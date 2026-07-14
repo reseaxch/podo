@@ -1,0 +1,11 @@
+{
+  "id": "cache-growth",
+  "title": "Unbounded checkout cache after deployment",
+  "kind": "positive",
+  "expected": {
+    "createsIncident": true,
+    "affectedService": "checkout-service",
+    "safeToAttemptFix": true,
+    "delivery": "pull_request"
+  }
+}

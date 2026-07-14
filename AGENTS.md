@@ -43,4 +43,11 @@ Read `README.md`, `docs/MVP_PLAN.md`, and the relevant section of `docs/USE_CASE
 
 ## Current repository state
 
-The repository currently contains an architecture scaffold and product documentation only. Do not invent setup, build, test, or deployment commands until the corresponding toolchain is committed and verified.
+The repository is a Bun workspace with runnable foundations for core, CLI, OpenTUI, dashboard, plugins, evals, and benchmarks. Use only commands documented in `README.md` or the nearest `AGENTS.md`.
+
+Before handing off a module, run the narrow checks listed in its nearest `AGENTS.md`. Before integrating a cross-workstream change, run:
+
+```sh
+bun run codex:smoke
+bun run check
+```

@@ -1,0 +1,11 @@
+{
+  "id": "misleading-deployment",
+  "title": "Recent deployment is unrelated to the runtime failure",
+  "kind": "adversarial",
+  "expected": {
+    "createsIncident": true,
+    "affectedService": "checkout-service",
+    "safeToAttemptFix": false,
+    "delivery": "issue"
+  }
+}

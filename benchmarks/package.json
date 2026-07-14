@@ -1,0 +1,14 @@
+{
+  "name": "@rootline/benchmarks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@rootline/codex-app-server-client": "workspace:*"
+  },
+  "scripts": {
+    "bench": "bun src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "bun build src/cli.ts --outdir dist --target bun"
+  }
+}

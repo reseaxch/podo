@@ -1,0 +1,16 @@
+{
+  "name": "@rootline/tui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun src/index.tsx",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "bun build src/index.tsx --outdir dist --target bun --packages external"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.4.3",
+    "@opentui/react": "^0.4.3",
+    "react": "^19.2.7"
+  }
+}

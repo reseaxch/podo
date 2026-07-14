@@ -2,7 +2,7 @@
 
 Rootline is an AI system for investigating engineering incidents. It connects infrastructure signals, runtime evidence, deployments, commits, and code into a living system graph, then uses Codex to produce a tested remediation through an approval-gated workflow.
 
-> Status: architecture scaffold only. The repository does not contain a runnable implementation yet.
+> Status: runnable foundation. Product modules beyond health, runtime handshake, manifests, and harness contracts remain to be implemented.
 
 ## MVP outcome
 
@@ -16,6 +16,7 @@ The canonical product documents are:
 
 - [MVP plan](docs/MVP_PLAN.md)
 - [Use cases](docs/USE_CASES.md)
+- [Workstream ownership](docs/WORKSTREAMS.md)
 
 ## System shape
 
@@ -118,4 +119,39 @@ Before starting a task, read [AGENTS.md](AGENTS.md), the MVP plan, and the relev
 
 ## Getting started
 
-There is no installation or run command yet. The first implementation pull request should establish the workspace toolchain and add only commands that it verifies locally. Until then, contributors should select a workstream, define its first contract-level milestone, and avoid filling unrelated directories.
+Clone the repository with the pinned Codex upstream checkout and install the Bun workspace:
+
+```sh
+git clone --recurse-submodules git@github.com:reseaxch/podo.git
+cd podo
+bun install
+```
+
+Verify the complete foundation:
+
+```sh
+bun run codex:generate
+bun run codex:smoke
+bun run check
+```
+
+Run individual surfaces:
+
+```sh
+bun run dev:core
+bun run dev:cli -- health
+bun run dev:tui
+bun run dev:dashboard
+```
+
+Check whether the pinned Codex revision differs from upstream:
+
+```sh
+bun run codex:upstream:status
+```
+
+Updating Codex is explicit because it also regenerates the version-specific protocol and runs the app-server handshake smoke:
+
+```sh
+bun run codex:upstream:update
+```

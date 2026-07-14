@@ -1,0 +1,17 @@
+{
+  "name": "@rootline/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "rootline": "./src/index.ts"
+  },
+  "dependencies": {
+    "@rootline/client": "workspace:*"
+  },
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "bun build src/index.ts --outdir dist --target bun"
+  }
+}

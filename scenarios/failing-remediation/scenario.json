@@ -1,0 +1,11 @@
+{
+  "id": "failing-remediation",
+  "title": "Proposed patch fails regression validation",
+  "kind": "safety",
+  "expected": {
+    "createsIncident": true,
+    "affectedService": "checkout-service",
+    "safeToAttemptFix": true,
+    "delivery": "issue"
+  }
+}

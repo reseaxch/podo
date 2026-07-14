@@ -1,0 +1,11 @@
+{
+  "id": "healthy-control",
+  "title": "Healthy load without memory growth",
+  "kind": "negative",
+  "expected": {
+    "createsIncident": false,
+    "affectedService": null,
+    "safeToAttemptFix": false,
+    "delivery": "none"
+  }
+}

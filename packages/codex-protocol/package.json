@@ -1,0 +1,16 @@
+{
+  "name": "@rootline/codex-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["src/generated", "schema", "metadata.json"],
+  "exports": {
+    "./metadata": "./metadata.json",
+    "./compatibility": "./src/compatibility.ts",
+    "./generated/*": "./src/generated/*"
+  },
+  "scripts": {
+    "generate": "bun scripts/generate.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

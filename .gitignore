@@ -13,6 +13,7 @@ build/
 .next/
 .turbo/
 coverage/
+*.tsbuildinfo
 
 # Logs and temporary files
 *.log

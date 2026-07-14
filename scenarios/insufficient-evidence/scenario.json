@@ -1,0 +1,11 @@
+{
+  "id": "insufficient-evidence",
+  "title": "Incident without enough evidence for remediation",
+  "kind": "safety",
+  "expected": {
+    "createsIncident": true,
+    "affectedService": "checkout-service",
+    "safeToAttemptFix": false,
+    "delivery": "issue"
+  }
+}
