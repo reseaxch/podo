@@ -1,0 +1,25 @@
+.DS_Store
+.scratch/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# JavaScript and TypeScript outputs
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Generated run artifacts; keep directory placeholders
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+evals/reports/*
+!evals/reports/.gitkeep
