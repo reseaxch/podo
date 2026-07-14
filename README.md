@@ -2,7 +2,7 @@
 
 Rootline is an AI system for investigating engineering incidents. It connects infrastructure signals, runtime evidence, deployments, commits, and code into a living system graph, then uses Codex to produce a tested remediation through an approval-gated workflow.
 
-> Status: runnable foundation. Product modules beyond health, runtime handshake, manifests, and harness contracts remain to be implemented.
+> Status: runnable foundation. Health/readiness and the in-memory Codex investigation vertical slice are implemented; durable incident, evidence, remediation, and delivery modules remain to be built.
 
 ## MVP outcome
 
@@ -71,7 +71,32 @@ pinned Codex runtime
   → CLI / TUI / dashboard
 ```
 
-The first implementation should launch `codex app-server` over stdio from `apps/core`, initialize one connection, start or resume threads, stream item and turn events into the audit trail, and route approval requests through Rootline. Clients communicate with Rootline core rather than the raw Codex protocol.
+Core owns one supervised `codex app-server --stdio` connection. The transport initializes it once, frames JSONL, correlates requests, surfaces notifications and server-initiated requests, and fails pending work on timeout, abort, EOF, or process exit. The runtime adapter starts or resumes one Codex thread per investigation and maps Codex messages into stable Rootline runtime events. Raw Codex protocol and thread IDs do not cross the core boundary.
+
+The pinned TypeScript SDK was evaluated but is not used by this path. At the pinned revision it launches `codex exec --experimental-json` per turn and exposes batch item/turn events, but not the long-lived App Server approval, user-input, steer, or server-request contract. It may later fit isolated batch/eval adapters behind the same runtime port; Direct App Server remains the default interactive runtime and the only state authority is core.
+
+## Investigation API foundation
+
+The current core implementation is intentionally in-memory. It owns investigation lifecycle, approval decisions, the Codex-to-investigation association, and a bounded ordered event log (256 events by default).
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/investigations` | Start with required `prompt`, absolute `cwd`, and `sandbox` (`read-only` or `workspace-write`) |
+| `GET` | `/api/investigations/:id` | Read authoritative state and the current pending approval |
+| `DELETE` | `/api/investigations/:id` | Deny a pending approval, interrupt the active turn, and cancel |
+| `POST` | `/api/investigations/:id/approvals/:approvalId` | Submit explicit `approve` or `deny`; user-input approvals may include `answers` |
+| `GET` | `/api/investigations/:id/events` | Stream ordered SSE events; reconnect with `Last-Event-ID` or `?after=` |
+
+The lifecycle exposed to clients is `starting → running ↔ waiting_for_approval → completed | cancelled | failed`. Approval requests never receive a default approval. A Codex EOF or crash fails every active investigation explicitly and degrades readiness. A later investigation performs one controlled lazy connection replacement; old thread/turn mutations are never retried, and readiness recovers only after the fresh runtime is established. If an SSE cursor predates the bounded retained log, core returns `409 event_replay_expired` rather than silently skipping events.
+
+The typed `@rootline/client` exposes `start`, `get`, `cancel`, `approve`, `deny`, and `subscribeEvents` (plus descriptive investigation aliases). For a local HTTP check:
+
+```sh
+bun run dev:core
+curl -N -X POST http://127.0.0.1:4100/api/investigations \
+  -H 'content-type: application/json' \
+  -d '{"prompt":"Investigate the incident evidence","cwd":"/absolute/path/to/sandbox","sandbox":"workspace-write"}'
+```
 
 Do not manually edit generated Codex protocol files. Regenerate them from the pinned Codex version and validate the client against that version.
 
@@ -133,6 +158,12 @@ Verify the complete foundation:
 bun run codex:generate
 bun run codex:smoke
 bun run check
+```
+
+Run the deterministic runtime and orchestration tests without a live Codex process:
+
+```sh
+bun test packages/codex-app-server-client apps/core packages/client
 ```
 
 Run individual surfaces:

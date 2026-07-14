@@ -1,73 +1,140 @@
-import { inspectCodexRuntime, type CodexRuntimeInfo } from "@rootline/codex-app-server-client"
-import type { HealthResponse, SystemStatusResponse } from "@rootline/contracts"
+import { inspectCodexRuntime, type CodexRuntime, type CodexRuntimeInfo } from "@rootline/codex-app-server-client"
+import type { ApprovalDecisionRequest, HealthResponse, InvestigationEvent, StartInvestigationRequest, SystemStatusResponse } from "@rootline/contracts"
+import { InvestigationService } from "./investigations"
 
 export interface CoreHandlerOptions {
   inspectCodex?: () => Promise<CodexRuntimeInfo>
+  runtime?: CodexRuntime
+  createRuntime?: () => Promise<CodexRuntime>
+  eventLogLimit?: number
 }
 
 const serviceVersion = "0.0.0"
 
 function json(body: unknown, status = 200): Response {
-  return Response.json(body, {
-    status,
-    headers: {
-      "cache-control": "no-store",
-    },
-  })
+  return Response.json(body, { status, headers: { "cache-control": "no-store" } })
 }
 
 export function createCoreHandler(options: CoreHandlerOptions = {}): (request: Request) => Promise<Response> {
   const inspectCodex = options.inspectCodex ?? (() => inspectCodexRuntime())
+  const investigations = new InvestigationService({
+    ...(options.runtime ? { runtime: options.runtime } : {}),
+    ...(options.createRuntime ? { createRuntime: options.createRuntime } : {}),
+    ...(options.eventLogLimit === undefined ? {} : { eventLogLimit: options.eventLogLimit }),
+  })
 
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
 
-    if (request.method !== "GET") {
-      return json({ error: "method_not_allowed" }, 405)
-    }
-
-    if (url.pathname === "/healthz") {
-      const response: HealthResponse = {
-        service: "rootline-core",
-        status: "ok",
-        version: serviceVersion,
-      }
+    if (request.method === "GET" && url.pathname === "/healthz") {
+      const response: HealthResponse = { service: "rootline-core", status: "ok", version: serviceVersion }
       return json(response)
     }
 
-    if (url.pathname === "/readyz" || url.pathname === "/api/system") {
+    if (request.method === "GET" && (url.pathname === "/readyz" || url.pathname === "/api/system")) {
       let response: SystemStatusResponse
       try {
         const runtime = await inspectCodex()
-        response = {
-          service: "rootline-core",
-          status: "ready",
-          version: serviceVersion,
-          codex: {
-            available: true,
-            binary: runtime.binary,
-            transport: "stdio",
-            version: runtime.version,
-          },
-        }
+        const runtimeError = investigations.runtimeError
+        response = runtimeError
+          ? { service: "rootline-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: runtime.binary, transport: "stdio", version: runtime.version, error: runtimeError } }
+          : { service: "rootline-core", status: "ready", version: serviceVersion, codex: { available: true, binary: runtime.binary, transport: "stdio", version: runtime.version } }
       } catch (error) {
-        response = {
-          service: "rootline-core",
-          status: "degraded",
-          version: serviceVersion,
-          codex: {
-            available: false,
-            binary: process.env.CODEX_BIN ?? "codex",
-            transport: "stdio",
-            version: null,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        }
+        response = { service: "rootline-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: process.env.CODEX_BIN ?? "codex", transport: "stdio", version: null, error: error instanceof Error ? error.message : String(error) } }
       }
-
       return json(response, url.pathname === "/readyz" && response.status !== "ready" ? 503 : 200)
     }
 
+    if (url.pathname === "/api/investigations" && request.method === "POST") {
+      const input = await readBody(request)
+      if (!isStartRequest(input)) return json({ error: "invalid_request", message: "prompt, absolute cwd, and sandbox policy are required" }, 400)
+      return json(await investigations.start(input), 201)
+    }
+
+    const eventsMatch = url.pathname.match(/^\/api\/investigations\/([^/]+)\/events$/)
+    if (eventsMatch?.[1] && request.method === "GET") {
+      const id = decodeURIComponent(eventsMatch[1])
+      const rawAfter = request.headers.get("last-event-id") ?? url.searchParams.get("after") ?? "0"
+      const after = Number(rawAfter)
+      if (!Number.isSafeInteger(after) || after < 0) return json({ error: "invalid_event_id" }, 400)
+      const replay = investigations.replay(id, after)
+      if (!replay) return json({ error: "not_found" }, 404)
+      const earliest = investigations.earliestSequence(id)
+      if (earliest !== null && after < earliest - 1) return json({ error: "event_replay_expired", message: `Earliest available sequence is ${earliest}` }, 409)
+      return eventStream(investigations, id, replay)
+    }
+
+    const approvalMatch = url.pathname.match(/^\/api\/investigations\/([^/]+)\/approvals\/([^/]+)$/)
+    if (approvalMatch?.[1] && approvalMatch[2] && request.method === "POST") {
+      const input = await readBody(request)
+      if (!isApprovalDecision(input)) return json({ error: "invalid_request" }, 400)
+      const result = await investigations.decideApproval(decodeURIComponent(approvalMatch[1]), decodeURIComponent(approvalMatch[2]), input)
+      return result ? json(result) : json({ error: "approval_not_found" }, 404)
+    }
+
+    const investigationMatch = url.pathname.match(/^\/api\/investigations\/([^/]+)$/)
+    if (investigationMatch?.[1]) {
+      const id = decodeURIComponent(investigationMatch[1])
+      if (request.method === "GET") {
+        const result = investigations.get(id)
+        return result ? json(result) : json({ error: "not_found" }, 404)
+      }
+      if (request.method === "DELETE") {
+        const result = await investigations.cancel(id)
+        return result ? json(result) : json({ error: "not_found" }, 404)
+      }
+      return json({ error: "method_not_allowed" }, 405)
+    }
+
+    if (!["GET", "POST", "DELETE"].includes(request.method)) return json({ error: "method_not_allowed" }, 405)
     return json({ error: "not_found" }, 404)
   }
+}
+
+function eventStream(service: InvestigationService, id: string, replay: InvestigationEvent[]): Response {
+  const encoder = new TextEncoder()
+  let unsubscribe: (() => void) | null = null
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of replay) controller.enqueue(encoder.encode(toSse(event)))
+      if (service.isTerminal(id)) {
+        controller.close()
+        return
+      }
+      unsubscribe = service.subscribe(id, (event) => {
+        controller.enqueue(encoder.encode(toSse(event)))
+        if (event.kind === "investigation.completed" || event.kind === "investigation.cancelled" || event.kind === "investigation.failed") {
+          unsubscribe?.()
+          controller.close()
+        }
+      })
+    },
+    cancel() { unsubscribe?.() },
+  })
+  return new Response(body, { headers: { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" } })
+}
+
+function toSse(event: { sequence: number; kind: string }): string {
+  return `id: ${event.sequence}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`
+}
+
+async function readBody(request: Request): Promise<unknown> {
+  try { return await request.json() } catch { return null }
+}
+
+function isStartRequest(value: unknown): value is StartInvestigationRequest {
+  if (!value || typeof value !== "object") return false
+  const input = value as Record<string, unknown>
+  return typeof input.prompt === "string" && input.prompt.trim().length > 0
+    && typeof input.cwd === "string" && input.cwd.startsWith("/")
+    && (input.sandbox === "read-only" || input.sandbox === "workspace-write")
+}
+
+function isApprovalDecision(value: unknown): value is ApprovalDecisionRequest {
+  if (!value || typeof value !== "object") return false
+  const input = value as Record<string, unknown>
+  if (input.decision !== "approve" && input.decision !== "deny") return false
+  if (input.answers === undefined) return true
+  if (!input.answers || typeof input.answers !== "object" || Array.isArray(input.answers)) return false
+  return Object.values(input.answers).every((answer) => Array.isArray(answer) && answer.every((entry) => typeof entry === "string"))
 }

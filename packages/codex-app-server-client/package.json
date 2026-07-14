@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
+  "dependencies": {
+    "@rootline/codex-protocol": "workspace:*"
+  },
   "scripts": {
     "smoke": "bun src/smoke.ts",
     "typecheck": "tsc -p tsconfig.json",
