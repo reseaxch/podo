@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useToast } from "../hooks/use-toast"
-import type { IncidentTab, IncidentWorkspaceData } from "../lib/incident-types"
+import type {
+  IncidentTab,
+  IncidentWorkspaceViewModel,
+  RemediationController,
+} from "../lib/incident-types"
 import { ChangesView } from "./incident/changes-view"
 import { DiagnosisLauncher, DiagnosisPanel } from "./incident/diagnosis-panel"
 import { EvidenceView } from "./incident/evidence-view"
@@ -14,9 +18,11 @@ import { Topbar } from "./shell/topbar"
 import { Icon } from "./ui/pictogram"
 
 export function IncidentWorkspace({
+  controller,
   incident,
 }: {
-  incident: IncidentWorkspaceData
+  controller: RemediationController
+  incident: IncidentWorkspaceViewModel
 }) {
   const [activeTab, setActiveTab] = useState<IncidentTab>("evidence")
   const [expandedId, setExpandedId] = useState<string | null>("trace")
@@ -122,7 +128,12 @@ export function IncidentWorkspace({
               <GraphView onOpenEvidence={openEvidence} />
             ) : null}
             {activeTab === "changes" ? (
-              <ChangesView onNotify={showToast} />
+              <ChangesView
+                controller={controller}
+                incidentId={incident.id}
+                onNotify={showToast}
+                remediation={incident.remediation}
+              />
             ) : null}
           </section>
           {diagnosisOpen ? (

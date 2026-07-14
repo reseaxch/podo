@@ -7,12 +7,12 @@ import { useMenu } from "../../hooks/use-menu"
 import { useTheme } from "../../hooks/use-theme"
 import type {
   IncidentTab,
-  IncidentWorkspaceData,
+  IncidentWorkspaceViewModel,
 } from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
 
 type TopbarProps = {
-  incident: IncidentWorkspaceData
+  incident: IncidentWorkspaceViewModel
   query: string
   onQueryChange: (query: string) => void
   onTabChange: (tab: IncidentTab) => void

@@ -54,3 +54,19 @@ test("empty server state remains understandable", async ({ page }) => {
     page.getByRole("heading", { name: "Incident not found" }),
   ).toBeVisible()
 })
+
+test("persisted dark theme hydrates without a mismatch", async ({ page }) => {
+  const hydrationErrors: string[] = []
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration/i.test(message.text()))
+      hydrationErrors.push(message.text())
+  })
+  await page.addInitScript(() => {
+    window.localStorage.setItem("podo-theme", "dark")
+  })
+
+  await page.goto("/")
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
+  expect(hydrationErrors).toEqual([])
+})

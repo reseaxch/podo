@@ -4,7 +4,7 @@ import Image from "next/image"
 import { useState } from "react"
 
 import { useMenu } from "../../hooks/use-menu"
-import type { IncidentWorkspaceData } from "../../lib/incident-types"
+import type { IncidentWorkspaceViewModel } from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
 
 type IncidentStatus = "Investigating" | "Mitigating" | "Monitoring" | "Resolved"
@@ -13,7 +13,7 @@ export function IncidentHeader({
   incident,
   onNotify,
 }: {
-  incident: IncidentWorkspaceData
+  incident: IncidentWorkspaceViewModel
   onNotify: (message: string) => void
 }) {
   const [incidentStatus, setIncidentStatus] =

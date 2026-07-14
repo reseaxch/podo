@@ -1,12 +1,19 @@
-import type { IncidentWorkspaceData } from "../lib/incident-types"
+import type { IncidentWorkspaceViewModel } from "../lib/incident-types"
 
-export const incidentMock: IncidentWorkspaceData = {
+export const incidentMock: IncidentWorkspaceViewModel = {
   id: "INC-042",
   title: "Checkout memory growth after deploy",
   severity: "P1",
   service: "checkout-service",
   elapsed: "18 min",
   owner: { name: "Maya Chen", avatar: "/maya-chen.jpg" },
+  remediation: {
+    id: "rem_inc_042",
+    reviewState: "ready",
+    branch: "fix/inc-042-cache-growth",
+    baseBranch: "main",
+    pullRequest: null,
+  },
   evidence: [
     {
       id: "deploy",

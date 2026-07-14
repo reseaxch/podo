@@ -2,54 +2,108 @@
 
 import { useState } from "react"
 
+import type {
+  RemediationController,
+  RemediationViewModel,
+} from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
 
 export function ChangesView({
+  controller,
+  incidentId,
   onNotify,
+  remediation,
 }: {
+  controller: RemediationController
+  incidentId: string
   onNotify: (message: string) => void
+  remediation: RemediationViewModel
 }) {
   const [activeFile, setActiveFile] = useState<"cache" | "tests">("cache")
   const [testsExpanded, setTestsExpanded] = useState(false)
   const [sandboxOpen, setSandboxOpen] = useState(false)
-  const [reviewState, setReviewState] = useState<
-    "ready" | "feedback" | "changes-requested" | "approved"
-  >("ready")
+  const [currentRemediation, setCurrentRemediation] = useState(remediation)
+  const [feedbackDraftOpen, setFeedbackDraftOpen] = useState(false)
   const [feedback, setFeedback] = useState("")
+  const [pendingAction, setPendingAction] = useState<
+    "feedback" | "approval" | "review" | null
+  >(null)
+  const reviewState = currentRemediation.reviewState
 
-  const status =
-    reviewState === "approved"
+  const status = feedbackDraftOpen
+    ? "Writing feedback"
+    : reviewState === "approved"
       ? "PR created"
       : reviewState === "changes-requested"
         ? "Changes requested"
-        : reviewState === "feedback"
-          ? "Writing feedback"
-          : "Ready for review"
-  const footerTitle =
-    reviewState === "approved"
-      ? "PR #1842 created"
+        : "Ready for review"
+  const footerTitle = feedbackDraftOpen
+    ? "Approval paused"
+    : reviewState === "approved"
+      ? `PR #${currentRemediation.pullRequest?.number ?? "—"} created`
       : reviewState === "changes-requested"
         ? "Revision requested"
-        : reviewState === "feedback"
-          ? "Approval paused"
-          : "Ready for human approval"
-  const footerDetail =
-    reviewState === "approved"
-      ? "fix/inc-042-cache-growth · awaiting CI"
+        : "Ready for human approval"
+  const footerDetail = feedbackDraftOpen
+    ? "Finish or cancel the feedback draft above"
+    : reviewState === "approved"
+      ? `${currentRemediation.branch} · awaiting CI`
       : reviewState === "changes-requested"
         ? "Podo AI will update the patch and rerun verification"
-        : reviewState === "feedback"
-          ? "Finish or cancel the feedback draft above"
-          : "Target: fix/inc-042-cache-growth · base: main"
+        : `Target: ${currentRemediation.branch} · base: ${currentRemediation.baseBranch}`
 
-  function approveChange() {
-    setReviewState("approved")
-    onNotify("PR #1842 created from the verified sandbox")
+  async function approveChange() {
+    setPendingAction("approval")
+    try {
+      const next = await controller.approveAndCreatePullRequest({
+        incidentId,
+        remediationId: currentRemediation.id,
+      })
+      setCurrentRemediation(next)
+      onNotify(
+        `PR #${next.pullRequest?.number ?? "—"} created from the verified sandbox`,
+      )
+    } catch {
+      onNotify("Approval failed; no remediation state changed")
+    } finally {
+      setPendingAction(null)
+    }
   }
-  function submitFeedback() {
+  async function submitFeedback() {
     if (!feedback.trim()) return
-    setReviewState("changes-requested")
-    onNotify("Review feedback sent to Podo AI")
+    setPendingAction("feedback")
+    try {
+      const next = await controller.requestChanges({
+        feedback,
+        incidentId,
+        remediationId: currentRemediation.id,
+      })
+      setCurrentRemediation(next)
+      setFeedbackDraftOpen(false)
+      setFeedback("")
+      onNotify("Review feedback sent to Podo AI")
+    } catch {
+      onNotify("Feedback was not accepted; review state is unchanged")
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function returnToReview() {
+    setPendingAction("review")
+    try {
+      const next = await controller.returnToReview({
+        incidentId,
+        remediationId: currentRemediation.id,
+      })
+      setCurrentRemediation(next)
+      setFeedback("")
+      onNotify("Remediation returned to review")
+    } catch {
+      onNotify("Review state could not be changed")
+    } finally {
+      setPendingAction(null)
+    }
   }
 
   return (
@@ -66,7 +120,11 @@ export function ChangesView({
           </p>
         </div>
         <div className="view-actions">
-          <span className={`status-chip state-${reviewState}`}>{status}</span>
+          <span
+            className={`status-chip state-${feedbackDraftOpen ? "feedback" : reviewState}`}
+          >
+            {status}
+          </span>
           <button
             aria-expanded={sandboxOpen}
             className="secondary-button"
@@ -450,7 +508,7 @@ export function ChangesView({
           </div>
         </aside>
       </div>
-      {reviewState === "feedback" ? (
+      {feedbackDraftOpen ? (
         <section className="review-feedback" aria-label="Request changes">
           <span>
             <small>Reviewer feedback</small>
@@ -467,7 +525,7 @@ export function ChangesView({
             <button
               className="secondary-button"
               onClick={() => {
-                setReviewState("ready")
+                setFeedbackDraftOpen(false)
                 setFeedback("")
               }}
               type="button"
@@ -476,7 +534,7 @@ export function ChangesView({
             </button>
             <button
               className="primary-button"
-              disabled={!feedback.trim()}
+              disabled={!feedback.trim() || pendingAction !== null}
               onClick={submitFeedback}
               type="button"
             >
@@ -485,14 +543,15 @@ export function ChangesView({
           </div>
         </section>
       ) : null}
-      <footer className={`approval-bar approval-${reviewState}`}>
+      <footer
+        className={`approval-bar approval-${feedbackDraftOpen ? "feedback" : reviewState}`}
+      >
         <span>
           <Icon
             name={
               reviewState === "approved"
                 ? "check-circle"
-                : reviewState === "changes-requested" ||
-                    reviewState === "feedback"
+                : reviewState === "changes-requested" || feedbackDraftOpen
                   ? "warning-circle"
                   : "git-branch"
             }
@@ -507,33 +566,38 @@ export function ChangesView({
           {reviewState === "approved" ? (
             <button
               className="primary-button"
-              onClick={() => onNotify("Opening PR #1842")}
+              onClick={() =>
+                onNotify(
+                  `Opening PR #${currentRemediation.pullRequest?.number ?? "—"}`,
+                )
+              }
               type="button"
             >
-              <Icon name="arrow-square-out" size={16} /> Open PR #1842
+              <Icon name="arrow-square-out" size={16} /> Open PR #
+              {currentRemediation.pullRequest?.number ?? "—"}
             </button>
           ) : reviewState === "changes-requested" ? (
             <button
               className="secondary-button"
-              onClick={() => {
-                setReviewState("ready")
-                setFeedback("")
-              }}
+              disabled={pendingAction !== null}
+              onClick={returnToReview}
               type="button"
             >
               Return to review
             </button>
-          ) : reviewState === "feedback" ? null : (
+          ) : feedbackDraftOpen ? null : (
             <>
               <button
                 className="secondary-button"
-                onClick={() => setReviewState("feedback")}
+                disabled={pendingAction !== null}
+                onClick={() => setFeedbackDraftOpen(true)}
                 type="button"
               >
                 Request changes
               </button>
               <button
                 className="primary-button"
+                disabled={pendingAction !== null}
                 onClick={approveChange}
                 type="button"
               >

@@ -1,5 +1,5 @@
 import { IncidentPageState } from "./components/incident-page-state"
-import { IncidentWorkspace } from "./components/incident-workspace"
+import { DemoIncidentWorkspace } from "./components/demo-incident-workspace"
 import { getIncidentWorkspace } from "./lib/incident-data"
 
 type PageProps = { searchParams: Promise<{ state?: string }> }
@@ -11,5 +11,5 @@ export default async function Page({ searchParams }: PageProps) {
 
   const incident = await getIncidentWorkspace()
   if (!incident) return <IncidentPageState kind="empty" />
-  return <IncidentWorkspace incident={incident} />
+  return <DemoIncidentWorkspace incident={incident} />
 }

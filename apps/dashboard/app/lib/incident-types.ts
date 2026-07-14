@@ -50,7 +50,33 @@ export type Evidence = {
   validation: "Verified" | "High confidence"
 }
 
-export type IncidentWorkspaceData = {
+export type RemediationReviewState = "ready" | "changes-requested" | "approved"
+
+export type RemediationViewModel = {
+  id: string
+  reviewState: RemediationReviewState
+  branch: string
+  baseBranch: string
+  pullRequest: { number: number; url: string } | null
+}
+
+export type RemediationController = {
+  requestChanges(input: {
+    incidentId: string
+    remediationId: string
+    feedback: string
+  }): Promise<RemediationViewModel>
+  approveAndCreatePullRequest(input: {
+    incidentId: string
+    remediationId: string
+  }): Promise<RemediationViewModel>
+  returnToReview(input: {
+    incidentId: string
+    remediationId: string
+  }): Promise<RemediationViewModel>
+}
+
+export type IncidentWorkspaceViewModel = {
   id: string
   title: string
   severity: "P1" | "P2" | "P3"
@@ -58,6 +84,7 @@ export type IncidentWorkspaceData = {
   elapsed: string
   owner: { name: string; avatar: string }
   evidence: Evidence[]
+  remediation: RemediationViewModel
 }
 
 export type IncidentTab = "evidence" | "graph" | "changes"
