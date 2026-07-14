@@ -6,11 +6,29 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "next": "^16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^6.0.3",
+    "eslint": "^9.39.0",
+    "eslint-config-next": "^16.2.10",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.5",
+    "vitest": "^4.1.10"
   }
 }
