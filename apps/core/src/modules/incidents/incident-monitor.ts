@@ -2,52 +2,16 @@ import {
   InMemoryTelemetryStore,
   stableId,
   type TelemetryEvent,
-  type TelemetryEventInput,
-  type TelemetryIngestionResult,
 } from "../telemetry"
+import type {
+  DetectedIncident,
+  IncidentEvidence,
+  IncidentReaction,
+  TelemetryEventInput,
+  TelemetryIngestionResult,
+} from "@rootline/contracts"
 
 const MIB = 1024 * 1024
-
-export interface IncidentEvidence {
-  id: string
-  sourceEventId: string
-  sourceType: TelemetryEvent["kind"]
-  observedAt: string
-  service: string
-  deploymentId: string
-}
-
-export interface DetectedIncident {
-  id: string
-  status: "detected"
-  detector: "cache_growth"
-  affectedService: string
-  deploymentId: string
-  createdAt: string
-  updatedAt: string
-  evidence: IncidentEvidence[]
-}
-
-export type IncidentReaction =
-  | {
-      action: "open_incident"
-      detector: "cache_growth"
-      service: string
-      deploymentId: string
-      reason: string
-    }
-  | {
-      action: "hold_for_more_evidence"
-      detector: "cache_growth"
-      service: string
-      deploymentId: string
-      reason: string
-    }
-  | {
-      action: "ignore_healthy"
-      detector: "cache_growth"
-      reason: string
-    }
 
 export interface IncidentMonitorResult {
   ingestion: TelemetryIngestionResult
@@ -115,6 +79,11 @@ export class IncidentMonitor {
     return [...this.incidents.values()]
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
       .map((incident) => structuredClone(incident))
+  }
+
+  getIncident(id: string): DetectedIncident | null {
+    const incident = this.incidents.get(id)
+    return incident ? structuredClone(incident) : null
   }
 }
 

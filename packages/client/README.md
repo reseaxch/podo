@@ -2,7 +2,7 @@
 
 `@rootline/client` is the shared client-side boundary for core. It owns URL handling, request/response decoding, command methods, and ordered SSE consumption.
 
-Current investigation methods cover start, read, cancel, approve, deny, and event subscription. Raw Codex protocol details must never appear in this package's public API.
+Current methods cover settings, telemetry ingestion, incident reads, and investigation start/read/cancel/approve/deny/event subscription. Raw Codex protocol details must never appear in this package's public API.
 
 ```sh
 bun test packages/client

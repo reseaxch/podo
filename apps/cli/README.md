@@ -6,6 +6,7 @@ The CLI consumes `@rootline/client`; it does not own workflow decisions or conne
 
 ```sh
 bun run dev:cli -- health
+bun run dev:cli -- incidents list
 bun run --cwd apps/cli typecheck
 bun run --cwd apps/cli build
 ```

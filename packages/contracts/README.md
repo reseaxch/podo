@@ -1,6 +1,6 @@
 # Rootline contracts
 
-`@rootline/contracts` defines stable producer/consumer shapes for Rootline commands, resources, lifecycle states, approvals, and events.
+`@rootline/contracts` defines stable producer/consumer shapes for Rootline settings, telemetry, incidents, investigations, approvals, and events.
 
 Contracts should describe Rootline concepts, not transport-library internals or raw Codex JSON-RPC. Keep them serializable and explicit about version-sensitive behavior.
 

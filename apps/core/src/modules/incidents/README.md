@@ -15,7 +15,7 @@ Partial or noisy signals return `hold_for_more_evidence`; healthy input returns
 `ignore_healthy`. Neither path creates incident state. Incident and evidence IDs
 are content-derived, so replaying the same telemetry does not duplicate state.
 
-HTTP exposure and the transition into the existing investigation orchestrator
-are deliberately separate integration work: core remains the only state owner,
-and clients must consume the future shared contract rather than this module
-directly.
+Core exposes this state through `GET /api/incidents` and
+`GET /api/incidents/:id`. The transition into the investigation orchestrator is
+still separate integration work; clients consume `@rootline/contracts` through
+`@rootline/client`, never this module directly.

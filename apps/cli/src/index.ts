@@ -17,6 +17,7 @@ Usage:
   rootline status                              Check core and Codex readiness
   rootline config show                         Show effective Rootline settings
   rootline config set <key> <value>            Update one Rootline setting
+  rootline incidents list                      List detected incidents
 
 Settings:
   autonomyMode       observe | recommend | act_with_approval
@@ -53,6 +54,10 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
       return 1
     }
     output(JSON.stringify(await client.updateSettings(patch), null, 2))
+    return 0
+  }
+  if (command === "incidents" && subcommand === "list" && key === undefined) {
+    output(JSON.stringify(await client.listIncidents(), null, 2))
     return 0
   }
   if (command === "help" || command === "--help" || command === "-h") {

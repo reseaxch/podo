@@ -55,6 +55,7 @@ describe("telemetry normalization", () => {
         kind: "metric",
         metric: { name: "process.heap.used", value: 1, unit: 42 },
       },
+      { ...validEvent, metric: null },
     ] as unknown as TelemetryEventInput[]
 
     expect(new InMemoryTelemetryStore().ingest(inputs)).toEqual({
@@ -67,6 +68,7 @@ describe("telemetry normalization", () => {
         { index: 4, reason: "containerId must be non-empty text when present" },
         { index: 5, reason: "metric.unit must be non-empty text when present" },
         { index: 6, reason: "metric.unit must be non-empty text when present" },
+        { index: 7, reason: "metric must be an object when present" },
       ],
     })
   })

@@ -38,6 +38,82 @@ export interface UpdateSettingsResponse {
   settings: RootlineSettings
 }
 
+export type TelemetryKind = "log" | "trace" | "metric"
+export type TelemetrySeverity = "debug" | "info" | "warn" | "error" | "critical"
+
+export interface TelemetryMetricInput {
+  name: string
+  value: number
+  unit?: string
+}
+
+export interface TelemetryEventInput {
+  timestamp: string
+  kind: TelemetryKind
+  service: string
+  severity: TelemetrySeverity
+  message: string
+  deploymentId?: string
+  commitId?: string
+  traceId?: string
+  containerId?: string
+  metric?: TelemetryMetricInput
+}
+
+export interface RejectedTelemetryEvent {
+  index: number
+  reason: string
+}
+
+export interface TelemetryIngestionResult {
+  accepted: number
+  duplicates: number
+  rejected: RejectedTelemetryEvent[]
+}
+
+export interface IncidentEvidence {
+  id: string
+  sourceEventId: string
+  sourceType: TelemetryKind
+  observedAt: string
+  service: string
+  deploymentId: string
+}
+
+export interface DetectedIncident {
+  id: string
+  status: "detected"
+  detector: "cache_growth"
+  affectedService: string
+  deploymentId: string
+  createdAt: string
+  updatedAt: string
+  evidence: IncidentEvidence[]
+}
+
+export type IncidentReaction =
+  | { action: "open_incident"; detector: "cache_growth"; service: string; deploymentId: string; reason: string }
+  | { action: "hold_for_more_evidence"; detector: "cache_growth"; service: string; deploymentId: string; reason: string }
+  | { action: "ignore_healthy"; detector: "cache_growth"; reason: string }
+
+export interface IngestTelemetryRequest {
+  events: TelemetryEventInput[]
+}
+
+export interface IngestTelemetryResponse {
+  ingestion: TelemetryIngestionResult
+  reaction: IncidentReaction
+  incident: DetectedIncident | null
+}
+
+export interface ListIncidentsResponse {
+  incidents: DetectedIncident[]
+}
+
+export interface GetIncidentResponse {
+  incident: DetectedIncident
+}
+
 export type InvestigationStatus =
   | "starting"
   | "running"

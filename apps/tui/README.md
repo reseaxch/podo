@@ -15,9 +15,12 @@ Keyboard escape paths, resize behavior, cleanup, and observable rendering are pa
 
 ## Control surface contract
 
-`RootlineTui` consumes an injected `RootlineTuiViewModel` and `RootlineTuiController`. The future
-`@rootline/client` adapter owns network synchronization; the renderer does not call core, persistence,
-or Codex directly.
+`RootlineTui` consumes an injected `RootlineTuiViewModel` and `RootlineTuiController`.
+`ConnectedRootlineTui` is the `@rootline/client` adapter: it loads readiness,
+settings, and incidents, and persists complete settings drafts. The renderer
+does not call core, persistence, or Codex directly. Investigation selection and
+live approval synchronization are the next adapter increment; until then the
+connected adapter never presents an actionable approval.
 
 - `Tab` moves focus between the run and settings panels.
 - `a`, `d`, and `c` explicitly approve, deny, or cancel while an approval is pending. Approval is

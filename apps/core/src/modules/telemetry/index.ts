@@ -1,41 +1,17 @@
 import { createHash } from "node:crypto"
+import type {
+  RejectedTelemetryEvent,
+  TelemetryEventInput,
+  TelemetryIngestionResult,
+  TelemetryKind,
+  TelemetrySeverity,
+} from "@rootline/contracts"
 
-export type TelemetryKind = "log" | "trace" | "metric"
-export type TelemetrySeverity = "debug" | "info" | "warn" | "error" | "critical"
-
-export interface TelemetryMetricInput {
-  name: string
-  value: number
-  unit?: string
-}
-
-export interface TelemetryEventInput {
-  timestamp: string
-  kind: TelemetryKind
-  service: string
-  severity: TelemetrySeverity
-  message: string
-  deploymentId?: string
-  commitId?: string
-  traceId?: string
-  containerId?: string
-  metric?: TelemetryMetricInput
-}
+export type { TelemetryEventInput, TelemetryIngestionResult } from "@rootline/contracts"
 
 export interface TelemetryEvent extends TelemetryEventInput {
   id: string
   timestamp: string
-}
-
-export interface RejectedTelemetryEvent {
-  index: number
-  reason: string
-}
-
-export interface TelemetryIngestionResult {
-  accepted: number
-  duplicates: number
-  rejected: RejectedTelemetryEvent[]
 }
 
 const KINDS = new Set<TelemetryKind>(["log", "trace", "metric"])
@@ -83,7 +59,10 @@ export function normalizeTelemetryEvent(input: TelemetryEventInput): TelemetryEv
   for (const key of ["deploymentId", "commitId", "traceId", "containerId"] as const) {
     if (isPresent(input, key) && !isNonEmpty(input[key])) return `${key} must be non-empty text when present`
   }
-  if (input.kind === "metric" && (!input.metric || typeof input.metric !== "object")) return "metric events require metric data"
+  if (isPresent(input, "metric") && (!input.metric || typeof input.metric !== "object")) {
+    return "metric must be an object when present"
+  }
+  if (input.kind === "metric" && !input.metric) return "metric events require metric data"
   if (input.metric && (!isNonEmpty(input.metric.name) || !Number.isFinite(input.metric.value))) {
     return "metric name and finite value are required"
   }

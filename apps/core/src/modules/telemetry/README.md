@@ -11,3 +11,7 @@ evidence implicitly.
 
 This store is intentionally process-local. A durable adapter can replace it
 without moving normalization or incident decisions into HTTP clients.
+
+`POST /api/telemetry/events` is the public batch boundary. It returns accepted,
+duplicate, and rejected counts together with the detector reaction and any
+incident opened by that batch.

@@ -115,4 +115,19 @@ describe("Rootline core handler", () => {
       expect(response.status).toBe(400)
     }
   })
+
+  test("rejects malformed telemetry envelopes without mutating incident state", async () => {
+    const handler = createCoreHandler()
+    for (const body of [{}, { events: [] }, { events: [null] }, { events: [], unexpected: true }]) {
+      const response = await handler(new Request("http://rootline.test/api/telemetry/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }))
+      expect(response.status).toBe(400)
+    }
+
+    const incidents = await handler(new Request("http://rootline.test/api/incidents"))
+    expect(await incidents.json()).toEqual({ incidents: [] })
+  })
 })

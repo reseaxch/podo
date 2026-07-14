@@ -2,12 +2,16 @@ import type {
   ApprovalDecisionResponse,
   CancelInvestigationResponse,
   GetInvestigationResponse,
+  GetIncidentResponse,
   GetSettingsResponse,
   HealthResponse,
+  IngestTelemetryResponse,
   InvestigationEvent,
+  ListIncidentsResponse,
   StartInvestigationRequest,
   StartInvestigationResponse,
   SystemStatusResponse,
+  TelemetryEventInput,
   UpdateSettingsRequest,
   UpdateSettingsResponse,
 } from "@rootline/contracts"
@@ -27,6 +31,9 @@ export interface RootlineClient {
   systemStatus(): Promise<SystemStatusResponse>
   getSettings(): Promise<GetSettingsResponse>
   updateSettings(input: UpdateSettingsRequest): Promise<UpdateSettingsResponse>
+  ingestTelemetry(events: TelemetryEventInput[]): Promise<IngestTelemetryResponse>
+  listIncidents(): Promise<ListIncidentsResponse>
+  getIncident(id: string): Promise<GetIncidentResponse>
   start(input: StartInvestigationRequest): Promise<StartInvestigationResponse>
   get(id: string): Promise<GetInvestigationResponse>
   cancel(id: string): Promise<CancelInvestigationResponse>
@@ -60,6 +67,9 @@ export function createRootlineClient(options: RootlineClientOptions = {}): Rootl
     systemStatus: async () => readJson<SystemStatusResponse>(await request(`${baseUrl}/api/system`)),
     getSettings: async () => readJson<GetSettingsResponse>(await request(`${baseUrl}/api/settings`)),
     updateSettings: (input) => command<UpdateSettingsResponse>(`${baseUrl}/api/settings`, "PATCH", input),
+    ingestTelemetry: (events) => command<IngestTelemetryResponse>(`${baseUrl}/api/telemetry/events`, "POST", { events }),
+    listIncidents: async () => readJson<ListIncidentsResponse>(await request(`${baseUrl}/api/incidents`)),
+    getIncident: async (id) => readJson<GetIncidentResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}`)),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
     get: async (id) => readJson<GetInvestigationResponse>(await request(investigationUrl(id))),
     cancel: (id) => command<CancelInvestigationResponse>(investigationUrl(id), "DELETE"),

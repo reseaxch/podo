@@ -1,6 +1,14 @@
 import { inspectCodexRuntime, type CodexRuntime, type CodexRuntimeInfo } from "@rootline/codex-app-server-client"
-import type { ApprovalDecisionRequest, HealthResponse, InvestigationEvent, StartInvestigationRequest, SystemStatusResponse } from "@rootline/contracts"
+import type {
+  ApprovalDecisionRequest,
+  HealthResponse,
+  IngestTelemetryRequest,
+  InvestigationEvent,
+  StartInvestigationRequest,
+  SystemStatusResponse,
+} from "@rootline/contracts"
 import { InvestigationService } from "./investigations"
+import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 import { SettingsStore } from "./settings"
 
 export interface CoreHandlerOptions {
@@ -8,6 +16,7 @@ export interface CoreHandlerOptions {
   runtime?: CodexRuntime
   createRuntime?: () => Promise<CodexRuntime>
   eventLogLimit?: number
+  incidentMonitor?: IncidentMonitor
 }
 
 const serviceVersion = "0.0.0"
@@ -24,6 +33,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
     ...(options.eventLogLimit === undefined ? {} : { eventLogLimit: options.eventLogLimit }),
   })
   const settings = new SettingsStore()
+  const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
 
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -56,6 +66,28 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
           : json({ error: "invalid_settings", message: "Settings patch contains unknown or invalid values" }, 400)
       }
       return json({ error: "method_not_allowed" }, 405)
+    }
+
+    if (url.pathname === "/api/telemetry/events") {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      const input = await readBody(request)
+      if (!isTelemetryBatch(input)) {
+        return json({ error: "invalid_telemetry_batch", message: "events must be a non-empty array of objects" }, 400)
+      }
+      return json(incidentMonitor.ingest(input.events))
+    }
+
+    if (url.pathname === "/api/incidents") {
+      return request.method === "GET"
+        ? json({ incidents: incidentMonitor.listIncidents() })
+        : json({ error: "method_not_allowed" }, 405)
+    }
+
+    const incidentMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)$/)
+    if (incidentMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      const incident = incidentMonitor.getIncident(decodeURIComponent(incidentMatch[1]))
+      return incident ? json({ incident }) : json({ error: "not_found" }, 404)
     }
 
     if (url.pathname === "/api/investigations" && request.method === "POST") {
@@ -150,4 +182,13 @@ function isApprovalDecision(value: unknown): value is ApprovalDecisionRequest {
   if (input.answers === undefined) return true
   if (!input.answers || typeof input.answers !== "object" || Array.isArray(input.answers)) return false
   return Object.values(input.answers).every((answer) => Array.isArray(answer) && answer.every((entry) => typeof entry === "string"))
+}
+
+function isTelemetryBatch(value: unknown): value is IngestTelemetryRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const input = value as Record<string, unknown>
+  return Object.keys(input).length === 1
+    && Array.isArray(input.events)
+    && input.events.length > 0
+    && input.events.every((event) => Boolean(event) && typeof event === "object" && !Array.isArray(event))
 }

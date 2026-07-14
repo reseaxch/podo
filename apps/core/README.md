@@ -9,8 +9,10 @@
 - ordered SSE event delivery with bounded replay;
 - fail-closed approvals and explicit crash handling;
 - controlled lazy replacement of a failed Codex runtime.
+- core-owned settings plus telemetry ingestion and incident read APIs;
+- deterministic, replay-safe cache-growth incident detection.
 
-Incident ingestion, durable persistence, graph-backed evidence, remediation, audit, and delivery remain workstream milestones.
+Durable persistence, automatic investigation handoff, graph-backed evidence, remediation, audit, and delivery remain workstream milestones.
 
 ## Run and validate
 

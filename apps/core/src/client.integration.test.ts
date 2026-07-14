@@ -76,3 +76,45 @@ test("typed client reads and updates the core-owned settings contract", async ()
   })
   expect(await client.getSettings()).toEqual(updated)
 })
+
+test("typed client ingests telemetry and reads core-owned incidents", async () => {
+  const handler = createCoreHandler()
+  const client = createRootlineClient({
+    baseUrl: "http://rootline.test",
+    fetch: (input, init) => handler(new Request(input, init)),
+  })
+  const base = Date.parse("2026-07-14T09:00:00.000Z")
+  const metric = (step: number, value: number) => ({
+    timestamp: new Date(base + step * 1_000).toISOString(),
+    kind: "metric" as const,
+    service: "checkout-service",
+    severity: "warn" as const,
+    message: "process heap sample",
+    deploymentId: "deploy-1042",
+    metric: { name: "process.heap.used", value, unit: "By" },
+  })
+  const failure = (step: number, kind: "log" | "trace", traceId: string, message: string) => ({
+    timestamp: new Date(base + step * 1_000).toISOString(),
+    kind,
+    service: "checkout-service",
+    severity: "error" as const,
+    message,
+    deploymentId: "deploy-1042",
+    traceId,
+  })
+  const result = await client.ingestTelemetry([
+    metric(0, 180 * 1024 * 1024),
+    metric(1, 310 * 1024 * 1024),
+    metric(2, 450 * 1024 * 1024),
+    metric(3, 620 * 1024 * 1024),
+    failure(4, "trace", "trace-1", "POST /checkout returned 500"),
+    failure(5, "log", "trace-2", "JavaScript heap out of memory"),
+  ])
+
+  expect(result.reaction.action).toBe("open_incident")
+  expect(result.incident?.evidence).toHaveLength(6)
+  if (!result.incident) throw new Error("expected incident")
+  const incidents = await client.listIncidents()
+  expect(incidents.incidents).toEqual([result.incident])
+  expect(await client.getIncident(result.incident!.id)).toEqual({ incident: result.incident })
+})
