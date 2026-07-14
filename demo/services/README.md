@@ -34,3 +34,21 @@ the cache (max entries and/or TTL) and invert that assertion.
 ```bash
 bun test demo/services/checkout-service
 ```
+
+## Run and smoke-check the topology
+
+Start each service in a separate terminal:
+
+```bash
+bun run --cwd demo/services/inventory-service start
+bun run --cwd demo/services/checkout-service start
+bun run --cwd demo/services/notification-worker start
+```
+
+The HTTP services stay running on ports 8082 and 8081 respectively. The worker
+starts a polling loop and processes its seeded demo job. To verify all three
+process entrypoints without leaving servers running, execute:
+
+```bash
+bun run demo/services/smoke.ts
+```

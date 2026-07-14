@@ -26,3 +26,13 @@ export function createServer(): { port: number; fetch: (req: Request) => Promise
     },
   }
 }
+
+export function startServer(): ReturnType<typeof Bun.serve> {
+  const server = Bun.serve(createServer())
+  console.log(`inventory-service listening on http://127.0.0.1:${server.port}`)
+  return server
+}
+
+if (import.meta.main) {
+  startServer()
+}

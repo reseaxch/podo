@@ -19,3 +19,28 @@ export function runOnce(queue: NotificationQueue): number {
   }
   return processed
 }
+
+export function startWorker(queue: NotificationQueue, intervalMs = 250): ReturnType<typeof setInterval> {
+  const processQueue = (): void => {
+    const processed = runOnce(queue)
+    if (processed > 0) {
+      console.log(`notification-worker delivered ${processed} notification(s)`)
+    }
+  }
+
+  processQueue()
+  return setInterval(processQueue, intervalMs)
+}
+
+if (import.meta.main) {
+  const queue = new NotificationQueue()
+  queue.enqueue({ orderId: "demo-order-1", channel: "email" })
+
+  if (process.env.DEMO_WORKER_ONCE === "1") {
+    runOnce(queue)
+    console.log("notification-worker delivered 1 notification(s)")
+  } else {
+    startWorker(queue)
+    console.log("notification-worker started")
+  }
+}
