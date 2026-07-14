@@ -1,6 +1,7 @@
 import { inspectCodexRuntime, type CodexRuntime, type CodexRuntimeInfo } from "@rootline/codex-app-server-client"
 import type { ApprovalDecisionRequest, HealthResponse, InvestigationEvent, StartInvestigationRequest, SystemStatusResponse } from "@rootline/contracts"
 import { InvestigationService } from "./investigations"
+import { SettingsStore } from "./settings"
 
 export interface CoreHandlerOptions {
   inspectCodex?: () => Promise<CodexRuntimeInfo>
@@ -22,6 +23,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
     ...(options.createRuntime ? { createRuntime: options.createRuntime } : {}),
     ...(options.eventLogLimit === undefined ? {} : { eventLogLimit: options.eventLogLimit }),
   })
+  const settings = new SettingsStore()
 
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -43,6 +45,17 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         response = { service: "rootline-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: process.env.CODEX_BIN ?? "codex", transport: "stdio", version: null, error: error instanceof Error ? error.message : String(error) } }
       }
       return json(response, url.pathname === "/readyz" && response.status !== "ready" ? 503 : 200)
+    }
+
+    if (url.pathname === "/api/settings") {
+      if (request.method === "GET") return json({ settings: settings.get() })
+      if (request.method === "PATCH") {
+        const updated = settings.update(await readBody(request))
+        return updated
+          ? json({ settings: updated })
+          : json({ error: "invalid_settings", message: "Settings patch contains unknown or invalid values" }, 400)
+      }
+      return json({ error: "method_not_allowed" }, 405)
     }
 
     if (url.pathname === "/api/investigations" && request.method === "POST") {
@@ -86,7 +99,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       return json({ error: "method_not_allowed" }, 405)
     }
 
-    if (!["GET", "POST", "DELETE"].includes(request.method)) return json({ error: "method_not_allowed" }, 405)
+    if (!["GET", "POST", "PATCH", "DELETE"].includes(request.method)) return json({ error: "method_not_allowed" }, 405)
     return json({ error: "not_found" }, 404)
   }
 }

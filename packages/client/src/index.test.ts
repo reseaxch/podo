@@ -45,6 +45,40 @@ describe("createRootlineClient", () => {
     expect(requests[3]?.body).toEqual({ decision: "deny" })
   })
 
+  test("reads and updates the public settings contract", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = []
+    const client = createRootlineClient({
+      baseUrl: "http://rootline.test/",
+      fetch: async (input, init) => {
+        requests.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+        })
+        return Response.json({
+          settings: {
+            autonomyMode: "recommend",
+            monitoringEnabled: true,
+            defaultSandbox: "read-only",
+            turnTimeoutMs: 60_000,
+          },
+        })
+      },
+    })
+
+    await client.getSettings()
+    await client.updateSettings({ autonomyMode: "recommend", monitoringEnabled: false })
+
+    expect(requests).toEqual([
+      { url: "http://rootline.test/api/settings", method: "GET" },
+      {
+        url: "http://rootline.test/api/settings",
+        method: "PATCH",
+        body: { autonomyMode: "recommend", monitoringEnabled: false },
+      },
+    ])
+  })
+
   test("decodes partial SSE frames and sends replay cursor", async () => {
     let headers: HeadersInit | undefined
     const encoder = new TextEncoder()

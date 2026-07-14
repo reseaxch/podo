@@ -49,3 +49,30 @@ test("typed client consumes the core investigation and event contracts", async (
   expect((await client.get(started.investigation.id)).investigation.status).toBe("cancelled")
   expect(JSON.stringify(started)).not.toContain("private-thread")
 })
+
+test("typed client reads and updates the core-owned settings contract", async () => {
+  const handler = createCoreHandler()
+  const client = createRootlineClient({
+    baseUrl: "http://rootline.test",
+    fetch: (input, init) => handler(new Request(input, init)),
+  })
+
+  expect((await client.getSettings()).settings).toEqual({
+    autonomyMode: "observe",
+    monitoringEnabled: true,
+    defaultSandbox: "read-only",
+    turnTimeoutMs: 60_000,
+  })
+
+  const updated = await client.updateSettings({
+    autonomyMode: "recommend",
+    defaultSandbox: "workspace-write",
+  })
+  expect(updated.settings).toEqual({
+    autonomyMode: "recommend",
+    monitoringEnabled: true,
+    defaultSandbox: "workspace-write",
+    turnTimeoutMs: 60_000,
+  })
+  expect(await client.getSettings()).toEqual(updated)
+})

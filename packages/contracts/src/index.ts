@@ -19,6 +19,25 @@ export interface SystemStatusResponse {
   codex: CodexRuntimeStatus
 }
 
+export type AutonomyMode = "observe" | "recommend" | "act_with_approval"
+
+export interface RootlineSettings {
+  autonomyMode: AutonomyMode
+  monitoringEnabled: boolean
+  defaultSandbox: InvestigationSandbox
+  turnTimeoutMs: number
+}
+
+export interface GetSettingsResponse {
+  settings: RootlineSettings
+}
+
+export type UpdateSettingsRequest = Partial<RootlineSettings>
+
+export interface UpdateSettingsResponse {
+  settings: RootlineSettings
+}
+
 export type InvestigationStatus =
   | "starting"
   | "running"

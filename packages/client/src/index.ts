@@ -2,11 +2,14 @@ import type {
   ApprovalDecisionResponse,
   CancelInvestigationResponse,
   GetInvestigationResponse,
+  GetSettingsResponse,
   HealthResponse,
   InvestigationEvent,
   StartInvestigationRequest,
   StartInvestigationResponse,
   SystemStatusResponse,
+  UpdateSettingsRequest,
+  UpdateSettingsResponse,
 } from "@rootline/contracts"
 
 export interface RootlineClientOptions {
@@ -22,6 +25,8 @@ export interface SubscribeEventsOptions {
 export interface RootlineClient {
   health(): Promise<HealthResponse>
   systemStatus(): Promise<SystemStatusResponse>
+  getSettings(): Promise<GetSettingsResponse>
+  updateSettings(input: UpdateSettingsRequest): Promise<UpdateSettingsResponse>
   start(input: StartInvestigationRequest): Promise<StartInvestigationResponse>
   get(id: string): Promise<GetInvestigationResponse>
   cancel(id: string): Promise<CancelInvestigationResponse>
@@ -53,6 +58,8 @@ export function createRootlineClient(options: RootlineClientOptions = {}): Rootl
   return {
     health: async () => readJson<HealthResponse>(await request(`${baseUrl}/healthz`)),
     systemStatus: async () => readJson<SystemStatusResponse>(await request(`${baseUrl}/api/system`)),
+    getSettings: async () => readJson<GetSettingsResponse>(await request(`${baseUrl}/api/settings`)),
+    updateSettings: (input) => command<UpdateSettingsResponse>(`${baseUrl}/api/settings`, "PATCH", input),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
     get: async (id) => readJson<GetInvestigationResponse>(await request(investigationUrl(id))),
     cancel: (id) => command<CancelInvestigationResponse>(investigationUrl(id), "DELETE"),
