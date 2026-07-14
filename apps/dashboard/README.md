@@ -4,6 +4,17 @@
 
 The dashboard is a client of core. It must use public Rootline contracts and must not access persistence or Codex directly.
 
+The default route reads detected incidents server-side through
+`@rootline/client`. Set `ROOTLINE_CORE_URL` when core is not available at
+`http://127.0.0.1:4100`. Use `?incident=<incident-id>` to select a specific
+incident. The judge-facing fixture workspace remains isolated at `/demo`; it is
+not imported by the production route and is not a production data source.
+
+The live incident view is intentionally read-only and fail-closed. The current
+core contract exposes detector evidence but does not yet link an incident to an
+investigation, diagnosis, remediation, or pull request, so the dashboard does
+not synthesize those states or expose approval controls.
+
 ```sh
 bun run dev:dashboard
 bun run --cwd apps/dashboard typecheck

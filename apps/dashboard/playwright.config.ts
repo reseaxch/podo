@@ -9,7 +9,7 @@ export default defineConfig({
   use: { baseURL: "http://localhost:3000", trace: "retain-on-failure" },
   webServer: {
     command: "./node_modules/.bin/next dev",
-    url: "http://localhost:3000",
+    url: "http://localhost:3000/demo",
     reuseExistingServer: !process.env.CI,
   },
   projects: [

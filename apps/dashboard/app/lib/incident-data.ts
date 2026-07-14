@@ -1,9 +1,32 @@
-import { incidentMock } from "../mocks/incident"
+import { createRootlineClient, type RootlineClient } from "@rootline/client"
+import type { DetectedIncident } from "@rootline/contracts"
 
-import type { IncidentWorkspaceViewModel } from "./incident-types"
+type GetIncidentWorkspaceOptions = {
+  client?: RootlineClient
+  incidentId?: string
+}
 
-export async function getIncidentWorkspace(): Promise<IncidentWorkspaceViewModel | null> {
-  // This is the only mock boundary. Replace its body with the typed Rootline
-  // client when the incident endpoint is available.
-  return Promise.resolve(structuredClone(incidentMock))
+function createDashboardClient(): RootlineClient {
+  return createRootlineClient({
+    baseUrl: process.env.ROOTLINE_CORE_URL ?? "http://127.0.0.1:4100",
+    fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+  })
+}
+
+export async function getIncidentWorkspace(
+  options: GetIncidentWorkspaceOptions = {},
+): Promise<DetectedIncident | null> {
+  const client = options.client ?? createDashboardClient()
+  if (options.incidentId) {
+    const { incident } = await client.getIncident(options.incidentId)
+    return incident
+  }
+
+  const { incidents } = await client.listIncidents()
+  return (
+    incidents.toSorted((left, right) => {
+      const byUpdatedAt = right.updatedAt.localeCompare(left.updatedAt)
+      return byUpdatedAt || right.id.localeCompare(left.id)
+    })[0] ?? null
+  )
 }
