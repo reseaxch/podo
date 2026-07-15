@@ -1,7 +1,18 @@
 import { createHash } from "node:crypto"
+import {
+  PODO_CODE_GRAPH_SCHEMA_VERSION,
+  type CodeGraphLinkType,
+  type CodeGraphNodeKind,
+  type CodeGraphProvenance,
+  type CodeGraphSourceLocation,
+  type NormalizedCodeGraphLink,
+  type NormalizedCodeGraphNode,
+  type NormalizedCodeGraphSnapshot,
+} from "@podo/contracts"
+
+export { PODO_CODE_GRAPH_SCHEMA_VERSION } from "@podo/contracts"
 
 export const GRAPHIFY_SCHEMA_VERSION = "1.0" as const
-export const PODO_CODE_GRAPH_SCHEMA_VERSION = "podo.code-graph.v1" as const
 
 export const GRAPHIFY_NODE_KINDS = [
   "repository",
@@ -21,17 +32,10 @@ export const GRAPHIFY_RELATION_TYPES = [
 
 export const GRAPHIFY_PROVENANCE_VALUES = ["extracted", "inferred", "ambiguous"] as const
 
-export type GraphifyNodeKind = (typeof GRAPHIFY_NODE_KINDS)[number]
-export type GraphifyRelationType = (typeof GRAPHIFY_RELATION_TYPES)[number]
-export type GraphifyProvenance = (typeof GRAPHIFY_PROVENANCE_VALUES)[number]
-
-export interface GraphifySourceLocation {
-  path: string
-  line: number
-  column?: number
-  endLine?: number
-  endColumn?: number
-}
+export type GraphifyNodeKind = CodeGraphNodeKind
+export type GraphifyRelationType = CodeGraphLinkType
+export type GraphifyProvenance = CodeGraphProvenance
+export type GraphifySourceLocation = CodeGraphSourceLocation
 
 export interface GraphifyNodeInput {
   id: string
@@ -57,38 +61,9 @@ export interface GraphifyGraphInput {
   relations: readonly GraphifyRelationInput[]
 }
 
-export interface PodoCodeGraphNode {
-  id: string
-  externalId: string
-  kind: GraphifyNodeKind
-  label: string
-  provenance: GraphifyProvenance
-  location?: GraphifySourceLocation
-}
-
-export interface PodoCodeGraphLink {
-  id: string
-  externalId: string
-  type: GraphifyRelationType
-  fromNodeId: string
-  toNodeId: string
-  fromExternalId: string
-  toExternalId: string
-  provenance: GraphifyProvenance
-  location?: GraphifySourceLocation
-}
-
-export interface PodoCodeGraphSnapshot {
-  id: string
-  schemaVersion: typeof PODO_CODE_GRAPH_SCHEMA_VERSION
-  source: {
-    provider: "graphify"
-    graphId: string
-    schemaVersion: typeof GRAPHIFY_SCHEMA_VERSION
-  }
-  nodes: PodoCodeGraphNode[]
-  links: PodoCodeGraphLink[]
-}
+export type PodoCodeGraphNode = NormalizedCodeGraphNode
+export type PodoCodeGraphLink = NormalizedCodeGraphLink
+export type PodoCodeGraphSnapshot = NormalizedCodeGraphSnapshot
 
 export type GraphifyImportIssueCode =
   | "invalid_type"
@@ -99,6 +74,7 @@ export type GraphifyImportIssueCode =
   | "invalid_location"
   | "duplicate_external_id"
   | "conflicting_external_id"
+  | "ambiguous_value"
   | "dangling_endpoint"
 
 export interface GraphifyImportIssue {

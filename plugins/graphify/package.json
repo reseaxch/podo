@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@podo/contracts": "workspace:*",
     "@podo/plugin-sdk": "workspace:*"
   },
   "scripts": {

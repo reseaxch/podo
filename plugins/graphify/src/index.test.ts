@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 
-import { normalizeGraphifyGraph } from "./index"
+import { decodeGraphifyNetworkxV1, normalizeGraphifyGraph } from "./index"
 
 const canonicalPayload = {
   schemaVersion: "1.0",
@@ -274,5 +275,127 @@ describe("normalizeGraphifyGraph", () => {
         message: 'Unsupported Graphify schema version "2.0"; expected "1.0"',
       },
     ])
+  })
+})
+
+describe("decodeGraphifyNetworkxV1", () => {
+  const fixtureUrl = new URL(
+    "../../../scenarios/cache-growth/fixtures/graph.json",
+    import.meta.url,
+  )
+  const fixture = JSON.parse(readFileSync(fixtureUrl, "utf8")) as unknown
+
+  test("decodes the canonical fixture into a stable cache file and function path", () => {
+    const first = decodeGraphifyNetworkxV1(fixture, { graphId: "cache-growth" })
+    const reorderedRaw = structuredClone(fixture) as {
+      nodes: unknown[]
+      links: unknown[]
+    }
+    reorderedRaw.nodes.reverse()
+    reorderedRaw.links.reverse()
+    const reordered = decodeGraphifyNetworkxV1(reorderedRaw, { graphId: "cache-growth" })
+
+    expect(first.ok).toBe(true)
+    expect(reordered).toEqual(first)
+    if (!first.ok) return
+
+    const cacheFile = first.snapshot.nodes.find(
+      (node) => node.kind === "file" && node.label === "cache.ts",
+    )
+    const checkoutCache = first.snapshot.nodes.find(
+      (node) => node.kind === "function" && node.label === "CheckoutCache",
+    )
+    expect(cacheFile).toMatchObject({
+      externalId: "demo_services_checkout_service_src_cache_ts",
+      provenance: "extracted",
+      location: {
+        path: "demo/services/checkout-service/src/cache.ts",
+        line: 1,
+      },
+    })
+    expect(checkoutCache).toMatchObject({
+      externalId: "cache_checkoutcache",
+      provenance: "extracted",
+      location: {
+        path: "demo/services/checkout-service/src/cache.ts",
+        line: 15,
+      },
+    })
+    expect(first.snapshot.links).toContainEqual(
+      expect.objectContaining({
+        type: "CONTAINS",
+        fromExternalId: cacheFile?.externalId,
+        toExternalId: checkoutCache?.externalId,
+        provenance: "extracted",
+        location: {
+          path: "demo/services/checkout-service/src/cache.ts",
+          line: 15,
+        },
+      }),
+    )
+    expect(first.snapshot.nodes).toContainEqual(
+      expect.objectContaining({ kind: "repository", label: "demo" }),
+    )
+    expect(first.snapshot.nodes).toContainEqual(
+      expect.objectContaining({ kind: "service", label: "checkout-service" }),
+    )
+  })
+
+  test("fails closed on malformed locations and dangling supported relations", () => {
+    const malformed = structuredClone(fixture) as {
+      nodes: Array<Record<string, unknown>>
+      links: Array<Record<string, unknown>>
+    }
+    const cache = malformed.nodes.find((node) => node.id === "cache_checkoutcache")
+    if (!cache) throw new Error("canonical cache node is missing")
+    cache.source_location = "line fifteen"
+    const contains = malformed.links.find(
+      (link) => link._src === "demo_services_checkout_service_src_cache_ts",
+    )
+    if (!contains) throw new Error("canonical cache relation is missing")
+    contains._tgt = "missing_cache_symbol"
+    contains.target = "missing_cache_symbol"
+    contains.confidence = "UNVERIFIED"
+
+    const result = decodeGraphifyNetworkxV1(malformed, { graphId: "cache-growth" })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.rejection.issues).toContainEqual({
+      code: "invalid_location",
+      path: "raw.nodes[id=cache_checkoutcache].source_location",
+      message: 'Expected source_location in "L<n>" form, received "line fifteen"',
+    })
+    expect(result.rejection.issues).toContainEqual({
+      code: "dangling_endpoint",
+      path: "raw.links[relation=contains,source=demo_services_checkout_service_src_cache_ts,target=missing_cache_symbol].target",
+      message: 'Supported relation target "missing_cache_symbol" does not identify a code node',
+    })
+    expect(result.rejection.issues).toContainEqual({
+      code: "unsupported_value",
+      path: "raw.links[relation=contains,source=demo_services_checkout_service_src_cache_ts,target=missing_cache_symbol].confidence",
+      message: 'Unsupported confidence "UNVERIFIED"',
+    })
+  })
+
+  test("rejects an ambiguous raw file identity instead of selecting one node", () => {
+    const ambiguous = structuredClone(fixture) as {
+      nodes: Array<Record<string, unknown>>
+    }
+    const cacheFile = ambiguous.nodes.find(
+      (node) => node.id === "demo_services_checkout_service_src_cache_ts",
+    )
+    if (!cacheFile) throw new Error("canonical cache file is missing")
+    ambiguous.nodes.push({ ...cacheFile, id: "duplicate_cache_file" })
+
+    const result = decodeGraphifyNetworkxV1(ambiguous, { graphId: "cache-growth" })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.rejection.issues).toContainEqual({
+      code: "ambiguous_value",
+      path: "raw.nodes[source_file=demo/services/checkout-service/src/cache.ts]",
+      message: 'Source file "demo/services/checkout-service/src/cache.ts" identifies multiple file nodes: demo_services_checkout_service_src_cache_ts, duplicate_cache_file',
+    })
   })
 })

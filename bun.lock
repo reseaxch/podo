@@ -114,6 +114,7 @@
       "name": "@podo/plugin-graphify",
       "version": "0.0.0",
       "dependencies": {
+        "@podo/contracts": "workspace:*",
         "@podo/plugin-sdk": "workspace:*",
       },
     },

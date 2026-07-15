@@ -72,13 +72,47 @@ Therefore repeated imports are byte-stable, node/link IDs remain stable when the
 updated, and any normalized content change produces a new snapshot ID. Changing `graphId`
 creates a distinct identity namespace.
 
-## Current limitation
+The normalized node, link, location, provenance, and snapshot types are imported
+from `@podo/contracts`. The compatibility aliases exported by this plugin remain
+available, but the plugin no longer owns a second Podo graph shape.
 
-Schema `1.0` is Podo's explicit compatibility boundary for the MVP; the repository does
-not yet contain a pinned upstream Graphify export or official schema fixture. When that
-artifact is selected, adapt it into this exact payload (or add a separately tested versioned
-decoder) rather than weakening validation. Persistence/upsert, operational overlay nodes, and
-graph queries belong outside this package.
+## Canonical NetworkX decoder
+
+`decodeGraphifyNetworkxV1(raw, { graphId })` is the strict decoder for
+`scenarios/cache-growth/fixtures/graph.json`. The version is explicit in the
+function name and `GRAPHIFY_NETWORKX_DECODER_VERSION`; the raw file itself does
+not carry a schema-version field.
+
+The decoder:
+
+- requires the canonical undirected, non-multigraph NetworkX envelope;
+- validates raw nodes, links, duplicated hyperedge metadata, endpoints,
+  confidence values/scores, and identity uniqueness before normalization;
+- converts `\` paths to repository-relative `/` paths and `L<n>` to a one-based
+  source location;
+- maps raw code nodes to file/function nodes, and derives repository/service
+  nodes only from an unambiguous `<repository>/services/<service>/...` path;
+- maps semantic `_src`/`_tgt` direction for `contains`, `method`, and `calls`;
+- maps `EXTRACTED`, `INFERRED`, and `AMBIGUOUS` confidence to the matching Podo
+  provenance value;
+- creates inferred repository-to-service and service-to-file ownership links;
+- passes the decoded payload through `normalizeGraphifyGraph`, retaining the
+  stable snapshot and entity identity rules above.
+
+The raw file is an undirected NetworkX export, so `source`/`target` ordering is
+not semantic. The decoder verifies those endpoints but uses `_src`/`_tgt` for
+relation direction. `references`, `semantically_similar_to`, `rationale_for`,
+and compound hyperedges are validated but intentionally not promoted into Podo
+code relations. Numeric `confidence_score` is validated from 0 to 1; the stable
+Podo contract retains its categorical provenance, not the provider-specific
+numeric score.
+
+## Current limitations
+
+The NetworkX decoder intentionally supports only the pinned canonical shape and
+the relation subset above. A future raw schema must get a separate versioned
+decoder instead of weakening `networkx-v1`. Persistence/upsert, operational
+overlay nodes, and graph queries belong outside this package.
 
 ```sh
 bun test plugins/graphify
