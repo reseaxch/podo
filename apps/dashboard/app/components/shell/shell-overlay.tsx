@@ -22,11 +22,18 @@ const commands: Array<{
   keywords: string
 }> = [
   {
+    label: "Open overview",
+    description: "Review decisions, posture, and active work",
+    href: "/overview",
+    icon: "squares-four",
+    keywords: "home command center decisions posture",
+  },
+  {
     label: "Open incidents",
     description: "Review active investigations and ownership",
     href: "/incidents",
     icon: "trend-up",
-    keywords: "overview queue active incidents",
+    keywords: "queue active incidents registry",
   },
   {
     label: "Open system graph",

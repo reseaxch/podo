@@ -10,6 +10,7 @@ export const evidenceSourceRecordsMock: EvidenceSourceRecord[] = [
     pictogram: "activity",
     summary:
       "Infrastructure metrics, service logs, monitors, and deployment markers from production.",
+    external_url: "https://app.datadoghq.com/",
     evidence_kinds: ["Metrics", "Logs", "Monitors", "Deployments"],
     signal_count_24h: 18420,
     last_sync_label: "18 sec ago",
@@ -33,6 +34,7 @@ export const evidenceSourceRecordsMock: EvidenceSourceRecord[] = [
     pictogram: "stack",
     summary:
       "Cloud Run revisions, container health, audit events, and runtime resource telemetry.",
+    external_url: "https://console.cloud.google.com/",
     evidence_kinds: ["Containers", "Audit logs", "Revisions", "Resources"],
     signal_count_24h: 7926,
     last_sync_label: "42 sec ago",
@@ -55,6 +57,7 @@ export const evidenceSourceRecordsMock: EvidenceSourceRecord[] = [
     pictogram: "git-branch",
     summary:
       "Commits, pull requests, checks, deployments, and code ownership for the primary repository.",
+    external_url: "https://github.com/reseaxch/podo",
     evidence_kinds: ["Commits", "Pull requests", "Checks", "Deployments"],
     signal_count_24h: 286,
     last_sync_label: "1 min ago",
@@ -77,6 +80,7 @@ export const evidenceSourceRecordsMock: EvidenceSourceRecord[] = [
     pictogram: "share-network",
     summary:
       "Trace spans and normalized application events from the deterministic incident replay.",
+    external_url: "https://opentelemetry.io/",
     evidence_kinds: ["Traces", "Spans", "Events"],
     signal_count_24h: 4138,
     last_sync_label: "2 min ago",
@@ -99,6 +103,7 @@ export const evidenceSourceRecordsMock: EvidenceSourceRecord[] = [
     pictogram: "rocket-launch",
     summary:
       "Workflow runs, failed steps, test artifacts, and release promotion evidence.",
+    external_url: "https://github.com/reseaxch/podo/actions",
     evidence_kinds: ["Workflows", "Tests", "Artifacts"],
     signal_count_24h: 64,
     last_sync_label: "19 min ago",
@@ -121,6 +126,7 @@ export const evidenceSourceRecordsMock: EvidenceSourceRecord[] = [
     pictogram: "warning-circle",
     summary:
       "Issues, stack traces, releases, and suspect commits from application error monitoring.",
+    external_url: "https://sentry.io/",
     evidence_kinds: ["Issues", "Stack traces", "Releases"],
     signal_count_24h: 0,
     last_sync_label: "Not connected",
@@ -137,6 +143,7 @@ export const evidenceSourceRecordsMock: EvidenceSourceRecord[] = [
     pictogram: "chart-line-up",
     summary:
       "Dashboard annotations, alert rules, and links to configured observability data sources.",
+    external_url: "https://grafana.com/",
     evidence_kinds: ["Alerts", "Annotations", "Dashboards"],
     signal_count_24h: 0,
     last_sync_label: "Not connected",

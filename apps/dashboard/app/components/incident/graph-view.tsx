@@ -6,13 +6,17 @@ import { graphNodeDetails, type GraphNodeId } from "../../mocks/incident"
 import { Icon } from "../ui/pictogram"
 
 export function GraphView({
+  initialSelectedNode = null,
   onOpenEvidence,
 }: {
+  initialSelectedNode?: GraphNodeId | null | undefined
   onOpenEvidence: (evidenceId: string) => void
 }) {
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 })
   const [graphMode, setGraphMode] = useState<"causal" | "all">("causal")
-  const [selectedNode, setSelectedNode] = useState<GraphNodeId | null>(null)
+  const [selectedNode, setSelectedNode] = useState<GraphNodeId | null>(
+    initialSelectedNode,
+  )
   const dragRef = useRef<{
     pointerId: number
     startX: number

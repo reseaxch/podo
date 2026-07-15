@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { useToast } from "../../hooks/use-toast"
@@ -8,6 +9,7 @@ import type {
   IncidentOverviewViewModel,
   IncidentSummary,
 } from "../../lib/incident-overview-types"
+import { incidentWorkspaceHref } from "../../lib/incident-links"
 import { IconRail } from "../shell/icon-rail"
 import { Topbar } from "../shell/topbar"
 import { Icon } from "../ui/pictogram"
@@ -41,7 +43,6 @@ export function IncidentsOverview({
   const [service, setService] = useState("All services")
   const [query, setQuery] = useState("")
   const [page, setPage] = useState(1)
-  const [showOverview, setShowOverview] = useState(true)
   const { toast, showToast } = useToast()
 
   const services = useMemo(
@@ -72,27 +73,15 @@ export function IncidentsOverview({
   const activeCount = overview.incidents.filter(
     (item) => item.status !== "Resolved",
   ).length
-  const approvalCount = overview.incidents.filter(
-    (item) => item.status === "Awaiting approval",
-  ).length
   const p1Count = overview.incidents.filter(
     (item) => item.severity === "P1" && item.status !== "Resolved",
   ).length
-  const attentionIncidents = overview.incidents.filter(
-    (item) =>
-      item.status !== "Resolved" &&
-      (item.severity === "P1" || item.status === "Awaiting approval"),
-  )
-  const activeStatusCounts = (
-    ["Investigating", "Awaiting approval", "Monitoring"] as const
-  ).map((status) => ({
-    status,
-    count: overview.incidents.filter((item) => item.status === status).length,
-  }))
 
   function openIncident(incident: IncidentSummary) {
     if (incident.hasWorkspace) {
-      window.location.assign(`/#workspace`)
+      window.location.assign(
+        incidentWorkspaceHref({ incidentId: incident.id, tab: "evidence" }),
+      )
       return
     }
     showToast(`${incident.id} detail is waiting for backend data`)
@@ -129,15 +118,9 @@ export function IncidentsOverview({
                 <small>{p1Count} critical · updated now</small>
               </span>
             </span>
-            <button
-              aria-expanded={showOverview}
-              className="secondary-button overview-toggle"
-              onClick={() => setShowOverview((current) => !current)}
-              type="button"
-            >
-              <Icon name={showOverview ? "caret-up" : "caret-down"} size={15} />
-              {showOverview ? "Hide overview" : "Show overview"}
-            </button>
+            <Link className="secondary-button overview-toggle" href="/overview">
+              <Icon name="squares-four" size={15} /> Overview
+            </Link>
             <button
               className="secondary-button refresh-button"
               onClick={() => showToast("Incident list refreshed")}
@@ -147,114 +130,6 @@ export function IncidentsOverview({
             </button>
           </div>
         </header>
-
-        {showOverview ? (
-          <section className="operations-cockpit" aria-label="Incident summary">
-            <article className="attention-queue">
-              <header>
-                <div>
-                  <span className="eyebrow">Attention queue</span>
-                  <h2>{attentionIncidents.length} incidents need a decision</h2>
-                  <p>Prioritized by severity, state, and current ownership.</p>
-                </div>
-                <span className="live-indicator">
-                  <i className="metric-signal live" /> Live
-                </span>
-              </header>
-              <div className="attention-list">
-                {attentionIncidents.slice(0, 3).map((incident, index) => (
-                  <button
-                    key={incident.id}
-                    onClick={() => openIncident(incident)}
-                    type="button"
-                  >
-                    <span className="sr-only">
-                      Open priority incident {incident.id}: {incident.title}
-                      .{" "}
-                    </span>
-                    <span className="attention-rank">0{index + 1}</span>
-                    <i
-                      className={`severity severity-${incident.severity.toLowerCase()}`}
-                    >
-                      {incident.severity}
-                    </i>
-                    <span className="attention-copy">
-                      <strong>{incident.title}</strong>
-                      <small>
-                        {incident.status} · {incident.service}
-                      </small>
-                    </span>
-                    <span className="attention-owner">
-                      <i>{incident.owner.initials}</i>
-                      <small>{incident.updated}</small>
-                    </span>
-                    <Icon name="caret-right" size={15} />
-                  </button>
-                ))}
-              </div>
-              <footer>
-                <span>
-                  <Icon name="shield-check" size={14} /> Evidence pipeline
-                  stable
-                </span>
-                <button
-                  onClick={() => {
-                    setFilter("Active")
-                    setPage(1)
-                  }}
-                  type="button"
-                >
-                  View active queue <Icon name="caret-right" size={13} />
-                </button>
-              </footer>
-            </article>
-            <article className="operations-flow">
-              <header>
-                <div>
-                  <span className="eyebrow">Operational flow</span>
-                  <h2>{activeCount} active investigations</h2>
-                </div>
-                <span className="flow-window">Last 24h</span>
-              </header>
-              <div className="flow-states">
-                {activeStatusCounts.map(({ status, count }) => (
-                  <div key={status}>
-                    <span>
-                      <i
-                        className={`flow-dot flow-dot-${status.toLowerCase().replaceAll(" ", "-")}`}
-                      />
-                      {status}
-                    </span>
-                    <strong>{count}</strong>
-                    <i className="flow-track">
-                      <b
-                        style={{
-                          width: `${activeCount ? (count / activeCount) * 100 : 0}%`,
-                        }}
-                      />
-                    </i>
-                  </div>
-                ))}
-              </div>
-              <footer>
-                <span>
-                  <small>Critical priority</small>
-                  <strong>{p1Count} P1</strong>
-                </span>
-                <span>
-                  <small>Ready for approval</small>
-                  <strong>{approvalCount}</strong>
-                </span>
-                <span>
-                  <small>Median diagnosis</small>
-                  <strong>
-                    14m <i>↓ 30%</i>
-                  </strong>
-                </span>
-              </footer>
-            </article>
-          </section>
-        ) : null}
 
         <section className="incident-inbox">
           <div className="incident-toolbar">

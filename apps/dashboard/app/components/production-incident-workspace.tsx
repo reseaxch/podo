@@ -1,8 +1,13 @@
+"use client"
+
 import type {
   DetectedIncident,
+  IncidentDelivery,
   IncidentEvidence,
+  IncidentRemediation,
   TelemetryKind,
 } from "@podo/contracts"
+import { useCallback, useEffect, useState } from "react"
 
 import { Icon } from "./ui/pictogram"
 
@@ -226,8 +231,8 @@ function InvestigationPanel({ incident }: { incident: DetectedIncident }) {
         <p className="production-kicker">Fail-closed boundary</p>
         <h2 id="next-step-title">Investigation not started</h2>
         <p>
-          No incident-linked investigation exists. Start one through an
-          authorized Podo client; this production dashboard remains read-only.
+          No incident-linked investigation exists. Start one below through the
+          Core-owned, read-only investigation boundary.
         </p>
         <IncidentFacts incident={incident} />
       </aside>
@@ -253,9 +258,8 @@ function InvestigationPanel({ incident }: { incident: DetectedIncident }) {
         <p className="production-kicker">Core investigation</p>
         <h2 id="next-step-title">{activeHeadings[status]}</h2>
         <p>
-          Core owns the investigation lifecycle. This dashboard reports its
-          authoritative state without offering local approval or remediation
-          controls.
+          Core owns the investigation lifecycle. This dashboard polls its
+          authoritative state and exposes only explicit, policy-gated actions.
         </p>
         <dl>
           <div>
@@ -279,10 +283,310 @@ function InvestigationPanel({ incident }: { incident: DetectedIncident }) {
   )
 }
 
+type WorkflowState = {
+  incident: DetectedIncident
+  remediation: IncidentRemediation | null
+  delivery: IncidentDelivery | null
+}
+
+function issueHref(
+  incident: DetectedIncident,
+  remediation: IncidentRemediation,
+) {
+  const title = `Manual remediation required for ${incident.id}`
+  const body = [
+    `Incident: ${incident.id}`,
+    `Service: ${incident.affectedService}`,
+    `Failure: ${remediation.error?.message ?? "Remediation validation failed"}`,
+    "",
+    "Review the evidence and failed remediation before preparing another patch.",
+  ].join("\n")
+  return `https://github.com/reseaxch/podo/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
+}
+
+function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
+  const [state, setState] = useState(initial)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const active =
+    state.incident.investigation?.status === "starting" ||
+    state.incident.investigation?.status === "running" ||
+    state.remediation?.status === "running" ||
+    state.delivery?.status === "delivering"
+
+  const refresh = useCallback(async () => {
+    const response = await fetch(
+      `/api/podo/incidents/${encodeURIComponent(state.incident.id)}`,
+      {
+        cache: "no-store",
+      },
+    )
+    if (!response.ok) throw new Error(`Refresh failed (${response.status})`)
+    setState((await response.json()) as WorkflowState)
+  }, [state.incident.id])
+
+  async function command(input: Record<string, string>) {
+    setBusy(true)
+    setError(null)
+    try {
+      const response = await fetch(
+        `/api/podo/incidents/${encodeURIComponent(state.incident.id)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      )
+      if (!response.ok) {
+        const detail = (await response.json().catch(() => null)) as {
+          message?: string
+        } | null
+        throw new Error(detail?.message ?? `Action failed (${response.status})`)
+      }
+      await refresh()
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error ? actionError.message : "Action failed",
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!active) return
+    const timer = window.setInterval(() => {
+      void refresh().catch(() => undefined)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [active, refresh])
+
+  const diagnosis = state.incident.diagnosis
+  const trustedDiagnosis =
+    diagnosis?.status === "validated" &&
+    state.incident.investigation?.status === "completed" &&
+    diagnosis.evidenceIds.every((id) =>
+      state.incident.evidence.some((item) => item.id === id),
+    )
+  const remediation = state.remediation
+  const delivery = state.delivery
+
+  return (
+    <div className="production-workflow-column">
+      <InvestigationPanel incident={state.incident} />
+      <section className="production-workflow" aria-labelledby="workflow-title">
+        <header>
+          <div>
+            <p className="production-kicker">Authorized workflow</p>
+            <h2 id="workflow-title">Next safe action</h2>
+          </div>
+          <button
+            className="secondary-button"
+            disabled={busy}
+            onClick={() =>
+              void refresh().catch((refreshError) =>
+                setError(String(refreshError)),
+              )
+            }
+            type="button"
+          >
+            Refresh
+          </button>
+        </header>
+
+        {error ? (
+          <p className="production-workflow-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        {remediation?.artifact ? (
+          <section
+            className="production-artifact"
+            aria-label="Verified remediation artifact"
+          >
+            <div>
+              <strong>{remediation.artifact.patch.summary}</strong>
+              <span>
+                {remediation.artifact.patch.changedFiles.length} changed files ·
+                verified tree {remediation.artifact.provenance.resultTreeOid}
+              </span>
+            </div>
+            <dl>
+              <div>
+                <dt>Regression before patch</dt>
+                <dd className="failed">
+                  {remediation.artifact.regression.prePatch}
+                </dd>
+              </div>
+              <div>
+                <dt>Regression after patch</dt>
+                <dd className="passed">
+                  {remediation.artifact.regression.postPatch}
+                </dd>
+              </div>
+              <div>
+                <dt>Validation</dt>
+                <dd className="passed">
+                  {remediation.artifact.validation.status}
+                </dd>
+              </div>
+            </dl>
+            <details>
+              <summary>Review exact patch</summary>
+              <pre>
+                <code>{remediation.artifact.patch.unifiedDiff}</code>
+              </pre>
+            </details>
+          </section>
+        ) : null}
+
+        {delivery?.status === "delivered" && delivery.pullRequest ? (
+          <a
+            className="primary-button"
+            href={delivery.pullRequest.url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open PR #{delivery.pullRequest.number}
+          </a>
+        ) : delivery?.status === "failed" ? (
+          <p className="production-workflow-error" role="alert">
+            {delivery.error?.message ?? "Pull request delivery failed."}
+          </p>
+        ) : remediation?.status === "failed" ? (
+          <div>
+            <p className="production-workflow-error" role="alert">
+              {remediation.error?.message ?? "Remediation verification failed."}
+            </p>
+            <a
+              className="primary-button"
+              href={issueHref(state.incident, remediation)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open prefilled GitHub issue
+            </a>
+          </div>
+        ) : !state.incident.investigation ? (
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => void command({ action: "start-investigation" })}
+            type="button"
+          >
+            Investigate incident
+          </button>
+        ) : active ? (
+          <p className="production-workflow-status" role="status">
+            <Icon name="activity" size={16} /> Core is processing this step…
+          </p>
+        ) : diagnosis?.status === "failed" ? (
+          <p className="production-workflow-status">
+            Investigation failed closed. Review the audit trail before retrying.
+          </p>
+        ) : trustedDiagnosis && diagnosis.safeToAttemptFix && !remediation ? (
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => void command({ action: "start-remediation" })}
+            type="button"
+          >
+            Prepare tested remediation
+          </button>
+        ) : remediation?.status === "pending_approval" ? (
+          <div className="production-workflow-actions">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() =>
+                void command({
+                  action: "decide-remediation",
+                  approvalId: remediation.approval.id,
+                  decision: "deny",
+                })
+              }
+              type="button"
+            >
+              Deny remediation
+            </button>
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() =>
+                void command({
+                  action: "decide-remediation",
+                  approvalId: remediation.approval.id,
+                  decision: "approve",
+                })
+              }
+              type="button"
+            >
+              Approve tested fix
+            </button>
+          </div>
+        ) : remediation?.status === "denied" ? (
+          <p className="production-workflow-status">
+            Remediation was denied. No code was changed.
+          </p>
+        ) : remediation?.status === "completed" && !delivery ? (
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => void command({ action: "start-delivery" })}
+            type="button"
+          >
+            Prepare pull request delivery
+          </button>
+        ) : delivery?.status === "pending_approval" ? (
+          <div className="production-workflow-actions">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() =>
+                void command({
+                  action: "decide-delivery",
+                  approvalId: delivery.approval.id,
+                  decision: "deny",
+                })
+              }
+              type="button"
+            >
+              Deny delivery
+            </button>
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() =>
+                void command({
+                  action: "decide-delivery",
+                  approvalId: delivery.approval.id,
+                  decision: "approve",
+                })
+              }
+              type="button"
+            >
+              Approve &amp; create PR
+            </button>
+          </div>
+        ) : (
+          <p className="production-workflow-status">
+            No further action is currently authorized.
+          </p>
+        )}
+      </section>
+    </div>
+  )
+}
+
 export function ProductionIncidentWorkspace({
   incident,
+  remediation = null,
+  delivery = null,
 }: {
   incident: DetectedIncident
+  remediation?: IncidentRemediation | null
+  delivery?: IncidentDelivery | null
 }) {
   return (
     <main className="production-shell" data-ready="true">
@@ -338,7 +642,7 @@ export function ProductionIncidentWorkspace({
             </div>
           </section>
 
-          <InvestigationPanel incident={incident} />
+          <ProductionWorkflow initial={{ incident, remediation, delivery }} />
         </div>
       </section>
     </main>

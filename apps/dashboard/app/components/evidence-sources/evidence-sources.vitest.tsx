@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -37,10 +37,12 @@ describe("EvidenceSources", () => {
     ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("tab", { name: /All sources/ }))
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Filter by category" }),
-      "Cloud",
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Filter by category",
+      }),
     )
+    await user.click(screen.getByRole("option", { name: "Cloud" }))
 
     expect(
       screen.getByRole("button", { name: /^Inspect Google Cloud\b/ }),
@@ -75,6 +77,26 @@ describe("EvidenceSources", () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Connect source" }))
+    const dialog = screen.getByRole("dialog", { name: "Connect Sentry" })
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: /reviewed the requested scopes/i,
+      }),
+    )
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Continue to authorization",
+      }),
+    )
+    expect(within(dialog).getByText("Authorize Podo in Sentry")).toBeVisible()
+    await user.click(
+      within(dialog).getByRole("button", { name: "Authorize Sentry" }),
+    )
+
+    expect(
+      screen.getByRole("dialog", { name: "Sentry connected" }),
+    ).toHaveTextContent("Evidence ingestion is ready")
+    await user.click(screen.getByRole("button", { name: "Done" }))
 
     expect(
       screen.getByRole("button", { name: "Manage connection" }),
@@ -93,17 +115,81 @@ describe("EvidenceSources", () => {
 
     await user.click(screen.getByRole("button", { name: /^Inspect Sentry\b/ }))
     await user.click(screen.getByRole("button", { name: "Connect source" }))
+    const dialog = screen.getByRole("dialog", { name: "Connect Sentry" })
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: /reviewed the requested scopes/i,
+      }),
+    )
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Continue to authorization",
+      }),
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Authorize Sentry" }),
+    )
 
     expect(updateConnection).toHaveBeenCalledWith({
       sourceId: "sentry-catalog",
       action: "connect",
       expectedStatus: "Available",
+      instance: "Sentry workspace",
     })
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Connector authorization expired",
     )
     expect(
-      screen.getByRole("button", { name: "Connect source" }),
+      within(dialog).getByRole("button", { name: "Authorize Sentry" }),
+    ).toBeInTheDocument()
+  })
+
+  it("keeps management non-mutating until disconnect is explicitly confirmed", async () => {
+    const user = userEvent.setup()
+    const updateConnection = vi
+      .fn<EvidenceSourcesController["updateConnection"]>()
+      .mockResolvedValue({
+        ...model.sources[0]!,
+        status: "Available",
+        connection: null,
+      })
+    render(<EvidenceSources controller={{ updateConnection }} model={model} />)
+
+    await user.click(screen.getByRole("button", { name: "Manage connection" }))
+    const dialog = screen.getByRole("dialog", { name: "Manage Datadog" })
+    expect(updateConnection).not.toHaveBeenCalled()
+    expect(
+      within(dialog).getByRole("button", { name: "Disconnect source" }),
+    ).toBeDisabled()
+
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: /new evidence will stop ingesting/i,
+      }),
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Disconnect source" }),
+    )
+
+    expect(updateConnection).toHaveBeenCalledWith({
+      sourceId: "datadog-prod",
+      action: "disconnect",
+      expectedStatus: "Connected",
+    })
+  })
+
+  it("lets the user choose an available connector from Add source", async () => {
+    const user = userEvent.setup()
+    render(<EvidenceSources model={model} />)
+
+    await user.click(screen.getByRole("button", { name: "Add source" }))
+
+    expect(
+      screen.getByRole("dialog", { name: "Add evidence source" }),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Configure Sentry" }))
+    expect(
+      screen.getByRole("dialog", { name: "Connect Sentry" }),
     ).toBeInTheDocument()
   })
 

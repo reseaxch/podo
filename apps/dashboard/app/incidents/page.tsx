@@ -1,7 +1,10 @@
+import type { Metadata } from "next"
+
 import { IncidentsOverview } from "../components/incidents/incidents-overview"
 import { getIncidentOverview } from "../lib/incidents-data"
 
-export default function IncidentsPage() {
-  const overview = getIncidentOverview()
+export default async function IncidentsPage() {
+  const overview = await getIncidentOverview()
   return <IncidentsOverview overview={overview} />
 }
+export const metadata: Metadata = { title: "Incidents | Podo" }

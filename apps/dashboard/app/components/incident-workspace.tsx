@@ -8,6 +8,7 @@ import type {
   IncidentTab,
   IncidentWorkspaceViewModel,
 } from "../lib/incident-types"
+import type { GraphNodeId } from "../mocks/incident"
 import { ChangesView } from "./incident/changes-view"
 import { DiagnosisLauncher, DiagnosisPanel } from "./incident/diagnosis-panel"
 import { EvidenceView } from "./incident/evidence-view"
@@ -20,11 +21,15 @@ import { Icon } from "./ui/pictogram"
 export function IncidentWorkspace({
   controller,
   incident,
+  initialGraphNodeId,
+  initialTab = "evidence",
 }: {
   controller: IncidentController
   incident: IncidentWorkspaceViewModel
+  initialGraphNodeId?: GraphNodeId | undefined
+  initialTab?: IncidentTab
 }) {
-  const [activeTab, setActiveTab] = useState<IncidentTab>("evidence")
+  const [activeTab, setActiveTab] = useState<IncidentTab>(initialTab)
   const [expandedId, setExpandedId] = useState<string | null>("trace")
   const [diagnosisOpen, setDiagnosisOpen] = useState(true)
   const [compactDiagnosis, setCompactDiagnosis] = useState(false)
@@ -137,7 +142,10 @@ export function IncidentWorkspace({
               />
             ) : null}
             {activeTab === "graph" ? (
-              <GraphView onOpenEvidence={openEvidence} />
+              <GraphView
+                initialSelectedNode={initialGraphNodeId}
+                onOpenEvidence={openEvidence}
+              />
             ) : null}
             {activeTab === "changes" ? (
               <ChangesView

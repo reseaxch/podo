@@ -13,6 +13,7 @@ export type IncidentSummary = {
   updated: string
   owner: { name: string; initials: string }
   hasWorkspace: boolean
+  attentionReason?: "Needs approval" | "SLO breached" | "Escalating" | "Unowned"
 }
 
 export type IncidentOverviewViewModel = {

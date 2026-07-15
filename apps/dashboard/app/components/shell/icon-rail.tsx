@@ -10,7 +10,11 @@ import { ShellOverlay, type ShellOverlayMode } from "./shell-overlay"
 export function IconRail() {
   const [overlay, setOverlay] = useState<ShellOverlayMode | null>(null)
   const pathname = usePathname() ?? ""
-  const incidentsActive = pathname === "/" || pathname.startsWith("/incidents")
+  const overviewActive = pathname.startsWith("/overview")
+  const incidentsActive =
+    pathname === "/" ||
+    pathname === "/demo" ||
+    pathname.startsWith("/incidents")
   const auditActive = pathname.startsWith("/audit")
   const evidenceActive = pathname.startsWith("/evidence-sources")
   const graphActive = pathname.startsWith("/system-graph")
@@ -37,11 +41,16 @@ export function IconRail() {
   return (
     <>
       <aside className="icon-rail" aria-label="Primary navigation">
-        <Link className="brand-mark" aria-label="Podo home" href="/incidents">
+        <Link className="brand-mark" aria-label="Podo home" href="/overview">
           <Icon name="cube" size={21} />
         </Link>
         <nav>
-          <Link aria-label="Overview" href="/incidents">
+          <Link
+            aria-current={overviewActive ? "page" : undefined}
+            aria-label="Overview"
+            className={overviewActive ? "active" : undefined}
+            href="/overview"
+          >
             <span className="rail-icon">
               <Icon name="squares-four" />
             </span>

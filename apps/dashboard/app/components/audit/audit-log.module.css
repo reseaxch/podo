@@ -59,6 +59,7 @@
   cursor: pointer;
   font-size: 10px;
   font-weight: 700;
+  text-decoration: none;
 }
 
 .liveDot,

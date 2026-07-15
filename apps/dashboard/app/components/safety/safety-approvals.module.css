@@ -256,7 +256,16 @@
 
 .queueItem[aria-current="true"] {
   border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 9px;
   background: var(--primary-soft);
+}
+
+.queueItem[aria-current="true"] + .queueItem {
+  border-top-color: transparent;
+}
+
+.queueItem:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--focus) 72%, transparent);
 }
 
 .requestIcon {

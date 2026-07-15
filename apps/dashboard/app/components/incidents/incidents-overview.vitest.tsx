@@ -94,21 +94,11 @@ describe("IncidentsOverview", () => {
     )
   })
 
-  it("collapses the operational overview to prioritize the incident queue", async () => {
-    const user = userEvent.setup()
+  it("links back to the operational overview", () => {
     render(<IncidentsOverview overview={incidentOverviewMock} />)
 
     expect(
-      screen.getByRole("region", { name: "Incident summary" }),
-    ).toBeInTheDocument()
-
-    await user.click(screen.getByRole("button", { name: "Hide overview" }))
-
-    expect(
-      screen.queryByRole("region", { name: "Incident summary" }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: "Show overview" }),
-    ).toHaveAttribute("aria-expanded", "false")
+      screen.getAllByRole("link", { name: "Overview" }).at(-1),
+    ).toHaveAttribute("href", "/overview")
   })
 })
