@@ -40,7 +40,7 @@ describe("GitCliBranchPublisher", () => {
     expect(await gitBare(fixture.bareRemote, ["show", "-s", "--format=%P", first.headCommit])).toBe(fixture.baseCommit)
     expect(await git(fixture.repositoryRoot, ["rev-parse", "refs/heads/main"])).toBe(fixture.baseCommit)
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
 
     const pushes = captured.filter(({ argv }) => argv.includes("push"))
     expect(pushes).toHaveLength(1)
@@ -77,7 +77,7 @@ describe("GitCliBranchPublisher", () => {
 
     expect(captured.some(({ argv }) => argv.includes("push"))).toBe(false)
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
   })
 
   test("fails closed when the base moves after publishing and leaves only the exact idempotent head", async () => {
@@ -315,6 +315,14 @@ async function gitBare(repository: string, args: string[]): Promise<string> {
 async function worktreePaths(repository: string): Promise<string[]> {
   const output = await git(repository, ["worktree", "list", "--porcelain"])
   return output.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => line.slice("worktree ".length))
+}
+
+// `git worktree list --porcelain` always emits forward-slash paths, while
+// realpath() returns native separators (backslashes on Windows). Normalize the
+// realpath side to Git's canonical forward-slash form so the comparison holds on
+// both Windows and Unix.
+function toGitPath(path: string): string {
+  return path.replaceAll("\\", "/")
 }
 
 async function command(
