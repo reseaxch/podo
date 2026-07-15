@@ -12,6 +12,11 @@
 - core-owned settings plus telemetry ingestion and incident read APIs;
 - deterministic, replay-safe cache-growth incident detection.
 - incident-scoped, evidence-backed investigator handoff through the typed client.
+- approval-gated remediation with a verified public artifact only after a
+  failing pre-patch regression, passing post-patch regression, and full
+  validation;
+- a fail-closed two-turn Codex patch producer and detached-worktree executor
+  that never stages, branches, pushes, merges, or mutates the source checkout.
 
 `POST /api/incidents/:id/investigation` is the product investigation entrypoint.
 It accepts only an absolute repository `cwd`; core selects the incident evidence,
@@ -37,8 +42,8 @@ provenance returns 409 without a partial path.
 Successful paths include normalized file/function labels, external identities,
 and optional source locations rather than opaque graph IDs alone.
 
-Durable persistence, graph-backed enrichment, remediation, audit, and delivery
-remain workstream milestones.
+Durable persistence, production composition of the shared Codex runtime,
+complete audit history, and GitHub delivery remain MVP workstream milestones.
 
 ## Run and validate
 

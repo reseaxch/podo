@@ -23,6 +23,7 @@
     "codex:smoke": "bun run --cwd packages/codex-app-server-client smoke",
     "codex:upstream:status": "bun scripts/codex-upstream.ts status",
     "codex:upstream:update": "bun scripts/codex-upstream.ts update",
+    "poc": "bun run codex:smoke && bun test tests/integration/canonical-poc.test.ts",
     "eval": "bun run --cwd evals eval",
     "bench": "bun run --cwd benchmarks bench"
   },

@@ -9,12 +9,12 @@ Podo connects infrastructure signals, runtime evidence, deployments, commits,
 and code into a living system graph, then uses Codex to produce remediation
 through an approval-gated workflow.
 
-> **Status:** active POC development. The canonical graph and telemetry fixtures
-> now run through Graphify decoding, typed replay, incident detection, the
-> evidence-specific deployment/commit/code graph, and a validated structured
-> diagnosis behind the real core/client boundary. The remaining POC work is
-> production dashboard control, isolated remediation, regression validation,
-> and a reproducible pull-request preview.
+> **Status:** canonical POC complete. `bun run poc` verifies the pinned live
+> Codex App Server and then executes the complete deterministic vertical slice
+> through the real graph, replay, core, typed client, Codex remediation producer,
+> isolated git worktree, red-to-green regression gate, and reproducible
+> pull-request preview. Production runtime composition and GitHub delivery are
+> the next MVP milestones.
 
 ## MVP outcome
 
@@ -146,18 +146,29 @@ These areas answer different questions:
 
 The canonical demo uses `scenarios/cache-growth`. Negative and adversarial controls live beside it so benchmark claims do not depend on a single happy path.
 
-The first cross-boundary POC proof is executable without a live server, network,
-or Codex process:
+The canonical POC is one command:
 
 ```sh
-bun test tests/integration/canonical-poc.test.ts
+bun run poc
 ```
 
-It proves the canonical fixture reaches a detected evidence-backed incident,
-resolves `deploy-1042 → trusted commit → cache.ts → CheckoutCache`, and exposes
-only a validated `podo.diagnosis.v1` after the deterministic runtime completes.
-The proof reads expected incident/diagnosis outcomes from `scenario.json`; its
-`safeToAttemptFix` flag neither grants approval nor starts remediation.
+The command first performs a real handshake with the pinned Codex App Server.
+It then proves the canonical fixture reaches a detected evidence-backed
+incident, resolves `deploy-1042 → trusted commit → cache.ts → CheckoutCache`,
+and exposes only a validated `podo.diagnosis.v1`. `safeToAttemptFix` does not
+grant mutation authority: the test observes a pending remediation with no
+worktree or patch, submits an explicit approval through `@podo/client`, and only
+then runs the production Codex remediation producer against a deterministic
+runtime double at the App Server boundary. The producer uses two turns in one
+thread to write a regression and a minimal fix inside a detached checkout. Podo
+independently requires the regression to fail before the fix, pass afterward,
+runs package validation, verifies the exact diff, cleans the worktree, and emits
+a stable PR preview while leaving the source checkout and default branch intact.
+
+The deterministic runtime double keeps this proof reproducible and offline; it
+does not replace the live App Server. `bun run codex:smoke` is the live protocol
+compatibility signal, while production composition of that runtime into the
+remediation executor remains an MVP integration step.
 
 Initial product gates from the MVP plan include:
 
@@ -206,6 +217,12 @@ Verify the complete foundation:
 bun run codex:generate
 bun run codex:smoke
 bun run check
+```
+
+Run the complete canonical POC gate:
+
+```sh
+bun run poc
 ```
 
 Run the deterministic runtime and orchestration tests without a live Codex process:
