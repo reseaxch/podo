@@ -27,8 +27,16 @@ repository-relative source location.
 This contract is already normalized Podo data. It is not the raw Graphify format.
 In particular, `scenarios/cache-growth/fixtures/graph.json` is a NetworkX node-link
 export with `directed`, `multigraph`, free-form nodes, and `source`/`target` links;
-passing it directly as `NormalizedCodeGraphSnapshot` is unsupported. A versioned
-Graphify raw-to-normalized decoder remains an explicit integration gap.
+passing it directly as `NormalizedCodeGraphSnapshot` is unsupported. The
+Graphify adapter's versioned decoder converts that source payload before core
+receives the normalized snapshot.
+
+`GetIncidentCausalPathResponse` exposes the evidence-specific
+`podo.causal-path.v1` chain as explicit incident, evidence, telemetry event,
+container, deployment, commit, file, and function identities. The transport
+includes normalized file/function labels, external IDs, and optional source
+locations so consumers can render code-level evidence. It does not expose graph
+implementation details, provider payloads, or a partial path.
 
 ```sh
 bun run --cwd packages/contracts typecheck

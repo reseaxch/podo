@@ -9,6 +9,7 @@ import type {
 } from "@podo/contracts"
 import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
+import { IncidentCausalPathService, type IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
 import { SettingsStore } from "./settings"
 
@@ -18,6 +19,7 @@ export interface CoreHandlerOptions {
   createRuntime?: () => Promise<CodexRuntime>
   eventLogLimit?: number
   incidentMonitor?: IncidentMonitor
+  incidentGraph?: IncidentGraphConfig
 }
 
 const serviceVersion = "0.0.0"
@@ -36,6 +38,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   const settings = new SettingsStore()
   const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
   const incidentInvestigations = new IncidentInvestigationCoordinator(incidentMonitor, investigations, settings)
+  const incidentCausalPaths = new IncidentCausalPathService(incidentMonitor, options.incidentGraph)
 
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -99,6 +102,22 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       const result = await incidentInvestigations.start(decodeURIComponent(incidentInvestigationMatch[1]), input)
       return result.ok
         ? json({ incident: result.incident, investigation: result.investigation }, result.created ? 201 : 200)
+        : json({ error: result.error, message: result.message }, result.status)
+    }
+
+    const incidentCausalPathMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/causal-path$/)
+    if (incidentCausalPathMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      const evidenceIds = url.searchParams.getAll("evidenceId")
+      const queryKeys = [...url.searchParams.keys()]
+      if (evidenceIds.length !== 1
+        || evidenceIds[0]?.trim().length === 0
+        || queryKeys.some((key) => key !== "evidenceId")) {
+        return json({ error: "invalid_request", message: "Exactly one non-empty evidenceId query parameter is required" }, 400)
+      }
+      const result = incidentCausalPaths.resolve(decodeURIComponent(incidentCausalPathMatch[1]), evidenceIds[0]!)
+      return result.ok
+        ? json(result.response)
         : json({ error: result.error, message: result.message }, result.status)
     }
 

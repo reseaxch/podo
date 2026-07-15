@@ -156,6 +156,41 @@ export interface GetIncidentResponse {
   incident: DetectedIncident
 }
 
+export const PODO_CAUSAL_PATH_SCHEMA_VERSION = "podo.causal-path.v1" as const
+
+export interface IncidentCausalPathFileNode {
+  id: string
+  kind: "file"
+  externalId: string
+  label: string
+  location?: CodeGraphSourceLocation
+}
+
+export interface IncidentCausalPathFunctionNode {
+  id: string
+  kind: "function"
+  externalId: string
+  label: string
+  location?: CodeGraphSourceLocation
+}
+
+export interface IncidentCausalPath {
+  schemaVersion: typeof PODO_CAUSAL_PATH_SCHEMA_VERSION
+  id: string
+  incident: { id: string }
+  evidence: { id: string }
+  telemetryEvent: { id: string; occurredAt: string }
+  container: { id: string }
+  deployment: { id: string }
+  commit: { id: string; sha: string }
+  file: IncidentCausalPathFileNode
+  function: IncidentCausalPathFunctionNode
+}
+
+export interface GetIncidentCausalPathResponse {
+  causalPath: IncidentCausalPath
+}
+
 export interface StartIncidentInvestigationRequest {
   cwd: string
 }

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { PODO_CODE_GRAPH_SCHEMA_VERSION, type NormalizedCodeGraphSnapshot } from "@podo/contracts"
 import { createCoreHandler } from "./app"
+import type { IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 
 describe("Podo core handler", () => {
   test("reports process health without requiring Codex", async () => {
@@ -130,4 +132,154 @@ describe("Podo core handler", () => {
     const incidents = await handler(new Request("http://podo.test/api/incidents"))
     expect(await incidents.json()).toEqual({ incidents: [] })
   })
+
+  test("fails causal-path requests closed for invalid queries and unknown or unavailable state", async () => {
+    const handler = createCoreHandler()
+    const incident = await ingestCausalPathIncident(handler)
+    const evidenceId = incident.evidence[0]!.id
+
+    const controls = [
+      { url: `/api/incidents/${incident.id}/causal-path`, status: 400, error: "invalid_request" },
+      { url: `/api/incidents/${incident.id}/causal-path?evidenceId=${evidenceId}&evidenceId=other`, status: 400, error: "invalid_request" },
+      { url: `/api/incidents/${incident.id}/causal-path?evidenceId=${evidenceId}&extra=true`, status: 400, error: "invalid_request" },
+      { url: "/api/incidents/unknown/causal-path?evidenceId=unknown", status: 404, error: "incident_not_found" },
+      { url: `/api/incidents/${incident.id}/causal-path?evidenceId=unknown`, status: 404, error: "evidence_not_found" },
+      { url: `/api/incidents/${incident.id}/causal-path?evidenceId=${evidenceId}`, status: 503, error: "causal_path_unavailable" },
+    ]
+
+    for (const control of controls) {
+      const response = await handler(new Request(`http://podo.test${control.url}`))
+      const body = await response.json() as Record<string, unknown>
+      expect(response.status).toBe(control.status)
+      expect(body.error).toBe(control.error)
+      expect(body.causalPath).toBeUndefined()
+    }
+  })
+
+  test("returns one stable unresolved error for missing or ambiguous trusted graph provenance", async () => {
+    const correlation = {
+      deploymentId: "deploy-1042",
+      containerId: "checkout-container",
+      commitSha: "0123456789abcdef0123456789abcdef01234567",
+      changedFileNodeId: "code:file:checkout-cache",
+    }
+    const validGraph = causalPathCodeGraph(correlation.changedFileNodeId)
+    const configs: IncidentGraphConfig[] = [
+      { codeGraph: validGraph, trustedCorrelations: [] },
+      { codeGraph: validGraph, trustedCorrelations: [correlation, structuredClone(correlation)] },
+      {
+        codeGraph: validGraph,
+        trustedCorrelations: [{ ...correlation, containerId: "wrong-container" }],
+      },
+      {
+        codeGraph: ambiguousCausalPathCodeGraph(validGraph, correlation.changedFileNodeId),
+        trustedCorrelations: [correlation],
+      },
+    ]
+
+    for (const incidentGraph of configs) {
+      const handler = createCoreHandler({ incidentGraph })
+      const incident = await ingestCausalPathIncident(handler)
+      const response = await handler(new Request(
+        `http://podo.test/api/incidents/${incident.id}/causal-path?evidenceId=${incident.evidence[0]!.id}`,
+      ))
+      const body = await response.json() as Record<string, unknown>
+      expect(response.status).toBe(409)
+      expect(body.error).toBe("causal_path_unresolved")
+      expect(body.causalPath).toBeUndefined()
+    }
+  })
 })
+
+async function ingestCausalPathIncident(handler: ReturnType<typeof createCoreHandler>) {
+  const base = Date.parse("2026-07-14T09:00:00.000Z")
+  const events = [
+    ...[180, 310, 450, 620].map((mib, step) => ({
+      timestamp: new Date(base + step * 1_000).toISOString(),
+      kind: "metric",
+      service: "checkout-service",
+      severity: "warn",
+      message: "process heap sample",
+      deploymentId: "deploy-1042",
+      containerId: "checkout-container",
+      metric: { name: "process.heap.used", value: mib * 1024 * 1024, unit: "By" },
+    })),
+    {
+      timestamp: new Date(base + 4_000).toISOString(),
+      kind: "trace",
+      service: "checkout-service",
+      severity: "error",
+      message: "POST /checkout returned 500",
+      deploymentId: "deploy-1042",
+      containerId: "checkout-container",
+      traceId: "trace-1",
+    },
+    {
+      timestamp: new Date(base + 5_000).toISOString(),
+      kind: "log",
+      service: "checkout-service",
+      severity: "error",
+      message: "JavaScript heap out of memory",
+      deploymentId: "deploy-1042",
+      containerId: "checkout-container",
+      traceId: "trace-2",
+    },
+  ]
+  const response = await handler(new Request("http://podo.test/api/telemetry/events", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ events }),
+  }))
+  expect(response.status).toBe(200)
+  const body = await response.json() as { incident: { id: string; evidence: Array<{ id: string }> } | null }
+  if (!body.incident) throw new Error("expected causal-path incident")
+  return body.incident
+}
+
+function causalPathCodeGraph(fileNodeId: string): NormalizedCodeGraphSnapshot {
+  return {
+    id: "graph-causal-path-handler",
+    schemaVersion: PODO_CODE_GRAPH_SCHEMA_VERSION,
+    source: { provider: "injected-test", graphId: "checkout", schemaVersion: "1" },
+    nodes: [
+      { id: fileNodeId, externalId: "external:file", kind: "file", label: "cache.ts", provenance: "extracted" },
+      { id: "code:function:checkout-cache-set", externalId: "external:function", kind: "function", label: "CheckoutCache.set", provenance: "extracted" },
+    ],
+    links: [{
+      id: "code:link:file-function",
+      externalId: "external:file-function",
+      type: "CONTAINS",
+      fromNodeId: fileNodeId,
+      toNodeId: "code:function:checkout-cache-set",
+      fromExternalId: "external:file",
+      toExternalId: "external:function",
+      provenance: "extracted",
+    }],
+  }
+}
+
+function ambiguousCausalPathCodeGraph(
+  graph: NormalizedCodeGraphSnapshot,
+  fileNodeId: string,
+): NormalizedCodeGraphSnapshot {
+  return {
+    ...graph,
+    nodes: [
+      ...graph.nodes,
+      { id: "code:function:other", externalId: "external:other", kind: "function", label: "Other.set", provenance: "extracted" },
+    ],
+    links: [
+      ...graph.links,
+      {
+        id: "code:link:file-other-function",
+        externalId: "external:file-other-function",
+        type: "CONTAINS",
+        fromNodeId: fileNodeId,
+        toNodeId: "code:function:other",
+        fromExternalId: "external:file",
+        toExternalId: "external:other",
+        provenance: "extracted",
+      },
+    ],
+  }
+}

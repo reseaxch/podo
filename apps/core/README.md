@@ -27,6 +27,16 @@ core-owned evidence IDs. The public incident then exposes either a validated
 diagnosis or a stable failure state; raw model output is never included in that
 projection and no diagnosis field authorizes remediation.
 
+`GET /api/incidents/:id/causal-path?evidenceId=...` resolves the versioned
+incident-to-function chain for one evidence item. The handler accepts normalized
+code graph data and trusted deployment/container/commit/file correlation only
+through `CoreHandlerOptions.incidentGraph`; it does not import an adapter or
+derive commit/file provenance from telemetry. Unknown incident/evidence returns
+404, missing graph configuration returns 503, and unresolved or ambiguous graph
+provenance returns 409 without a partial path.
+Successful paths include normalized file/function labels, external identities,
+and optional source locations rather than opaque graph IDs alone.
+
 Durable persistence, graph-backed enrichment, remediation, audit, and delivery
 remain workstream milestones.
 

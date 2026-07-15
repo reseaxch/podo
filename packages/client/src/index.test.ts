@@ -68,6 +68,23 @@ describe("createPodoClient", () => {
     }])
   })
 
+  test("reads an evidence-specific causal path with encoded identities", async () => {
+    const requestedUrls: string[] = []
+    const client = createPodoClient({
+      baseUrl: "http://podo.test/",
+      fetch: async (input) => {
+        requestedUrls.push(String(input))
+        return Response.json({ causalPath: { schemaVersion: "podo.causal-path.v1", id: "path-1" } })
+      },
+    })
+
+    await client.getIncidentCausalPath("incident/1", "evidence?1")
+
+    expect(requestedUrls).toEqual([
+      "http://podo.test/api/incidents/incident%2F1/causal-path?evidenceId=evidence%3F1",
+    ])
+  })
+
   test("reads and updates the public settings contract", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = []
     const client = createPodoClient({

@@ -2,6 +2,7 @@ import type {
   ApprovalDecisionResponse,
   CancelInvestigationResponse,
   GetInvestigationResponse,
+  GetIncidentCausalPathResponse,
   GetIncidentResponse,
   GetSettingsResponse,
   HealthResponse,
@@ -49,6 +50,7 @@ export interface PodoClient {
 
 export interface PodoIncidentClient extends PodoClient {
   startIncidentInvestigation(id: string, input: StartIncidentInvestigationRequest): Promise<StartIncidentInvestigationResponse>
+  getIncidentCausalPath(id: string, evidenceId: string): Promise<GetIncidentCausalPathResponse>
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -76,6 +78,7 @@ export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentC
     ingestTelemetry: (events) => command<IngestTelemetryResponse>(`${baseUrl}/api/telemetry/events`, "POST", { events }),
     listIncidents: async () => readJson<ListIncidentsResponse>(await request(`${baseUrl}/api/incidents`)),
     getIncident: async (id) => readJson<GetIncidentResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}`)),
+    getIncidentCausalPath: async (id, evidenceId) => readJson<GetIncidentCausalPathResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/causal-path?evidenceId=${encodeURIComponent(evidenceId)}`)),
     startIncidentInvestigation: (id, input) => command<StartIncidentInvestigationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/investigation`, "POST", input),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
     get: async (id) => readJson<GetInvestigationResponse>(await request(investigationUrl(id))),

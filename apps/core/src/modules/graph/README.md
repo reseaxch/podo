@@ -36,6 +36,16 @@ trusted deployment correlation is authoritative, but when present it must
 match. The `CHANGED` target comes only from that trusted correlation; telemetry
 cannot select a file.
 
+`IncidentCausalPathService` is the read-side owner for the production transport
+path. Core receives a normalized code graph plus deployment correlations only
+through explicit injected configuration, snapshots that configuration, builds
+the operational overlay, atomically loads `InMemoryPodoGraph`, and resolves one
+requested evidence path. Missing configuration, missing or duplicate
+correlation, invalid overlays, and ambiguous graph hops return no partial path.
+Resolved file and function nodes are re-read by exact ID and kind from the
+accepted normalized snapshot; their label, external identity, and optional
+source location form the code-level transport evidence.
+
 Current limits are deliberate: the graph is an in-memory full replacement, not
 persistence or an incremental upsert engine; `CHANGED` must identify one file and
 that file must contain one candidate function for the selected evidence path.
