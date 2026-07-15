@@ -9,7 +9,7 @@ export default async function Page({ searchParams }: PageProps) {
   if (state === "error") throw new Error("Mock incident request failed")
   if (state === "empty") return <IncidentPageState kind="empty" />
 
-  const incident = await getIncidentWorkspace()
+  const incident = getIncidentWorkspace()
   if (!incident) return <IncidentPageState kind="empty" />
   return <DemoIncidentWorkspace incident={incident} />
 }

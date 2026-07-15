@@ -557,7 +557,7 @@
 }
 .severity-p1 {
   color: white;
-  background: var(--critical);
+  background: var(--critical-solid);
 }
 .severity-p2 {
   color: var(--warning);

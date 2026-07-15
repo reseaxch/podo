@@ -106,7 +106,7 @@
 }
 .confidence progress::-webkit-progress-value {
   border-radius: 999px;
-  background: var(--primary);
+  background: var(--primary-solid);
 }
 .confidence progress::-moz-progress-bar {
   border-radius: 999px;
@@ -355,7 +355,7 @@
   font-weight: 750;
 }
 .primary-button:hover {
-  background: var(--primary-hover);
+  background: var(--primary-solid-hover);
 }
 .primary-button,
 .secondary-button,

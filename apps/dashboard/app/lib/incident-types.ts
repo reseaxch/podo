@@ -51,6 +51,8 @@ export type Evidence = {
 }
 
 export type RemediationReviewState = "ready" | "changes-requested" | "approved"
+export type IncidentStatus =
+  "Investigating" | "Mitigating" | "Monitoring" | "Resolved"
 
 export type RemediationViewModel = {
   id: string
@@ -76,12 +78,21 @@ export type RemediationController = {
   }): Promise<RemediationViewModel>
 }
 
+export type IncidentController = RemediationController & {
+  updateStatus(input: {
+    incidentId: string
+    expectedStatus: IncidentStatus
+    status: IncidentStatus
+  }): Promise<{ status: IncidentStatus }>
+}
+
 export type IncidentWorkspaceViewModel = {
   id: string
   title: string
   severity: "P1" | "P2" | "P3"
   service: string
   elapsed: string
+  status: IncidentStatus
   owner: { name: string; avatar: string }
   evidence: Evidence[]
   remediation: RemediationViewModel

@@ -19,6 +19,7 @@ describe("IncidentWorkspace", () => {
         controller={createMockIncidentController(
           incidentMock.id,
           incidentMock.remediation,
+          incidentMock.status,
         )}
         incident={incidentMock}
       />,
@@ -28,11 +29,13 @@ describe("IncidentWorkspace", () => {
       "Datadog",
     )
     expect(
-      screen.getByRole("button", { name: "Expand Heap usage increasing" }),
+      screen.getByRole("button", {
+        name: /^Expand Heap usage increasing\b/,
+      }),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole("button", {
-        name: "Expand Deploy v2.8.1 to production",
+        name: /^Expand Deploy v2.8.1 to production\b/,
       }),
     ).not.toBeInTheDocument()
   })
@@ -44,6 +47,7 @@ describe("IncidentWorkspace", () => {
         controller={createMockIncidentController(
           incidentMock.id,
           incidentMock.remediation,
+          incidentMock.status,
         )}
         incident={incidentMock}
       />,

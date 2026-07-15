@@ -100,7 +100,7 @@ export function IncidentsOverview({
 
   return (
     <main className="app-shell incidents-shell" data-ready="true">
-      <IconRail onNotify={showToast} />
+      <IconRail />
       <Topbar
         onNotify={showToast}
         onQueryChange={(value) => {
@@ -164,11 +164,14 @@ export function IncidentsOverview({
               <div className="attention-list">
                 {attentionIncidents.slice(0, 3).map((incident, index) => (
                   <button
-                    aria-label={`Open priority incident ${incident.id}: ${incident.title}`}
                     key={incident.id}
                     onClick={() => openIncident(incident)}
                     type="button"
                   >
+                    <span className="sr-only">
+                      Open priority incident {incident.id}: {incident.title}
+                      .{" "}
+                    </span>
                     <span className="attention-rank">0{index + 1}</span>
                     <i
                       className={`severity severity-${incident.severity.toLowerCase()}`}
@@ -314,12 +317,14 @@ export function IncidentsOverview({
             </div>
             {visibleIncidents.map((incident) => (
               <button
-                aria-label={`Open ${incident.id}: ${incident.title}`}
                 className="incident-row"
                 key={incident.id}
                 onClick={() => openIncident(incident)}
                 type="button"
               >
+                <span className="sr-only">
+                  Open {incident.id}: {incident.title}.{" "}
+                </span>
                 <span className="incident-primary">
                   <i
                     className={`severity severity-${incident.severity.toLowerCase()}`}

@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useToast } from "../hooks/use-toast"
 import type {
+  IncidentController,
   IncidentTab,
   IncidentWorkspaceViewModel,
-  RemediationController,
 } from "../lib/incident-types"
 import { ChangesView } from "./incident/changes-view"
 import { DiagnosisLauncher, DiagnosisPanel } from "./incident/diagnosis-panel"
@@ -21,7 +21,7 @@ export function IncidentWorkspace({
   controller,
   incident,
 }: {
-  controller: RemediationController
+  controller: IncidentController
   incident: IncidentWorkspaceViewModel
 }) {
   const [activeTab, setActiveTab] = useState<IncidentTab>("evidence")
@@ -72,7 +72,7 @@ export function IncidentWorkspace({
 
   return (
     <main className="app-shell" ref={shellRef}>
-      <IconRail onNotify={showToast} onTabChange={setActiveTab} />
+      <IconRail />
       <Topbar
         current={incident.id}
         onNotify={showToast}
@@ -90,7 +90,11 @@ export function IncidentWorkspace({
         searchPlaceholder="Search evidence..."
       />
       <section className="workspace" id="workspace">
-        <IncidentHeader incident={incident} onNotify={showToast} />
+        <IncidentHeader
+          controller={controller}
+          incident={incident}
+          onNotify={showToast}
+        />
         <div
           className={`workspace-body ${diagnosisOpen ? "" : "diagnosis-collapsed"}`}
         >

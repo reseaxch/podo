@@ -21,7 +21,7 @@ test("incident workspace supports its primary investigation flow", async ({
   if (await search.isVisible()) {
     await search.fill("Datadog")
     await expect(
-      page.getByRole("button", { name: "Expand Heap usage increasing" }),
+      page.getByRole("button", { name: /^Expand Heap usage increasing\b/ }),
     ).toBeVisible()
     await expect(
       page.getByRole("button", { name: /Deploy v2.8.1 to production/ }),
