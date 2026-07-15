@@ -6,7 +6,8 @@
   "dependencies": {
     "@podo/codex-app-server-client": "workspace:*",
     "@podo/contracts": "workspace:*",
-    "@podo/domain": "workspace:*"
+    "@podo/domain": "workspace:*",
+    "@podo/plugin-github": "workspace:*"
   },
   "scripts": {
     "dev": "bun --watch src/index.ts",

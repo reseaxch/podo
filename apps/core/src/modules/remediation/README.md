@@ -22,10 +22,13 @@ persistence, or delivery. Core accepts a completed result only when:
 - full validation passed with named checks;
 - the PR preview is complete and policy allows it.
 
-Only then does the public artifact include the diff, integrity hash, verification
-record, and reproducible PR preview. Any exception, malformed result, failed
-regression, failed validation, inconsistent paths, or policy denial becomes a
-terminal sanitized failure with no artifact or delivery.
+Only then does the public artifact include the sorted authoritative diagnosis
+evidence IDs, trusted base ref and commit, deterministic patched-tree OID, diff,
+integrity hash, verification record, and reproducible PR preview. The preview ID
+hashes that complete artifact identity, so the same diff against a different
+base cannot alias the original verified result. Any exception, malformed result,
+failed regression, failed validation, inconsistent paths, or policy denial
+becomes a terminal sanitized failure with no artifact or delivery.
 
 ## Local verification executor
 
@@ -44,7 +47,9 @@ detached worktree beneath the owned scratch parent, and performs this sequence:
 3. `applyFix` changes the implementation without changing the regression files.
 4. The same regression command must exit zero.
 5. Every validation command must exit zero.
-6. Git emits the bounded binary diff and exact safe changed-file list; core
+6. Git emits the bounded binary diff and exact safe changed-file list.
+7. The executor applies that sealed diff to the trusted base in a scratch-owned
+   temporary index and object store and records the resulting Git tree OID; core
    builds a deterministic sanitized PR preview.
 
 The executor snapshots the complete tracked and untracked candidate diff
@@ -53,8 +58,11 @@ passing validation command must leave that snapshot byte-for-byte unchanged.
 Any added, deleted, staged, or modified file fails the attempt with the stable
 sanitized `verification_command_mutated_worktree` code; no artifact is returned.
 
-The executor never creates a branch, stages files, stashes, resets, pushes,
-merges, or writes to the default worktree. Untracked files are represented with
+The executor never creates a branch, stages files in a repository index,
+stashes, resets, pushes, merges, or writes to the default worktree. Result-tree
+calculation uses a temporary index and object directory under the owned scratch
+parent, reads source objects through Git alternates, and removes all temporary
+state in `finally`. Untracked files are represented with
 per-file `git diff --no-index` rather than index mutation. Git override
 environment variables are removed,
 repository hooks and fsmonitor are disabled, configured clean/smudge/process

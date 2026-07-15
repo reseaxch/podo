@@ -47,6 +47,20 @@ function client(
 }
 
 describe("Podo CLI config", () => {
+  test("documents the separate delivery approval lifecycle in help", async () => {
+    const stdout: string[] = []
+
+    expect(await runCli(["help"], {
+      client: client(),
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+    expect(stdout).toHaveLength(1)
+    expect(stdout[0]).toContain("podo incidents deliver <incidentId>")
+    expect(stdout[0]).toContain("podo incidents delivery <incidentId>")
+    expect(stdout[0]).toContain("podo incidents approve-delivery <incidentId> <approvalId>")
+    expect(stdout[0]).toContain("podo incidents deny-delivery <incidentId> <approvalId>")
+  })
+
   test("prints settings as JSON", async () => {
     const stdout: string[] = []
     const exitCode = await runCli(["config", "show"], { client: client(), stdout: (line) => stdout.push(line) })
@@ -161,6 +175,20 @@ const remediation = {
   },
   createdAt: "2026-07-14T09:03:00.000Z",
   updatedAt: "2026-07-14T09:03:00.000Z",
+}
+
+const delivery = {
+  id: "delivery-1",
+  incidentId: "incident/1",
+  remediationId: "remediation-1",
+  artifactId: "artifact-1",
+  status: "pending_approval" as const,
+  approval: {
+    id: "delivery-approval/1",
+    status: "pending" as const,
+  },
+  createdAt: "2026-07-14T09:04:00.000Z",
+  updatedAt: "2026-07-14T09:04:00.000Z",
 }
 
 describe("Podo CLI incidents", () => {
@@ -281,6 +309,56 @@ describe("Podo CLI incidents", () => {
     )))
   })
 
+  test("routes the separately approved delivery lifecycle through the typed client", async () => {
+    const calls: Array<[string, ...string[]]> = []
+    const stdout: string[] = []
+    const fake = client({
+      startIncidentDelivery: async (incidentId) => {
+        calls.push(["deliver", incidentId])
+        return { delivery }
+      },
+      getIncidentDelivery: async (incidentId) => {
+        calls.push(["delivery", incidentId])
+        return { delivery }
+      },
+      approveIncidentDelivery: async (incidentId, approvalId) => {
+        calls.push(["approve-delivery", incidentId, approvalId])
+        return { delivery }
+      },
+      denyIncidentDelivery: async (incidentId, approvalId) => {
+        calls.push(["deny-delivery", incidentId, approvalId])
+        return { delivery }
+      },
+    })
+
+    expect(await runCli(["incidents", "deliver", "incident/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+    expect(await runCli(["incidents", "delivery", "incident/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+    expect(await runCli(["incidents", "approve-delivery", "incident/1", "delivery-approval/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+    expect(await runCli(["incidents", "deny-delivery", "incident/1", "delivery-approval/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+
+    expect(calls).toEqual([
+      ["deliver", "incident/1"],
+      ["delivery", "incident/1"],
+      ["approve-delivery", "incident/1", "delivery-approval/1"],
+      ["deny-delivery", "incident/1", "delivery-approval/1"],
+    ])
+    expect(stdout).toEqual(Array.from({ length: 4 }, () => (
+      JSON.stringify({ delivery }, null, 2)
+    )))
+  })
+
   test.each([
     [
       "show without an id",
@@ -387,6 +465,66 @@ describe("Podo CLI incidents", () => {
       ["incidents", "deny-remediation", "incident-1", "approval-1", "extra"],
       "Invalid arguments. Usage: podo incidents deny-remediation <incidentId> <approvalId>",
     ],
+    [
+      "deliver without an id",
+      ["incidents", "deliver"],
+      "Invalid arguments. Usage: podo incidents deliver <incidentId>",
+    ],
+    [
+      "deliver with a blank id",
+      ["incidents", "deliver", " "],
+      "Invalid arguments. Usage: podo incidents deliver <incidentId>",
+    ],
+    [
+      "deliver with extra args",
+      ["incidents", "deliver", "incident-1", "extra"],
+      "Invalid arguments. Usage: podo incidents deliver <incidentId>",
+    ],
+    [
+      "delivery without an id",
+      ["incidents", "delivery"],
+      "Invalid arguments. Usage: podo incidents delivery <incidentId>",
+    ],
+    [
+      "delivery with a blank id",
+      ["incidents", "delivery", " "],
+      "Invalid arguments. Usage: podo incidents delivery <incidentId>",
+    ],
+    [
+      "delivery with extra args",
+      ["incidents", "delivery", "incident-1", "extra"],
+      "Invalid arguments. Usage: podo incidents delivery <incidentId>",
+    ],
+    [
+      "approve-delivery without an approval id",
+      ["incidents", "approve-delivery", "incident-1"],
+      "Invalid arguments. Usage: podo incidents approve-delivery <incidentId> <approvalId>",
+    ],
+    [
+      "approve-delivery with a blank approval id",
+      ["incidents", "approve-delivery", "incident-1", " "],
+      "Invalid arguments. Usage: podo incidents approve-delivery <incidentId> <approvalId>",
+    ],
+    [
+      "approve-delivery with extra args",
+      ["incidents", "approve-delivery", "incident-1", "approval-1", "extra"],
+      "Invalid arguments. Usage: podo incidents approve-delivery <incidentId> <approvalId>",
+    ],
+    [
+      "deny-delivery without an approval id",
+      ["incidents", "deny-delivery", "incident-1"],
+      "Invalid arguments. Usage: podo incidents deny-delivery <incidentId> <approvalId>",
+    ],
+    [
+      "deny-delivery with a blank incident id",
+      ["incidents", "deny-delivery", " ", "approval-1"],
+      "Invalid arguments. Usage: podo incidents deny-delivery <incidentId> <approvalId>",
+    ],
+    [
+      "deny-delivery with extra args",
+      ["incidents", "deny-delivery", "incident-1", "approval-1", "extra"],
+      "Invalid arguments. Usage: podo incidents deny-delivery <incidentId> <approvalId>",
+    ],
   ])("fails locally for %s", async (_label, args, expectedError) => {
     let calls = 0
     const stdout: string[] = []
@@ -402,6 +540,10 @@ describe("Podo CLI incidents", () => {
       getIncidentRemediation: async () => { calls += 1; return { remediation } },
       approveIncidentRemediation: async () => { calls += 1; return { remediation } },
       denyIncidentRemediation: async () => { calls += 1; return { remediation } },
+      startIncidentDelivery: async () => { calls += 1; return { delivery } },
+      getIncidentDelivery: async () => { calls += 1; return { delivery } },
+      approveIncidentDelivery: async () => { calls += 1; return { delivery } },
+      denyIncidentDelivery: async () => { calls += 1; return { delivery } },
     })
 
     expect(
@@ -421,9 +563,9 @@ describe("Podo CLI incidents", () => {
     const stderr: string[] = []
 
     await expect(
-      runCli(["incidents", "show", "incident-1"], {
+      runCli(["incidents", "approve-delivery", "incident-1", "approval-1"], {
         client: client({
-          getIncident: async () => {
+          approveIncidentDelivery: async () => {
             throw new Error("Podo request failed (503): unavailable")
           },
         }),

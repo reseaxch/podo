@@ -9,6 +9,7 @@ const productionRemediationEnvironment = {
   PODO_REMEDIATION_ENABLED: "true",
   PODO_REMEDIATION_REPOSITORY_ROOT: "/repo",
   PODO_REMEDIATION_BASE_REF: "refs/heads/main",
+  PODO_REMEDIATION_PULL_REQUEST_BASE_BRANCH: "main",
   PODO_REMEDIATION_SCRATCH_PARENT: "/scratch",
   PODO_REMEDIATION_REGRESSION_COMMAND: '["bun","test","demo/services/checkout-service"]',
   PODO_REMEDIATION_VALIDATION_COMMANDS: '[["bun","run","typecheck"],["bun","test"]]',
@@ -81,7 +82,11 @@ function completeDiagnosis(runtime: DiagnosisRuntime, evidenceIds: string[], saf
 
 function verifiedExecutorResult() {
   return {
-    provenance: { baseCommit: "a".repeat(40) },
+    provenance: {
+      baseRef: "main",
+      baseCommit: "a".repeat(40),
+      resultTreeOid: "b".repeat(40),
+    },
     patch: {
       summary: "Bound checkout cache retention",
       changedFiles: ["demo/services/checkout-service/src/cache.ts"],
@@ -306,6 +311,12 @@ describe("incident remediation API", () => {
       status: "completed",
       approval: { id: pending.remediation.approval.id, status: "approved" },
       artifact: {
+        provenance: {
+          baseRef: "main",
+          baseCommit: "a".repeat(40),
+          resultTreeOid: "b".repeat(40),
+        },
+        evidenceIds: [...investigation.incident.evidence.map(({ id }) => id)].sort(),
         patch: {
           summary: "Bound checkout cache retention",
           changedFiles: ["demo/services/checkout-service/src/cache.ts"],
@@ -461,6 +472,43 @@ describe("incident remediation API", () => {
     expect(failed.remediation.artifact).toBeUndefined()
     expect(JSON.stringify(failed)).not.toContain("secret-codex-output")
     expect(JSON.stringify(failed)).not.toContain("unifiedDiff")
+  })
+
+  test("binds artifact identity to the trusted base and rejects malformed tree provenance", async () => {
+    const first = await createValidatedFixture({ async execute() { return verifiedExecutorResult() } })
+    const firstPending = await first.client.startIncidentRemediation(first.incident.id)
+    const firstCompleted = await first.client.approveIncidentRemediation(first.incident.id, firstPending.remediation.approval.id)
+
+    const secondResult = {
+      ...verifiedExecutorResult(),
+      provenance: {
+        ...verifiedExecutorResult().provenance,
+        baseCommit: "c".repeat(40),
+        resultTreeOid: "d".repeat(40),
+      },
+    }
+    const second = await createValidatedFixture({ async execute() { return secondResult } })
+    const secondPending = await second.client.startIncidentRemediation(second.incident.id)
+    const secondCompleted = await second.client.approveIncidentRemediation(second.incident.id, secondPending.remediation.approval.id)
+
+    expect(secondCompleted.remediation.artifact?.patch).toEqual(firstCompleted.remediation.artifact?.patch)
+    expect(secondCompleted.remediation.artifact?.pullRequestPreview.id)
+      .not.toBe(firstCompleted.remediation.artifact?.pullRequestPreview.id)
+
+    for (const provenance of [
+      { baseRef: "main", baseCommit: "a".repeat(40), resultTreeOid: "not-a-tree" },
+      { baseRef: "../main", baseCommit: "a".repeat(40), resultTreeOid: "b".repeat(40) },
+      { baseCommit: "a".repeat(40), resultTreeOid: "b".repeat(40) },
+      { baseRef: "main", baseCommit: "a".repeat(40) },
+    ]) {
+      const fixture = await createValidatedFixture({
+        async execute() { return { ...verifiedExecutorResult(), provenance } },
+      })
+      const pending = await fixture.client.startIncidentRemediation(fixture.incident.id)
+      const failed = await fixture.client.approveIncidentRemediation(fixture.incident.id, pending.remediation.approval.id)
+      expect(failed.remediation).toMatchObject({ status: "failed", error: { code: "invalid_executor_result" } })
+      expect(failed.remediation.artifact).toBeUndefined()
+    }
   })
 
   test("fails terminally for missing results, failed validation, and executor exceptions", async () => {

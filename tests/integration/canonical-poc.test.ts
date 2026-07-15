@@ -198,6 +198,12 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
   expect(proof.remediationRuntime.approvalResolutionAttempts).toBe(0)
   expect(proof.remediationRuntime.interrupts).toEqual([])
   expect(proof.remediationRuntime.listeners.size).toBe(0)
+  expect(artifact.provenance.baseRef).toBe("main")
+  expect(artifact.provenance.baseCommit).toBe(proof.fixture.baseCommit)
+  expect(artifact.provenance.resultTreeOid).toMatch(/^[a-f0-9]{40,64}$/)
+  expect(artifact.evidenceIds).toEqual(
+    [...proof.validatedIncident.diagnosis!.evidenceIds].sort(),
+  )
   expect(artifact.patch.changedFiles).toEqual([
     CACHE_REGRESSION_PATH,
     CACHE_IMPLEMENTATION_PATH,
@@ -324,6 +330,7 @@ async function runCanonicalPocProof(): Promise<{
   const remediationExecutor = new LocalWorktreeRemediationExecutor({
     repositoryRoot: fixture.repositoryRoot,
     trustedBaseRef: "main",
+    pullRequestBaseBranch: "main",
     scratchParent: fixture.scratchParent,
     regressionCommand: [process.execPath, "test", CACHE_REGRESSION_PATH],
     validationCommands: [[process.execPath, "test", "./demo/services/checkout-service"]],
@@ -677,6 +684,7 @@ function expectedPreviewId(artifact: NonNullable<IncidentRemediation["artifact"]
   return `pr_preview_${createHash("sha256")
     .update(JSON.stringify({
       provenance: artifact.provenance,
+      evidenceIds: artifact.evidenceIds,
       patch: artifact.patch,
       regression: artifact.regression,
       validation: artifact.validation,

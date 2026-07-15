@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { realpathSync, statSync } from "node:fs"
-import { rm } from "node:fs/promises"
+import { mkdir, rm } from "node:fs/promises"
 import { isAbsolute, relative, resolve } from "node:path"
 
 import type {
@@ -23,6 +23,7 @@ export interface RemediationPatchProducer {
 export interface LocalWorktreeRemediationExecutorConfig {
   repositoryRoot: string
   trustedBaseRef: string
+  pullRequestBaseBranch: string
   scratchParent: string
   regressionCommand: string[]
   validationCommands: string[][]
@@ -116,12 +117,22 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
         await this.requirePatchUnchanged(worktreePath, candidatePatch)
       }
 
+      const resultTreeOid = await this.computeResultTree(
+        repository.baseCommit,
+        repository.objectDirectory,
+        candidatePatch.unifiedDiff,
+      )
+
       return buildResult(
         input,
         this.config.trustedBaseRef,
+        this.config.pullRequestBaseBranch,
         repository.baseCommit,
+        resultTreeOid,
         candidatePatch,
-        this.config.validationCommands.map((_, index) => `validation-${index + 1}`),
+        this.config.validationCommands
+          .map((_, index) => `validation-${index + 1}`)
+          .sort(compareCodeUnits),
       )
     } finally {
       let disposeFailed = false
@@ -140,7 +151,7 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
     }
   }
 
-  private async verifyRepository(): Promise<{ baseCommit: string }> {
+  private async verifyRepository(): Promise<{ baseCommit: string; objectDirectory: string }> {
     const root = await this.git(["rev-parse", "--show-toplevel"], this.config.repositoryRoot)
     if (root.exitCode !== 0) throw failure("repository_unavailable")
     const reportedRoot = decode(root.stdout).trim()
@@ -162,7 +173,59 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
     const baseCommit = decode(base.stdout).trim()
     if (!/^[a-f0-9]{40,64}$/.test(baseCommit)) throw failure("trusted_base_ref_unavailable")
 
-    return { baseCommit }
+    const commonDirectoryResult = await this.git(["rev-parse", "--git-common-dir"], this.config.repositoryRoot)
+    if (commonDirectoryResult.exitCode !== 0) throw failure("repository_unavailable")
+    const reportedCommonDirectory = decode(commonDirectoryResult.stdout).trim()
+    let objectDirectory: string
+    try {
+      const commonDirectory = realpathSync(resolve(this.config.repositoryRoot, reportedCommonDirectory))
+      objectDirectory = realpathSync(resolve(commonDirectory, "objects"))
+      if (!statSync(objectDirectory).isDirectory()) throw new Error()
+    } catch {
+      throw failure("repository_unavailable")
+    }
+
+    return { baseCommit, objectDirectory }
+  }
+
+  private async computeResultTree(baseCommit: string, sourceObjectDirectory: string, unifiedDiff: string): Promise<string> {
+    const temporaryRoot = resolve(this.config.scratchParent, `podo-remediation-tree-${randomUUID()}`)
+    assertOwnedTreePath(this.config.scratchParent, temporaryRoot)
+    const indexPath = resolve(temporaryRoot, "index")
+    const objectDirectory = resolve(temporaryRoot, "objects")
+    const patchPath = resolve(temporaryRoot, "candidate.diff")
+    let resultTreeOid = ""
+    let computationFailed = false
+
+    try {
+      await mkdir(objectDirectory, { recursive: true })
+      await Bun.write(patchPath, unifiedDiff)
+      const env = this.gitEnvironment({
+        GIT_INDEX_FILE: indexPath,
+        GIT_OBJECT_DIRECTORY: objectDirectory,
+        GIT_ALTERNATE_OBJECT_DIRECTORIES: sourceObjectDirectory,
+      })
+      const read = await this.gitWithEnvironment(["read-tree", baseCommit], this.config.repositoryRoot, env)
+      const applied = read.exitCode === 0
+        ? await this.gitWithEnvironment(["apply", "--cached", "--binary", "--whitespace=nowarn", patchPath], this.config.repositoryRoot, env)
+        : read
+      const tree = applied.exitCode === 0
+        ? await this.gitWithEnvironment(["write-tree"], this.config.repositoryRoot, env)
+        : applied
+      resultTreeOid = tree.exitCode === 0 ? decode(tree.stdout).trim() : ""
+      if (!/^[a-f0-9]{40,64}$/.test(resultTreeOid)) computationFailed = true
+    } catch {
+      computationFailed = true
+    } finally {
+      try {
+        await rm(temporaryRoot, { recursive: true, force: true })
+      } catch {
+        throw failure("result_tree_cleanup_failed")
+      }
+    }
+
+    if (computationFailed) throw failure("result_tree_computation_failed")
+    return resultTreeOid
   }
 
   private async requireCleanWorktree(worktreePath: string, expectedCommit: string): Promise<void> {
@@ -266,6 +329,25 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
   }
 
   private git(argv: string[], cwd: string, cleanup = false): Promise<CommandResult> {
+    const env = this.gitEnvironment()
+    return this.gitWithEnvironment(argv, cwd, env, cleanup)
+  }
+
+  private gitWithEnvironment(
+    argv: string[],
+    cwd: string,
+    env: Record<string, string | undefined>,
+    cleanup = false,
+  ): Promise<CommandResult> {
+    return this.run(
+      ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...argv],
+      cwd,
+      cleanup ? "worktree_cleanup_failed" : "git_command_failed",
+      env,
+    )
+  }
+
+  private gitEnvironment(overrides: Record<string, string> = {}): Record<string, string | undefined> {
     const env = { ...process.env }
     for (const key of Object.keys(env)) {
       if (key === "GIT_DIR"
@@ -278,12 +360,7 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
     }
     env.GIT_CONFIG_GLOBAL = "/dev/null"
     env.GIT_CONFIG_NOSYSTEM = "1"
-    return this.run(
-      ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...argv],
-      cwd,
-      cleanup ? "worktree_cleanup_failed" : "git_command_failed",
-      env,
-    )
+    return { ...env, ...overrides }
   }
 
   private command(argv: string[], cwd: string): Promise<CommandResult> {
@@ -327,7 +404,7 @@ function validateConfig(config: LocalWorktreeRemediationExecutorConfig): Validat
     const repositoryRoot = canonicalDirectory(config.repositoryRoot)
     const scratchParent = canonicalDirectory(config.scratchParent)
     if (!repositoryRoot || !scratchParent || pathsOverlap(repositoryRoot, scratchParent)) throw new Error()
-    if (!isSafeRef(config.trustedBaseRef)) throw new Error()
+    if (!isSafeRef(config.trustedBaseRef) || !isSafeBranch(config.pullRequestBaseBranch)) throw new Error()
     if (!isCommand(config.regressionCommand)) throw new Error()
     if (!Array.isArray(config.validationCommands)
       || config.validationCommands.length === 0
@@ -381,6 +458,10 @@ function isSafeRef(value: unknown): value is string {
     && !value.endsWith(".")
 }
 
+function isSafeBranch(value: unknown): value is string {
+  return isSafeRef(value) && !value.startsWith("refs/")
+}
+
 function isCommand(value: unknown): value is string[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > 100) return false
   if (!value.every((argument) => typeof argument === "string" && argument.length > 0 && argument.length <= 8_192 && !argument.includes("\0"))) return false
@@ -395,6 +476,13 @@ function assertOwnedPath(parent: string, path: string): void {
   }
 }
 
+function assertOwnedTreePath(parent: string, path: string): void {
+  const child = relative(parent, path)
+  if (child.length === 0 || child.startsWith("..") || child.includes("/") || !/^podo-remediation-tree-[a-f0-9-]+$/.test(child)) {
+    throw failure("unsafe_result_tree_path")
+  }
+}
+
 function isSafeRelativePath(path: string): boolean {
   if (path.length === 0 || path.length > 512 || path.startsWith("/") || path.includes("\\")) return false
   return path.split("/").every((segment) => /^[A-Za-z0-9._@+-]+$/.test(segment) && segment !== "." && segment !== "..")
@@ -403,7 +491,9 @@ function isSafeRelativePath(path: string): boolean {
 function buildResult(
   input: IncidentRemediationExecutorInput,
   baseRef: string,
+  pullRequestBaseBranch: string,
   baseCommit: string,
+  resultTreeOid: string,
   patch: { unifiedDiff: string; changedFiles: string[] },
   validationChecks: string[],
 ): IncidentRemediationExecutorResult {
@@ -418,7 +508,7 @@ function buildResult(
   const action = boundedLine(input.incident.diagnosis.recommendedAction, 180) || "apply verified remediation"
   const summary = boundedLine(`${action} for ${input.incident.affectedService}`, 500)
   return {
-    provenance: { baseCommit },
+    provenance: { baseRef, baseCommit, resultTreeOid },
     patch: { summary, changedFiles: patch.changedFiles, unifiedDiff: patch.unifiedDiff },
     regression: { test: "incident regression", prePatch: "failed", postPatch: "passed" },
     validation: {
@@ -428,7 +518,7 @@ function buildResult(
     pullRequestPreview: {
       title: boundedLine(`fix(${service}): ${action}`, 300),
       body: buildPreviewBody(input, patch.changedFiles, fingerprint),
-      baseBranch: baseRef,
+      baseBranch: pullRequestBaseBranch,
       headBranch: `podo/remediation-${fingerprint.slice(0, 16)}`,
     },
   }

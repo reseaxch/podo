@@ -20,6 +20,7 @@ export type ProductionRemediationExecutorFactory = (runtimeProvider: RuntimeProv
 interface ProductionRemediationConfig {
   repositoryRoot: string
   trustedBaseRef: string
+  pullRequestBaseBranch: string
   scratchParent: string
   regressionCommand: string[]
   validationCommands: string[][]
@@ -84,6 +85,7 @@ function createConfiguredExecutor(
       const executor = createExecutor({
         repositoryRoot: config.repositoryRoot,
         trustedBaseRef: config.trustedBaseRef,
+        pullRequestBaseBranch: config.pullRequestBaseBranch,
         scratchParent: config.scratchParent,
         regressionCommand: [...config.regressionCommand],
         validationCommands: config.validationCommands.map((command) => [...command]),
@@ -103,6 +105,7 @@ function parseConfig(environment: Environment): ProductionRemediationConfig | nu
 
   const repositoryRoot = required(environment, "PODO_REMEDIATION_REPOSITORY_ROOT")
   const trustedBaseRef = required(environment, "PODO_REMEDIATION_BASE_REF")
+  const pullRequestBaseBranch = required(environment, "PODO_REMEDIATION_PULL_REQUEST_BASE_BRANCH")
   const scratchParent = required(environment, "PODO_REMEDIATION_SCRATCH_PARENT")
   const regressionCommand = command(environment.PODO_REMEDIATION_REGRESSION_COMMAND)
   const validationCommands = commandList(environment.PODO_REMEDIATION_VALIDATION_COMMANDS)
@@ -113,11 +116,13 @@ function parseConfig(environment: Environment): ProductionRemediationConfig | nu
   if (!safeAbsolutePath(repositoryRoot)
     || !safeAbsolutePath(scratchParent)
     || pathsOverlap(repositoryRoot, scratchParent)
-    || !safeRef(trustedBaseRef)) throw invalidConfig()
+    || !safeRef(trustedBaseRef)
+    || !safeBranch(pullRequestBaseBranch)) throw invalidConfig()
 
   return {
     repositoryRoot,
     trustedBaseRef,
+    pullRequestBaseBranch,
     scratchParent,
     regressionCommand,
     validationCommands,
@@ -188,6 +193,10 @@ function safeRef(value: string): boolean {
     && !value.includes("//")
     && !value.endsWith("/")
     && !value.endsWith(".")
+}
+
+function safeBranch(value: string): boolean {
+  return safeRef(value) && !value.startsWith("refs/")
 }
 
 function invalidConfig(): ProductionRemediationConfigError {

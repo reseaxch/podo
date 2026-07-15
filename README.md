@@ -13,11 +13,13 @@ through an approval-gated workflow.
 > Codex App Server and then executes the complete deterministic vertical slice
 > through the real graph, replay, core, typed client, Codex remediation producer,
 > isolated git worktree, red-to-green regression gate, and reproducible
-> pull-request preview. Local/POC runtime composition is now available as an
-> explicit fail-closed Core configuration. The Core-owned, separately approved
-> GitHub delivery contract is implemented with immutable artifact provenance and
-> audit events; its networked GitHub adapter and durable audit operations remain
-> MVP milestones before broader production use.
+> pull-request preview. The next MVP slice is also implemented as an explicit,
+> disabled-by-default production composition: Core seals the exact tested Git
+> tree, requires a separate delivery approval, publishes only a derived branch,
+> and creates or reconciles the exactly matching GitHub pull request. The live
+> GitHub path is covered with REST fakes and an isolated bare remote rather than
+> a real repository write. Durable Core state/reconciliation and authenticated
+> actor identity remain milestones before broader production use.
 
 ## MVP outcome
 
@@ -45,14 +47,16 @@ canonical graph + telemetry replay
   → isolated patch and regression test
   → passing validation
   → reproducible pull-request preview
-  → separate delivery approval and validated GitHub delivery port
+  → separate delivery approval
+  → verified derived Git branch and exact GitHub pull request
 ```
 
-The POC may keep state in memory and use a fake pull-request delivery port. It
-is not complete if the dashboard displays fixture-only diagnosis/remediation
-state or if failed validation can reach delivery. The MVP adds durable
-operations, the networked GitHub adapter, full audit coverage, judge setup,
-eval baselines, benchmarks, and the final submission artifacts.
+The deterministic POC keeps state in memory and uses a fake pull-request
+delivery port so `bun run poc` remains offline and reproducible. The same sealed
+artifact now has an opt-in real GitHub delivery composition for operator runs.
+The MVP still needs durable operations and reconciliation, authenticated actor
+identity, complete audit persistence, judge setup, eval baselines, benchmarks,
+and final submission artifacts. Failed validation must never reach either path.
 
 ## System shape
 
@@ -174,7 +178,10 @@ does not replace the live App Server. `bun run codex:smoke` is the live protocol
 compatibility signal. Local/POC Core operators can opt into the same verified
 executor through the fail-closed `PODO_REMEDIATION_*` configuration documented in
 [`apps/core/README.md`](apps/core/README.md); remediation and investigations
-share one supervised App Server runtime.
+share one supervised App Server runtime. Operators may additionally enable the
+separately approved `PODO_GITHUB_*` delivery composition described there; it
+binds the local trusted ref, GitHub repository/base branch, exact result tree,
+derived head, and pull-request content before reporting delivery success.
 
 Initial product gates from the MVP plan include:
 

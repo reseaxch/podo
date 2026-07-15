@@ -208,8 +208,11 @@ export interface IncidentRemediationApproval {
 
 export interface IncidentRemediationArtifact {
   provenance: {
+    baseRef: string
     baseCommit: string
+    resultTreeOid: string
   }
+  evidenceIds: string[]
   patch: {
     summary: string
     changedFiles: string[]

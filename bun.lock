@@ -28,12 +28,16 @@
       "dependencies": {
         "@podo/codex-app-server-client": "workspace:*",
         "@podo/contracts": "workspace:*",
+        "@podo/domain": "workspace:*",
+        "@podo/plugin-github": "workspace:*",
       },
     },
     "apps/dashboard": {
       "name": "@podo/dashboard",
       "version": "0.0.0",
       "dependencies": {
+        "@podo/client": "workspace:*",
+        "@podo/contracts": "workspace:*",
         "next": "^16.2.10",
         "react": "^19.2.7",
         "react-dom": "^19.2.7",
@@ -122,6 +126,7 @@
       "name": "@podo/plugin-otel-replay",
       "version": "0.0.0",
       "dependencies": {
+        "@podo/contracts": "workspace:*",
         "@podo/plugin-sdk": "workspace:*",
       },
     },
@@ -335,6 +340,36 @@
 
     "@playwright/test": ["@playwright/test@1.61.1", "", { "dependencies": { "playwright": "1.61.1" }, "bin": { "playwright": "cli.js" } }, "sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig=="],
 
+    "@podo/benchmarks": ["@podo/benchmarks@workspace:benchmarks"],
+
+    "@podo/cli": ["@podo/cli@workspace:apps/cli"],
+
+    "@podo/client": ["@podo/client@workspace:packages/client"],
+
+    "@podo/codex-app-server-client": ["@podo/codex-app-server-client@workspace:packages/codex-app-server-client"],
+
+    "@podo/codex-protocol": ["@podo/codex-protocol@workspace:packages/codex-protocol"],
+
+    "@podo/contracts": ["@podo/contracts@workspace:packages/contracts"],
+
+    "@podo/core": ["@podo/core@workspace:apps/core"],
+
+    "@podo/dashboard": ["@podo/dashboard@workspace:apps/dashboard"],
+
+    "@podo/domain": ["@podo/domain@workspace:packages/domain"],
+
+    "@podo/evals": ["@podo/evals@workspace:evals"],
+
+    "@podo/plugin-github": ["@podo/plugin-github@workspace:plugins/github"],
+
+    "@podo/plugin-graphify": ["@podo/plugin-graphify@workspace:plugins/graphify"],
+
+    "@podo/plugin-otel-replay": ["@podo/plugin-otel-replay@workspace:plugins/otel-replay"],
+
+    "@podo/plugin-sdk": ["@podo/plugin-sdk@workspace:packages/plugin-sdk"],
+
+    "@podo/tui": ["@podo/tui@workspace:apps/tui"],
+
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.1.5", "", { "os": "android", "cpu": "arm64" }, "sha512-lZg8fqIv2v7FF237bwMgzGZEJvGL79/s5knJ/i6FmsGF4XXlzccZ4jb+TrFIxtSSxFtIpdsgrPZeMk1I9AFcyQ=="],
 
     "@rolldown/binding-darwin-arm64": ["@rolldown/binding-darwin-arm64@1.1.5", "", { "os": "darwin", "cpu": "arm64" }, "sha512-51Bnx9pNiMRKSUNtBfySkNJ9vMU9Hh3I1ozDd6gyPPYzaXCfnptUcEZxXGYFn+ul2dtcMUiqGR1Yai2K10uoTw=="],
@@ -366,36 +401,6 @@
     "@rolldown/binding-win32-x64-msvc": ["@rolldown/binding-win32-x64-msvc@1.1.5", "", { "os": "win32", "cpu": "x64" }, "sha512-tTZuDBPw85tEN5PQi1pnEBzDy0Z49HtScLAbD5t6hyeU92A95pRWaSMw1GZZi/RwgSgUIl0xrSlXIT/9QzvYSA=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
-
-    "@podo/benchmarks": ["@podo/benchmarks@workspace:benchmarks"],
-
-    "@podo/cli": ["@podo/cli@workspace:apps/cli"],
-
-    "@podo/client": ["@podo/client@workspace:packages/client"],
-
-    "@podo/codex-app-server-client": ["@podo/codex-app-server-client@workspace:packages/codex-app-server-client"],
-
-    "@podo/codex-protocol": ["@podo/codex-protocol@workspace:packages/codex-protocol"],
-
-    "@podo/contracts": ["@podo/contracts@workspace:packages/contracts"],
-
-    "@podo/core": ["@podo/core@workspace:apps/core"],
-
-    "@podo/dashboard": ["@podo/dashboard@workspace:apps/dashboard"],
-
-    "@podo/domain": ["@podo/domain@workspace:packages/domain"],
-
-    "@podo/evals": ["@podo/evals@workspace:evals"],
-
-    "@podo/plugin-github": ["@podo/plugin-github@workspace:plugins/github"],
-
-    "@podo/plugin-graphify": ["@podo/plugin-graphify@workspace:plugins/graphify"],
-
-    "@podo/plugin-otel-replay": ["@podo/plugin-otel-replay@workspace:plugins/otel-replay"],
-
-    "@podo/plugin-sdk": ["@podo/plugin-sdk@workspace:packages/plugin-sdk"],
-
-    "@podo/tui": ["@podo/tui@workspace:apps/tui"],
 
     "@rtsao/scc": ["@rtsao/scc@1.1.0", "", {}, "sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g=="],
 
