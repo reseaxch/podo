@@ -172,6 +172,9 @@ thread to write a regression and a minimal fix inside a detached checkout. Podo
 independently requires the regression to fail before the fix, pass afterward,
 runs package validation, verifies the exact diff, cleans the worktree, and emits
 a stable PR preview while leaving the source checkout and default branch intact.
+It then compares the incident telemetry with the deterministic post-fix replay
+and requires a versioned `stabilized` report covering heap growth, peak usage,
+error events, and deployment identities.
 
 The deterministic runtime double keeps this proof reproducible and offline; it
 does not replace the live App Server. `bun run codex:smoke` is the live protocol

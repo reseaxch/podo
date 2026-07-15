@@ -40,6 +40,21 @@ Events at different instants are never put in the same batch. Equal-instant even
 
 The adapter clones but does not normalize events. Source IDs, timestamps, trace links, deployment IDs, container IDs, and additional JSON provenance fields are passed through unchanged. Replaying the same input and configuration produces the same order, batch boundaries, timing, and `replayId`. Core remains the idempotence authority: a second replay may correctly report duplicates instead of accepted events.
 
+## Before/after comparison
+
+`compareTelemetryWindows` is a pure, deterministic post-replay measurement
+boundary. The caller selects one service, metric name/unit, and a finite stable
+growth limit. The report records selected-service event and metric-sample
+counts, first/last/peak values, net change, error-event counts, deployment IDs,
+and a stable comparison ID. Its verdict is `stabilized`, `unchanged`, or
+`regressed`; malformed windows, missing samples, overlapping or out-of-order
+windows, mixed units, and invalid thresholds fail closed.
+
+The canonical cache-growth scenario owns the incident `telemetry.json` and
+post-fix `telemetry-after-fix.json` windows under
+`scenarios/cache-growth/fixtures`. `bun run telemetry:compare` prints the
+versioned report and exits nonzero unless the post-fix window is proven stable.
+
 ## Validation ownership
 
 The replay boundary only rejects data it cannot schedule or reproduce safely:
