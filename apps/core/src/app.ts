@@ -13,7 +13,7 @@ import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 import { IncidentCausalPathService, type IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
 import { IncidentRemediationService, type IncidentRemediationExecutor } from "./modules/remediation/incident-remediation"
-import { IncidentDeliveryService, type PullRequestDeliveryPort } from "./modules/remediation/incident-delivery"
+import { IncidentDeliveryService, type PullRequestDeliveryConfig } from "./modules/remediation/incident-delivery"
 import { SettingsStore } from "./settings"
 
 export interface CoreHandlerOptions {
@@ -25,7 +25,7 @@ export interface CoreHandlerOptions {
   incidentGraph?: IncidentGraphConfig
   remediationExecutor?: IncidentRemediationExecutor
   remediationExecutorFactory?: (runtimeProvider: () => Promise<CodexRuntime>) => IncidentRemediationExecutor
-  pullRequestDelivery?: PullRequestDeliveryPort
+  pullRequestDelivery?: PullRequestDeliveryConfig
 }
 
 const serviceVersion = "0.0.0"

@@ -30,6 +30,15 @@ describe("Podo core handler", () => {
     })).toThrow("remediation_executor_configuration_is_ambiguous")
   })
 
+  test("rejects an invalid operator-configured delivery repository", () => {
+    expect(() => createCoreHandler({
+      pullRequestDelivery: {
+        expectedRepository: "caller-controlled-or-missing-owner",
+        port: { async deliver() { return {} } },
+      },
+    })).toThrow("invalid_pull_request_delivery_repository")
+  })
+
   test("reports process health without requiring Codex", async () => {
     const handler = createCoreHandler({
       inspectCodex: async () => {

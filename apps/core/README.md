@@ -54,7 +54,7 @@ remediation and delivery: request, approval or denial, execution start, and
 sanitized verification or delivery success/failure.
 `GET /api/incidents/:id/remediation/audit`
 returns the ordered typed events. It records stable Core identifiers, decisions,
-sanitized failure codes, and the verified artifact hash; it never records raw
+sanitized failure codes, and the stable full-artifact ID; it never records raw
 Codex output, command output, private runtime IDs, secrets, diffs, or unverified
 pull-request content.
 
@@ -84,8 +84,12 @@ After verification, `POST /api/incidents/:id/remediation/delivery` creates a
 separate pending delivery approval. Approval is the only path that invokes the
 configured `PullRequestDeliveryPort`, and repeated or concurrent approval
 invokes it at most once. Core passes only the snapshotted artifact, including
-its immutable base commit, and accepts only a strictly validated GitHub PR
-result. Denial, missing verification, changed artifacts, adapter errors, and
+its immutable base commit, stable full-artifact ID, delivery ID, and a
+Core-authored authorization record containing the opaque approval ID. The
+operator configuration binds the port to one expected `owner/repository`;
+callers cannot select it. Core accepts only a strictly validated GitHub PR result
+whose repository, base commit, base branch, head branch, and artifact ID all
+match. Denial, missing verification, changed artifacts, adapter errors, and
 invalid results expose no pull-request record or provider output.
 
 The actual networked GitHub adapter is not part of this slice. Durable

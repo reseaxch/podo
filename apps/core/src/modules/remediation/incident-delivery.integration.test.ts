@@ -98,7 +98,11 @@ function verifiedExecutorResult() {
 async function completedRemediationFixture(delivery: { deliver(input: unknown): Promise<unknown> }) {
   const runtime = new DiagnosisRuntime()
   const remediationExecutor = { async execute() { return verifiedExecutorResult() } }
-  const handler = createCoreHandler({ runtime, remediationExecutor, pullRequestDelivery: delivery })
+  const handler = createCoreHandler({
+    runtime,
+    remediationExecutor,
+    pullRequestDelivery: { expectedRepository: "reseaxch/podo", port: delivery },
+  })
   const client = createPodoClient({
     baseUrl: "http://podo.test",
     fetch: (input, init) => handler(new Request(input, init)),
@@ -111,41 +115,63 @@ async function completedRemediationFixture(delivery: { deliver(input: unknown): 
   const remediation = await client.startIncidentRemediation(ingested.incident.id)
   const completed = await client.approveIncidentRemediation(ingested.incident.id, remediation.remediation.approval.id)
   if (!completed.remediation.artifact) throw new Error("expected verified artifact")
-  return { client, incident: ingested.incident, remediation: completed.remediation }
+  return { client, handler, incident: ingested.incident, remediation: completed.remediation }
 }
 
-function deliveredResult(artifactSha256: string) {
+function deliveredResult(artifactId: string) {
   return {
     provider: "github",
     repository: "reseaxch/podo",
     number: 6,
     url: "https://github.com/reseaxch/podo/pull/6",
     baseCommit,
+    baseBranch: "main",
     headBranch: "podo/fix-checkout-cache",
-    artifactSha256,
+    artifactId,
   }
 }
 
 describe("incident pull request delivery API", () => {
   test("requires a second approval and delivers the immutable verified artifact at most once", async () => {
     const deliveryInputs: unknown[] = []
-    let artifactSha256 = ""
+    let artifactId = ""
     const fixture = await completedRemediationFixture({
       async deliver(input) {
         deliveryInputs.push(input)
-        return deliveredResult(artifactSha256)
+        return deliveredResult(artifactId)
       },
     })
-    artifactSha256 = fixture.remediation.artifact!.patch.sha256
+    artifactId = fixture.remediation.artifact!.pullRequestPreview.id
+
+    const injectedStart = await fixture.handler(new Request(
+      `http://podo.test/api/incidents/${encodeURIComponent(fixture.incident.id)}/remediation/delivery`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: "caller", authorization: { approvalId: "caller" } }),
+      },
+    ))
+    expect(injectedStart.status).toBe(400)
 
     const pending = await fixture.client.startIncidentDelivery(fixture.incident.id)
     expect(pending.delivery).toMatchObject({
       incidentId: fixture.incident.id,
       remediationId: fixture.remediation.id,
-      artifactSha256,
+      artifactId,
       status: "pending_approval",
       approval: { status: "pending" },
     })
+    expect(deliveryInputs).toHaveLength(0)
+
+    const injectedApproval = await fixture.handler(new Request(
+      `http://podo.test/api/incidents/${encodeURIComponent(fixture.incident.id)}/remediation/delivery/approvals/${encodeURIComponent(pending.delivery.approval.id)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: "approve", authorization: { approvalId: "caller" } }),
+      },
+    ))
+    expect(injectedApproval.status).toBe(400)
     expect(deliveryInputs).toHaveLength(0)
 
     const [first, repeated] = await Promise.all([
@@ -158,10 +184,15 @@ describe("incident pull request delivery API", () => {
     expect(deliveryInputs[0]).toMatchObject({
       incidentId: fixture.incident.id,
       remediationId: fixture.remediation.id,
+      deliveryId: pending.delivery.id,
+      authorization: {
+        kind: "core.pull_request_delivery.v1",
+        approvalId: pending.delivery.approval.id,
+        approvedAt: expect.stringMatching(/^2026-|^20\d\d-/),
+      },
       artifact: {
         provenance: { baseCommit },
-        patch: { sha256: artifactSha256 },
-        pullRequestPreview: { baseBranch: "main", headBranch: "podo/fix-checkout-cache" },
+        pullRequestPreview: { id: artifactId, baseBranch: "main", headBranch: "podo/fix-checkout-cache" },
       },
     })
     expect(first.delivery).toMatchObject({
@@ -172,15 +203,16 @@ describe("incident pull request delivery API", () => {
         repository: "reseaxch/podo",
         number: 6,
         url: "https://github.com/reseaxch/podo/pull/6",
-        artifactSha256,
+        artifactId,
         baseCommit,
+        baseBranch: "main",
       },
     })
     expect((await fixture.client.getIncidentRemediationAudit(fixture.incident.id)).events.slice(-4)).toMatchObject([
       { kind: "delivery.requested" },
       { kind: "delivery.approval_decided", decision: "approve" },
       { kind: "delivery.started" },
-      { kind: "delivery.succeeded", artifactSha256, pullRequestUrl: "https://github.com/reseaxch/podo/pull/6" },
+      { kind: "delivery.succeeded", artifactId, pullRequestUrl: "https://github.com/reseaxch/podo/pull/6" },
     ])
   })
 
@@ -210,15 +242,17 @@ describe("incident pull request delivery API", () => {
     expect(JSON.stringify(failed)).not.toContain("private-provider-output")
     expect(JSON.stringify(failed)).not.toContain("unifiedDiff")
 
+    let invalidArtifactId = ""
     const invalidFixture = await completedRemediationFixture({
       async deliver() {
         return {
-          ...deliveredResult("untrusted-artifact-hash"),
-          url: "https://attacker.invalid/pull/6",
-          privateOutput: "must-not-escape",
+          ...deliveredResult(invalidArtifactId),
+          repository: "attacker/podo",
+          url: "https://github.com/attacker/podo/pull/6",
         }
       },
     })
+    invalidArtifactId = invalidFixture.remediation.artifact!.pullRequestPreview.id
     const invalidPending = await invalidFixture.client.startIncidentDelivery(invalidFixture.incident.id)
     const invalid = await invalidFixture.client.approveIncidentDelivery(
       invalidFixture.incident.id,
@@ -226,7 +260,39 @@ describe("incident pull request delivery API", () => {
     )
     expect(invalid.delivery).toMatchObject({ status: "failed", error: { code: "invalid_delivery_result" } })
     expect(invalid.delivery.pullRequest).toBeUndefined()
-    expect(JSON.stringify(invalid)).not.toContain("attacker.invalid")
-    expect(JSON.stringify(invalid)).not.toContain("must-not-escape")
+    expect(JSON.stringify(invalid)).not.toContain("attacker/podo")
+
+    let wrongBaseArtifactId = ""
+    const wrongBaseFixture = await completedRemediationFixture({
+      async deliver() {
+        return { ...deliveredResult(wrongBaseArtifactId), baseBranch: "release" }
+      },
+    })
+    wrongBaseArtifactId = wrongBaseFixture.remediation.artifact!.pullRequestPreview.id
+    const wrongBasePending = await wrongBaseFixture.client.startIncidentDelivery(wrongBaseFixture.incident.id)
+    const wrongBase = await wrongBaseFixture.client.approveIncidentDelivery(
+      wrongBaseFixture.incident.id,
+      wrongBasePending.delivery.approval.id,
+    )
+    expect(wrongBase.delivery).toMatchObject({ status: "failed", error: { code: "invalid_delivery_result" } })
+    expect(wrongBase.delivery.pullRequest).toBeUndefined()
+    expect(JSON.stringify(wrongBase)).not.toContain("release")
+  })
+
+  test("keeps create_pull_request authorization exclusively behind delivery approval policy", async () => {
+    const calls: unknown[] = []
+    const fixture = await completedRemediationFixture({
+      async deliver(input) { calls.push(input); return {} },
+    })
+
+    expect(fixture.remediation).toMatchObject({
+      status: "completed",
+      artifact: { pullRequestPreview: { id: expect.stringMatching(/^pr_preview_/) } },
+    })
+    expect(calls).toHaveLength(0)
+
+    await fixture.client.updateSettings({ autonomyMode: "recommend" })
+    await expect(fixture.client.startIncidentDelivery(fixture.incident.id)).rejects.toThrow("409")
+    expect(calls).toHaveLength(0)
   })
 })

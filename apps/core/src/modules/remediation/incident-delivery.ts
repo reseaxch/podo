@@ -11,8 +11,14 @@ import type { SettingsStore } from "../../settings"
 import type { IncidentRemediationService } from "./incident-remediation"
 
 export interface PullRequestDeliveryInput {
+  deliveryId: string
   incidentId: string
   remediationId: string
+  authorization: {
+    kind: "core.pull_request_delivery.v1"
+    approvalId: string
+    approvedAt: string
+  }
   artifact: IncidentRemediationArtifact
 }
 
@@ -20,9 +26,15 @@ export interface PullRequestDeliveryPort {
   deliver(input: PullRequestDeliveryInput): Promise<unknown>
 }
 
+export interface PullRequestDeliveryConfig {
+  expectedRepository: string
+  port: PullRequestDeliveryPort
+}
+
 interface DeliveryRecord {
   delivery: IncidentDelivery
   artifact: IncidentRemediationArtifact
+  authorization?: PullRequestDeliveryInput["authorization"]
   execution?: Promise<void>
 }
 
@@ -47,8 +59,12 @@ export class IncidentDeliveryService {
   constructor(
     private readonly remediations: IncidentRemediationService,
     private readonly settings: SettingsStore,
-    private readonly port?: PullRequestDeliveryPort,
-  ) {}
+    private readonly config?: PullRequestDeliveryConfig,
+  ) {
+    if (config && !isRepositoryIdentity(config.expectedRepository)) {
+      throw new Error("invalid_pull_request_delivery_repository")
+    }
+  }
 
   start(incidentId: string): StartIncidentDeliveryResult {
     const existing = this.byIncident.get(incidentId)
@@ -60,7 +76,7 @@ export class IncidentDeliveryService {
     if (remediation.status !== "completed" || !remediation.artifact) {
       return { ok: false, status: 409, error: "remediation_not_verified", message: "A completed verified remediation artifact is required" }
     }
-    if (!this.port) return { ok: false, status: 503, error: "delivery_unavailable", message: "Pull request delivery is unavailable" }
+    if (!this.config) return { ok: false, status: 503, error: "delivery_unavailable", message: "Pull request delivery is unavailable" }
 
     const mode = this.settings.get().autonomyMode
     const policy = evaluateReaction({
@@ -81,7 +97,7 @@ export class IncidentDeliveryService {
         id: `delivery_${randomUUID()}`,
         incidentId,
         remediationId: remediation.id,
-        artifactSha256: remediation.artifact.patch.sha256,
+        artifactId: remediation.artifact.pullRequestPreview.id,
         status: "pending_approval",
         approval: { id: `approval_${randomUUID()}`, status: "pending" },
         createdAt: now,
@@ -92,7 +108,7 @@ export class IncidentDeliveryService {
     this.remediations.appendAudit(incidentId, {
       kind: "delivery.requested",
       deliveryId: record.delivery.id,
-      artifactSha256: record.delivery.artifactSha256,
+      artifactId: record.delivery.artifactId,
     })
     return { ok: true, created: true, delivery: copy(record.delivery) }
   }
@@ -130,6 +146,11 @@ export class IncidentDeliveryService {
 
     record.delivery.approval.status = "approved"
     record.delivery.status = "delivering"
+    record.authorization = {
+      kind: "core.pull_request_delivery.v1",
+      approvalId,
+      approvedAt: record.delivery.updatedAt,
+    }
     this.auditDecision(record, approvalId, decision)
     record.execution = this.execute(record)
     await record.execution
@@ -144,7 +165,7 @@ export class IncidentDeliveryService {
       regression: "passed",
       target: "isolated_checkout",
     })
-    if (!policy.allowed || !this.port) {
+    if (!policy.allowed || !this.config || !record.authorization) {
       this.fail(record, "policy_denied", "Pull request delivery was denied by the active policy")
       return
     }
@@ -161,14 +182,16 @@ export class IncidentDeliveryService {
     this.remediations.appendAudit(record.delivery.incidentId, {
       kind: "delivery.started",
       deliveryId: record.delivery.id,
-      artifactSha256: record.delivery.artifactSha256,
+      artifactId: record.delivery.artifactId,
     })
 
     let raw: unknown
     try {
-      raw = await this.port.deliver({
+      raw = await this.config.port.deliver({
+        deliveryId: record.delivery.id,
         incidentId: record.delivery.incidentId,
         remediationId: record.delivery.remediationId,
+        authorization: copy(record.authorization),
         artifact: copy(record.artifact),
       })
     } catch {
@@ -176,7 +199,7 @@ export class IncidentDeliveryService {
       return
     }
 
-    const result = parseDeliveryResult(raw, record.artifact)
+    const result = parseDeliveryResult(raw, record.artifact, this.config.expectedRepository)
     if (!result) {
       this.fail(record, "invalid_delivery_result", "Pull request delivery returned an invalid result")
       return
@@ -188,7 +211,7 @@ export class IncidentDeliveryService {
     this.remediations.appendAudit(record.delivery.incidentId, {
       kind: "delivery.succeeded",
       deliveryId: record.delivery.id,
-      artifactSha256: record.delivery.artifactSha256,
+      artifactId: record.delivery.artifactId,
       pullRequestUrl: result.url,
     })
   }
@@ -215,26 +238,32 @@ export class IncidentDeliveryService {
   }
 }
 
-function parseDeliveryResult(value: unknown, artifact: IncidentRemediationArtifact): NonNullable<IncidentDelivery["pullRequest"]> | null {
+function parseDeliveryResult(
+  value: unknown,
+  artifact: IncidentRemediationArtifact,
+  expectedRepository: string,
+): NonNullable<IncidentDelivery["pullRequest"]> | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
     "provider",
     "repository",
     "number",
     "url",
     "baseCommit",
+    "baseBranch",
     "headBranch",
-    "artifactSha256",
+    "artifactId",
   ])) return null
   if (value.provider !== "github"
     || typeof value.repository !== "string"
-    || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value.repository)
+    || value.repository !== expectedRepository
     || !Number.isSafeInteger(value.number)
     || (value.number as number) < 1
     || typeof value.url !== "string"
     || value.url !== `https://github.com/${value.repository}/pull/${value.number}`
     || value.baseCommit !== artifact.provenance.baseCommit
+    || value.baseBranch !== artifact.pullRequestPreview.baseBranch
     || value.headBranch !== artifact.pullRequestPreview.headBranch
-    || value.artifactSha256 !== artifact.patch.sha256) return null
+    || value.artifactId !== artifact.pullRequestPreview.id) return null
 
   return {
     provider: "github",
@@ -242,9 +271,15 @@ function parseDeliveryResult(value: unknown, artifact: IncidentRemediationArtifa
     number: value.number as number,
     url: value.url,
     baseCommit: value.baseCommit,
+    baseBranch: value.baseBranch,
     headBranch: value.headBranch,
-    artifactSha256: value.artifactSha256,
+    artifactId: value.artifactId,
   }
+}
+
+function isRepositoryIdentity(value: string): boolean {
+  return /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,38})\/[A-Za-z0-9_.-]+$/.test(value)
+    && !value.split("/").includes("..")
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

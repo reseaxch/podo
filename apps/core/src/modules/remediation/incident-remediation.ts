@@ -249,10 +249,10 @@ export class IncidentRemediationService {
 
     const releaseDecision = evaluateReaction({
       mode: this.settings.get().autonomyMode,
-      action: "create_pull_request",
-      approval: "approved",
+      action: "preview_patch",
+      approval: "not_requested",
       regression: "passed",
-      target,
+      target: "none",
     })
     if (!releaseDecision.allowed) {
       this.fail(record, "policy_denied", "Pull request preview was denied by the active policy")
@@ -264,7 +264,7 @@ export class IncidentRemediationService {
     record.remediation.updatedAt = new Date().toISOString()
     this.recordAudit(record, {
       kind: "remediation.verification_succeeded",
-      artifactSha256: record.remediation.artifact.patch.sha256,
+      artifactId: record.remediation.artifact.pullRequestPreview.id,
     })
   }
 
@@ -298,7 +298,7 @@ export class IncidentRemediationService {
         record.audit.push({ ...base, kind: event.kind, code: event.code })
         return
       case "remediation.verification_succeeded":
-        record.audit.push({ ...base, kind: event.kind, artifactSha256: event.artifactSha256 })
+        record.audit.push({ ...base, kind: event.kind, artifactId: event.artifactId })
         return
       case "delivery.requested":
       case "delivery.started":
@@ -306,7 +306,7 @@ export class IncidentRemediationService {
           ...base,
           kind: event.kind,
           deliveryId: event.deliveryId,
-          artifactSha256: event.artifactSha256,
+          artifactId: event.artifactId,
         })
         return
       case "delivery.approval_decided":
@@ -326,7 +326,7 @@ export class IncidentRemediationService {
           ...base,
           kind: event.kind,
           deliveryId: event.deliveryId,
-          artifactSha256: event.artifactSha256,
+          artifactId: event.artifactId,
           pullRequestUrl: event.pullRequestUrl,
         })
     }

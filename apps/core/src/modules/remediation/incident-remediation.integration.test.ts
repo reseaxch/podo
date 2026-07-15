@@ -331,7 +331,7 @@ describe("incident remediation API", () => {
       {
         sequence: 4,
         kind: "remediation.verification_succeeded",
-        artifactSha256: completed.remediation.artifact!.patch.sha256,
+        artifactId: completed.remediation.artifact!.pullRequestPreview.id,
       },
     ])
   })
@@ -500,7 +500,7 @@ describe("incident remediation API", () => {
     expect(calls).toHaveLength(0)
   })
 
-  test("does not publish a verified artifact if policy changes during execution", async () => {
+  test("uses non-mutating preview policy after verification when mode changes to recommend", async () => {
     let release!: (value: unknown) => void
     let markStarted!: () => void
     const gate = new Promise<unknown>((resolve) => { release = resolve })
@@ -515,8 +515,11 @@ describe("incident remediation API", () => {
     await client.updateSettings({ autonomyMode: "recommend" })
     release(verifiedExecutorResult())
 
-    const failed = await approval
-    expect(failed.remediation).toMatchObject({ status: "failed", error: { code: "policy_denied" } })
-    expect(failed.remediation.artifact).toBeUndefined()
+    const completed = await approval
+    expect(completed.remediation).toMatchObject({
+      status: "completed",
+      artifact: { pullRequestPreview: { id: expect.stringMatching(/^pr_preview_/) } },
+    })
+    expect(completed.remediation.error).toBeUndefined()
   })
 })

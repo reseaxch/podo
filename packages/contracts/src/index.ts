@@ -290,12 +290,12 @@ export type IncidentRemediationAuditEvent =
   }
   | IncidentRemediationAuditEventBase & {
     kind: "remediation.verification_succeeded"
-    artifactSha256: string
+    artifactId: string
   }
   | IncidentRemediationAuditEventBase & {
     kind: "delivery.requested"
     deliveryId: string
-    artifactSha256: string
+    artifactId: string
   }
   | IncidentRemediationAuditEventBase & {
     kind: "delivery.approval_decided"
@@ -306,7 +306,7 @@ export type IncidentRemediationAuditEvent =
   | IncidentRemediationAuditEventBase & {
     kind: "delivery.started"
     deliveryId: string
-    artifactSha256: string
+    artifactId: string
   }
   | IncidentRemediationAuditEventBase & {
     kind: "delivery.failed"
@@ -316,7 +316,7 @@ export type IncidentRemediationAuditEvent =
   | IncidentRemediationAuditEventBase & {
     kind: "delivery.succeeded"
     deliveryId: string
-    artifactSha256: string
+    artifactId: string
     pullRequestUrl: string
   }
 
@@ -334,7 +334,7 @@ export interface IncidentDelivery {
   id: string
   incidentId: string
   remediationId: string
-  artifactSha256: string
+  artifactId: string
   status: "pending_approval" | "delivering" | "delivered" | "denied" | "failed"
   approval: {
     id: string
@@ -348,8 +348,9 @@ export interface IncidentDelivery {
     number: number
     url: string
     baseCommit: string
+    baseBranch: string
     headBranch: string
-    artifactSha256: string
+    artifactId: string
   }
   error?: {
     code: IncidentDeliveryErrorCode
