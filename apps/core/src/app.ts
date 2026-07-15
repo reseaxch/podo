@@ -132,6 +132,13 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         : json({ error: result.error, message: result.message }, result.status)
     }
 
+    const incidentRemediationAuditMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/audit$/)
+    if (incidentRemediationAuditMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      const result = incidentRemediations.audit(decodeURIComponent(incidentRemediationAuditMatch[1]))
+      return result.ok ? json({ events: result.events }) : json({ error: "not_found" }, 404)
+    }
+
     const incidentRemediationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation$/)
     if (incidentRemediationMatch?.[1]) {
       const incidentId = decodeURIComponent(incidentRemediationMatch[1])

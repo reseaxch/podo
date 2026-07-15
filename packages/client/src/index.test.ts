@@ -101,6 +101,7 @@ describe("createPodoClient", () => {
 
     await client.startIncidentRemediation("incident/1")
     await client.getIncidentRemediation("incident/1")
+    await client.getIncidentRemediationAudit("incident/1")
     await client.approveIncidentRemediation("incident/1", "approval/1")
     await client.denyIncidentRemediation("incident/1", "approval/2")
 
@@ -112,6 +113,10 @@ describe("createPodoClient", () => {
       },
       {
         url: "http://podo.test/api/incidents/incident%2F1/remediation",
+        method: "GET",
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation/audit",
         method: "GET",
       },
       {

@@ -48,6 +48,15 @@ Codex runtime used by investigations; it does not start a second app-server
 connection. `/api/system` and `/readyz` expose `remediation.configured` without
 making remediation availability a process-readiness requirement.
 
+This composition is a local/POC operator capability, not a broad production
+rollout gate. Core keeps a minimum in-memory audit boundary for every configured
+remediation: request, approval or denial, execution start, and sanitized
+verification success/failure. `GET /api/incidents/:id/remediation/audit`
+returns the ordered typed events. It records stable Core identifiers, decisions,
+sanitized failure codes, and the verified artifact hash; it never records raw
+Codex output, command output, private runtime IDs, secrets, diffs, or unverified
+pull-request content.
+
 Enable it with the following complete, fail-closed configuration:
 
 ```sh
@@ -70,8 +79,9 @@ to start. Directory existence, canonical paths, repository identity, and the
 trusted base ref are revalidated immediately before an isolated worktree is
 created; those checks fail the remediation without mutating the source checkout.
 
-Durable persistence, complete audit history, and GitHub delivery remain MVP
-workstream milestones.
+Durable persistence/replay, authenticated actor identity, complete tool-level
+audit history, and GitHub delivery remain explicitly out of scope for this
+slice and are required before broader production use.
 
 ## Run and validate
 

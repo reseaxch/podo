@@ -262,6 +262,38 @@ export interface IncidentRemediationDecisionResponse {
   remediation: IncidentRemediation
 }
 
+interface IncidentRemediationAuditEventBase {
+  sequence: number
+  occurredAt: string
+  incidentId: string
+  remediationId: string
+}
+
+export type IncidentRemediationAuditEvent =
+  | IncidentRemediationAuditEventBase & {
+    kind: "remediation.requested"
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "remediation.approval_decided"
+    approvalId: string
+    decision: "approve" | "deny"
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "remediation.execution_started"
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "remediation.verification_failed"
+    code: NonNullable<IncidentRemediation["error"]>["code"]
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "remediation.verification_succeeded"
+    artifactSha256: string
+  }
+
+export interface GetIncidentRemediationAuditResponse {
+  events: IncidentRemediationAuditEvent[]
+}
+
 export interface StartIncidentInvestigationRequest {
   cwd: string
 }

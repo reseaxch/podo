@@ -4,6 +4,7 @@ import type {
   GetInvestigationResponse,
   GetIncidentCausalPathResponse,
   GetIncidentResponse,
+  GetIncidentRemediationAuditResponse,
   GetSettingsResponse,
   HealthResponse,
   IngestTelemetryResponse,
@@ -59,6 +60,7 @@ export interface PodoIncidentClient extends PodoClient {
 export interface PodoRemediationClient {
   startIncidentRemediation(id: string): Promise<StartIncidentRemediationResponse>
   getIncidentRemediation(id: string): Promise<GetIncidentRemediationResponse>
+  getIncidentRemediationAudit(id: string): Promise<GetIncidentRemediationAuditResponse>
   approveIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
   denyIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
 }
@@ -92,6 +94,7 @@ export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentC
     startIncidentInvestigation: (id, input) => command<StartIncidentInvestigationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/investigation`, "POST", input),
     startIncidentRemediation: (id) => command<StartIncidentRemediationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`, "POST", {}),
     getIncidentRemediation: async (id) => readJson<GetIncidentRemediationResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`)),
+    getIncidentRemediationAudit: async (id) => readJson<GetIncidentRemediationAuditResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/audit`)),
     approveIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "approve" }),
     denyIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "deny" }),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
