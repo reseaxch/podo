@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@rootline/contracts": "workspace:*",
     "@rootline/plugin-sdk": "workspace:*"
   },
   "scripts": {
