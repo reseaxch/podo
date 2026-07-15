@@ -418,6 +418,7 @@ function buildResult(
   const action = boundedLine(input.incident.diagnosis.recommendedAction, 180) || "apply verified remediation"
   const summary = boundedLine(`${action} for ${input.incident.affectedService}`, 500)
   return {
+    provenance: { baseCommit },
     patch: { summary, changedFiles: patch.changedFiles, unifiedDiff: patch.unifiedDiff },
     regression: { test: "incident regression", prePatch: "failed", postPatch: "passed" },
     validation: {

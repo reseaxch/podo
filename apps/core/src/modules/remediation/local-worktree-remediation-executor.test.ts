@@ -57,6 +57,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
     expect(worktreeHead).toBe(trustedBaseCommit)
     expect(stagedBeforeFix).toBe("")
     expect(result).toMatchObject({
+      provenance: { baseCommit: trustedBaseCommit },
       regression: { prePatch: "failed", postPatch: "passed" },
       validation: { status: "passed", checks: ["validation-1"] },
       patch: { changedFiles: ["src/cache.ts", "test/cache.test.ts"] },
@@ -77,6 +78,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
     expect(await Bun.file(hookMarker).exists()).toBe(false)
 
     const repeated = await executor.execute(input("incident/../../not-a-path; touch escaped"))
+    expect(repeated.provenance).toEqual(result.provenance)
     expect(repeated.patch).toEqual(result.patch)
     expect(repeated.pullRequestPreview).toEqual(result.pullRequestPreview)
   })

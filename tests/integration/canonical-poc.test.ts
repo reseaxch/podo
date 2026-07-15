@@ -676,6 +676,7 @@ function expectedPreviewId(artifact: NonNullable<IncidentRemediation["artifact"]
   const { id: _id, ...preview } = artifact.pullRequestPreview
   return `pr_preview_${createHash("sha256")
     .update(JSON.stringify({
+      provenance: artifact.provenance,
       patch: artifact.patch,
       regression: artifact.regression,
       validation: artifact.validation,

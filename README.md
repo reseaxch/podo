@@ -14,8 +14,10 @@ through an approval-gated workflow.
 > through the real graph, replay, core, typed client, Codex remediation producer,
 > isolated git worktree, red-to-green regression gate, and reproducible
 > pull-request preview. Local/POC runtime composition is now available as an
-> explicit fail-closed Core configuration; durable audit operations and GitHub
-> delivery remain MVP milestones before broader production use.
+> explicit fail-closed Core configuration. The Core-owned, separately approved
+> GitHub delivery contract is implemented with immutable artifact provenance and
+> audit events; its networked GitHub adapter and durable audit operations remain
+> MVP milestones before broader production use.
 
 ## MVP outcome
 
@@ -43,13 +45,14 @@ canonical graph + telemetry replay
   → isolated patch and regression test
   → passing validation
   → reproducible pull-request preview
+  → separate delivery approval and validated GitHub delivery port
 ```
 
-The POC may keep state in memory and use a local pull-request preview. It is not
-complete if the dashboard displays fixture-only diagnosis/remediation state or
-if failed validation can reach delivery. The MVP adds durable operations,
-GitHub delivery, full audit coverage, judge setup, eval baselines, benchmarks,
-and the final submission artifacts.
+The POC may keep state in memory and use a fake pull-request delivery port. It
+is not complete if the dashboard displays fixture-only diagnosis/remediation
+state or if failed validation can reach delivery. The MVP adds durable
+operations, the networked GitHub adapter, full audit coverage, judge setup,
+eval baselines, benchmarks, and the final submission artifacts.
 
 ## System shape
 

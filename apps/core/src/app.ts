@@ -13,6 +13,7 @@ import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 import { IncidentCausalPathService, type IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
 import { IncidentRemediationService, type IncidentRemediationExecutor } from "./modules/remediation/incident-remediation"
+import { IncidentDeliveryService, type PullRequestDeliveryConfig } from "./modules/remediation/incident-delivery"
 import { SettingsStore } from "./settings"
 
 export interface CoreHandlerOptions {
@@ -24,6 +25,7 @@ export interface CoreHandlerOptions {
   incidentGraph?: IncidentGraphConfig
   remediationExecutor?: IncidentRemediationExecutor
   remediationExecutorFactory?: (runtimeProvider: () => Promise<CodexRuntime>) => IncidentRemediationExecutor
+  pullRequestDelivery?: PullRequestDeliveryConfig
 }
 
 const serviceVersion = "0.0.0"
@@ -49,6 +51,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   const remediationExecutor = options.remediationExecutor
     ?? options.remediationExecutorFactory?.(() => investigations.acquireRuntime())
   const incidentRemediations = new IncidentRemediationService(incidentMonitor, incidentInvestigations, settings, remediationExecutor)
+  const incidentDeliveries = new IncidentDeliveryService(incidentRemediations, settings, options.pullRequestDelivery)
   const remediationStatus = { configured: remediationExecutor !== undefined }
 
   return async function handleRequest(request: Request): Promise<Response> {
@@ -137,6 +140,41 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
       const result = incidentRemediations.audit(decodeURIComponent(incidentRemediationAuditMatch[1]))
       return result.ok ? json({ events: result.events }) : json({ error: "not_found" }, 404)
+    }
+
+    const incidentDeliveryMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/delivery$/)
+    if (incidentDeliveryMatch?.[1]) {
+      const incidentId = decodeURIComponent(incidentDeliveryMatch[1])
+      if (request.method === "GET") {
+        const result = incidentDeliveries.get(incidentId)
+        return result.ok
+          ? json({ delivery: result.delivery })
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      if (request.method === "POST") {
+        const input = await readBody(request)
+        if (!isEmptyObject(input)) return json({ error: "invalid_request", message: "No caller-authored delivery input is accepted" }, 400)
+        const result = incidentDeliveries.start(incidentId)
+        return result.ok
+          ? json({ delivery: result.delivery }, result.created ? 201 : 200)
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      return json({ error: "method_not_allowed" }, 405)
+    }
+
+    const incidentDeliveryApprovalMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/delivery\/approvals\/([^/]+)$/)
+    if (incidentDeliveryApprovalMatch?.[1] && incidentDeliveryApprovalMatch[2]) {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      const input = await readBody(request)
+      if (!isIncidentRemediationDecision(input)) return json({ error: "invalid_request" }, 400)
+      const result = await incidentDeliveries.decide(
+        decodeURIComponent(incidentDeliveryApprovalMatch[1]),
+        decodeURIComponent(incidentDeliveryApprovalMatch[2]),
+        input.decision,
+      )
+      return result.ok
+        ? json({ delivery: result.delivery })
+        : json({ error: result.error, message: result.message }, result.status)
     }
 
     const incidentRemediationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation$/)
