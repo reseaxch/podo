@@ -25,10 +25,21 @@ ambiguous links fail closed; the query never selects an arbitrary candidate.
 Multiple evidence items per incident are supported by querying the specific
 evidence identity.
 
+`constructIncidentOperationalOverlay` is the pure incident-to-overlay boundary.
+It accepts a real detected incident, its normalized telemetry evidence, and an
+explicit trusted deployment correlation containing deployment, container,
+commit SHA, and changed normalized file-node identities. It requires one
+unambiguous telemetry event per evidence reference and exact service,
+timestamp, kind, deployment, and container provenance before emitting the six
+operational link kinds above. A telemetry commit ID is optional because the
+trusted deployment correlation is authoritative, but when present it must
+match. The `CHANGED` target comes only from that trusted correlation; telemetry
+cannot select a file.
+
 Current limits are deliberate: the graph is an in-memory full replacement, not
 persistence or an incremental upsert engine; `CHANGED` must identify one file and
 that file must contain one candidate function for the selected evidence path.
-Operational overlay construction from the incident monitor is not wired yet.
+Operational overlay construction is not wired into the incident monitor yet.
 The raw NetworkX-shaped Graphify fixture also requires a separate versioned
 raw-to-`NormalizedCodeGraphSnapshot` decoder before it can be loaded here.
 
