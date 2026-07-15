@@ -4,6 +4,7 @@ import type { CodexRuntime, CodexRuntimeEvent } from "@podo/codex-app-server-cli
 import { createPodoClient } from "../../../../../packages/client/src/index"
 import { createCoreHandler } from "../../app"
 import { createProductionRemediationExecutorFactory } from "../../runtime/production-remediation"
+import type { IssueDeliveryInput } from "./incident-issue"
 
 const productionRemediationEnvironment = {
   PODO_REMEDIATION_ENABLED: "true",
@@ -65,7 +66,16 @@ function telemetry() {
   ]
 }
 
-function completeDiagnosis(runtime: DiagnosisRuntime, evidenceIds: string[], safeToAttemptFix = true): void {
+function completeDiagnosis(
+  runtime: DiagnosisRuntime,
+  evidenceIds: string[],
+  safeToAttemptFix = true,
+  overrides: Partial<{
+    summary: string
+    probableRootCause: string
+    recommendedAction: string
+  }> = {},
+): void {
   const output = JSON.stringify({
     schemaVersion: "podo.diagnosis.v1",
     summary: "Heap growth correlates with checkout failures",
@@ -75,9 +85,35 @@ function completeDiagnosis(runtime: DiagnosisRuntime, evidenceIds: string[], saf
     evidenceIds,
     recommendedAction: "Bound the cache and add a regression test",
     safeToAttemptFix,
+    ...overrides,
   })
   runtime.emit({ kind: "output.delta", threadId: "private-thread", turnId: "private-turn", text: output })
   runtime.emit({ kind: "turn.completed", threadId: "private-thread", turnId: "private-turn", status: "completed" })
+}
+
+function issueResult(input: IssueDeliveryInput, number: number, state: "open" | "closed" = "open") {
+  return {
+    provider: "github" as const,
+    status: "created" as const,
+    repository: "reseaxch/podo",
+    number,
+    url: `https://github.com/reseaxch/podo/issues/${number}`,
+    state,
+    draft: {
+      id: input.draft.id,
+      idempotencyKey: input.draft.idempotencyKey,
+      contentSha256: input.draft.contentSha256,
+    },
+    authorization: {
+      id: input.authorization.authorizationId,
+      authorizedAt: input.authorization.authorizedAt,
+    },
+    incident: {
+      id: input.draft.content.incidentId,
+      reason: input.draft.content.reason,
+      evidenceIds: [...input.draft.content.evidenceIds],
+    },
+  }
 }
 
 function verifiedExecutorResult() {
@@ -178,6 +214,160 @@ async function createProductionCompositionFixture(executorResult: unknown) {
 }
 
 describe("incident remediation API", () => {
+  test("creates one GitHub issue fallback for a validated diagnosis that is unsafe to remediate", async () => {
+    const runtime = new DiagnosisRuntime()
+    const delivered: unknown[] = []
+    const handler = createCoreHandler({
+      runtime,
+      issueDelivery: {
+        expectedRepository: "reseaxch/podo",
+        port: {
+          async create(input: IssueDeliveryInput) {
+            delivered.push(input)
+            return issueResult(input, 91)
+          },
+        },
+      },
+    })
+    const client = createPodoClient({
+      baseUrl: "http://podo.test",
+      fetch: (input, init) => handler(new Request(input, init)),
+    })
+    const ingested = await client.ingestTelemetry(telemetry())
+    if (!ingested.incident) throw new Error("expected incident")
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const investigation = await client.startIncidentInvestigation(ingested.incident.id, { cwd: "/repo" })
+    completeDiagnosis(runtime, investigation.incident.evidence.map(({ id }) => id), false)
+
+    const first = await client.startIncidentIssue(ingested.incident.id)
+    const repeated = await client.startIncidentIssue(ingested.incident.id)
+
+    expect(repeated).toEqual(first)
+    expect(first.issueDelivery).toMatchObject({
+      status: "created",
+      reason: "remediation_not_safe",
+      issue: { provider: "github", repository: "reseaxch/podo", number: 91 },
+    })
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]).toMatchObject({
+      authorization: { kind: "core.issue_fallback.v1" },
+      draft: {
+        id: expect.stringMatching(/^issue_draft_/),
+        content: { incidentId: ingested.incident.id, reason: "remediation_not_safe" },
+      },
+    })
+    expect(JSON.stringify(delivered[0])).toContain(investigation.incident.evidence[0]!.id)
+    expect(JSON.stringify(delivered[0])).not.toContain("unifiedDiff")
+    expect((await client.getIncidentAudit(ingested.incident.id)).events.slice(-2).map(({ kind }) => kind)).toEqual([
+      "issue.requested",
+      "issue.succeeded",
+    ])
+  })
+
+  test("rejects confidential diagnosis content before any issue provider call", async () => {
+    const runtime = new DiagnosisRuntime()
+    let issueCreates = 0
+    const handler = createCoreHandler({
+      runtime,
+      issueDelivery: {
+        expectedRepository: "reseaxch/podo",
+        port: {
+          async create(input: IssueDeliveryInput) {
+            issueCreates++
+            return issueResult(input, 94)
+          },
+        },
+      },
+    })
+    const client = createPodoClient({ baseUrl: "http://podo.test", fetch: (input, init) => handler(new Request(input, init)) })
+    const ingested = await client.ingestTelemetry(telemetry())
+    if (!ingested.incident) throw new Error("expected incident")
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const investigation = await client.startIncidentInvestigation(ingested.incident.id, { cwd: "/repo" })
+    completeDiagnosis(runtime, investigation.incident.evidence.map(({ id }) => id), false, {
+      probableRootCause: "Cache key CANARY_SECRET_42 was retained without a bound",
+    })
+
+    await expect(client.startIncidentIssue(ingested.incident.id)).rejects.toThrow("confidential_content")
+
+    expect(issueCreates).toBe(0)
+    const audit = await client.getIncidentAudit(ingested.incident.id)
+    expect(JSON.stringify(audit)).not.toContain("CANARY_SECRET_42")
+    expect(audit.events.some(({ kind }) => kind === "issue.requested")).toBe(false)
+  })
+
+  test("fails closed when provider result is not exactly bound to the sealed draft", async () => {
+    const runtime = new DiagnosisRuntime()
+    const handler = createCoreHandler({
+      runtime,
+      issueDelivery: {
+        expectedRepository: "reseaxch/podo",
+        port: {
+          async create(input: IssueDeliveryInput) {
+            return issueResult(input, 95, "closed")
+          },
+        },
+      },
+    })
+    const client = createPodoClient({ baseUrl: "http://podo.test", fetch: (input, init) => handler(new Request(input, init)) })
+    const ingested = await client.ingestTelemetry(telemetry())
+    if (!ingested.incident) throw new Error("expected incident")
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const investigation = await client.startIncidentInvestigation(ingested.incident.id, { cwd: "/repo" })
+    completeDiagnosis(runtime, investigation.incident.evidence.map(({ id }) => id), false)
+
+    const fallback = await client.startIncidentIssue(ingested.incident.id)
+
+    expect(fallback.issueDelivery).toMatchObject({
+      status: "failed",
+      error: { code: "invalid_delivery_result" },
+    })
+    expect(fallback.issueDelivery.issue).toBeUndefined()
+  })
+
+  test("routes failed remediation validation to issue instead of pull request delivery", async () => {
+    const runtime = new DiagnosisRuntime()
+    let issueCreates = 0
+    const handler = createCoreHandler({
+      runtime,
+      remediationExecutor: {
+        async execute() {
+          return {
+            ...verifiedExecutorResult(),
+            validation: { status: "failed", checks: ["core-tests"] },
+          }
+        },
+      },
+      issueDelivery: {
+        expectedRepository: "reseaxch/podo",
+        port: {
+          async create(input: IssueDeliveryInput) {
+            issueCreates++
+            return issueResult(input, 93)
+          },
+        },
+      },
+    })
+    const client = createPodoClient({ baseUrl: "http://podo.test", fetch: (input, init) => handler(new Request(input, init)) })
+    const ingested = await client.ingestTelemetry(telemetry())
+    if (!ingested.incident) throw new Error("expected incident")
+    await client.updateSettings({ autonomyMode: "act_with_approval" })
+    const investigation = await client.startIncidentInvestigation(ingested.incident.id, { cwd: "/repo" })
+    completeDiagnosis(runtime, investigation.incident.evidence.map(({ id }) => id), true)
+    const pending = await client.startIncidentRemediation(ingested.incident.id)
+    const failed = await client.approveIncidentRemediation(ingested.incident.id, pending.remediation.approval.id)
+    expect(failed.remediation).toMatchObject({ status: "failed", error: { code: "verification_failed" } })
+
+    const fallback = await client.startIncidentIssue(ingested.incident.id)
+
+    expect(fallback.issueDelivery).toMatchObject({
+      status: "created",
+      reason: "remediation_failed",
+      issue: { number: 93 },
+    })
+    expect(issueCreates).toBe(1)
+    await expect(client.startIncidentDelivery(ingested.incident.id)).rejects.toThrow("remediation_not_verified")
+  })
   test("keeps the production composition seam approval-gated, idempotent, and artifact-safe", async () => {
     const deniedFixture = await createProductionCompositionFixture(verifiedExecutorResult())
     const deniedPending = await deniedFixture.client.startIncidentRemediation(deniedFixture.incident.id)

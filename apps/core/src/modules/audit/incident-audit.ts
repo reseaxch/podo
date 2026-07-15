@@ -70,6 +70,28 @@ function validateInput(input: unknown): IncidentAuditInput {
           && value.code !== "investigation_failed"
           && value.code !== "investigation_cancelled")) throw invalidEvent()
       break
+    case "issue.requested":
+      if (!hasExactKeys(value, ["kind", "issueDeliveryId", "reason"])
+        || !isIdentifier(value.issueDeliveryId)
+        || (value.reason !== "remediation_not_safe"
+          && value.reason !== "remediation_denied"
+          && value.reason !== "remediation_failed")) throw invalidEvent()
+      break
+    case "issue.succeeded":
+      if (!hasExactKeys(value, ["kind", "issueDeliveryId", "issueUrl"])
+        || !isIdentifier(value.issueDeliveryId)
+        || !isIdentifier(value.issueUrl)) throw invalidEvent()
+      break
+    case "issue.failed":
+      if (!hasExactKeys(value, ["kind", "issueDeliveryId", "code"])
+        || !isIdentifier(value.issueDeliveryId)
+        || (value.code !== "policy_denied"
+          && value.code !== "fallback_not_available"
+          && value.code !== "confidential_content"
+          && value.code !== "delivery_unavailable"
+          && value.code !== "delivery_failed"
+          && value.code !== "invalid_delivery_result")) throw invalidEvent()
+      break
     default:
       throw invalidEvent()
   }

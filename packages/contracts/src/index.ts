@@ -354,9 +354,44 @@ export type IncidentAuditEvent =
     investigationId: string
     code: IncidentDiagnosisErrorCode
   }
+  | IncidentAuditEventBase & { kind: "issue.requested"; issueDeliveryId: string; reason: IncidentIssueFallbackReason }
+  | IncidentAuditEventBase & { kind: "issue.succeeded"; issueDeliveryId: string; issueUrl: string }
+  | IncidentAuditEventBase & { kind: "issue.failed"; issueDeliveryId: string; code: IncidentIssueErrorCode }
 
 export interface GetIncidentAuditResponse {
   events: IncidentAuditEvent[]
+}
+
+export type IncidentIssueFallbackReason = "remediation_not_safe" | "remediation_denied" | "remediation_failed"
+export type IncidentIssueErrorCode = "policy_denied" | "fallback_not_available" | "confidential_content" | "delivery_unavailable" | "delivery_failed" | "invalid_delivery_result"
+
+export interface IncidentIssueDelivery {
+  id: string
+  incidentId: string
+  reason: IncidentIssueFallbackReason
+  status: "creating" | "created" | "failed"
+  createdAt: string
+  updatedAt: string
+  issue?: {
+    provider: "github"
+    repository: string
+    number: number
+    url: string
+    state: "open"
+    providerStatus: "created" | "existing"
+    draftId: string
+    idempotencyKey: string
+    contentSha256: string
+  }
+  error?: { code: IncidentIssueErrorCode; message: string }
+}
+
+export interface StartIncidentIssueResponse {
+  issueDelivery: IncidentIssueDelivery
+}
+
+export interface GetIncidentIssueResponse {
+  issueDelivery: IncidentIssueDelivery
 }
 
 export type IncidentDeliveryErrorCode =

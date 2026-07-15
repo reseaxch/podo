@@ -185,8 +185,9 @@ share one supervised App Server runtime. Operators may additionally enable the
 separately approved `PODO_GITHUB_*` delivery composition described there; it
 binds the local trusted ref, GitHub repository/base branch, exact result tree,
 derived head, and pull-request content before reporting delivery success.
-Core also exposes an incident-wide investigation audit endpoint with ordered,
-evidence-attributed lifecycle events.
+The same Core module also supports an independently enabled, idempotent GitHub
+issue fallback for unsafe or failed remediation and an incident-wide
+investigation/issue audit endpoint.
 
 Initial product gates from the MVP plan include:
 
