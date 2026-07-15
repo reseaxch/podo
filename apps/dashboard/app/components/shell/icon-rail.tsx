@@ -4,32 +4,32 @@ import type { IncidentTab } from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
 
 type IconRailProps = {
-  onTabChange: (tab: IncidentTab) => void
+  onTabChange?: (tab: IncidentTab) => void
   onNotify: (message: string) => void
 }
 
 export function IconRail({ onTabChange, onNotify }: IconRailProps) {
   return (
     <aside className="icon-rail" aria-label="Primary navigation">
-      <a className="brand-mark" aria-label="Podo home" href="#workspace">
+      <a className="brand-mark" aria-label="Podo home" href="/incidents">
         <Icon name="cube" size={21} />
       </a>
       <nav>
-        <a aria-label="Overview" href="#workspace">
+        <a aria-label="Overview" href="/incidents">
           <Icon name="squares-four" />
         </a>
         <a
           aria-current="page"
           aria-label="Incidents"
           className="active"
-          href="#workspace"
+          href="/incidents"
         >
           <Icon name="trend-up" />
         </a>
         <button
           aria-label="Evidence sources"
           onClick={() => {
-            onTabChange("evidence")
+            onTabChange?.("evidence")
             onNotify("7 evidence sources connected")
           }}
           type="button"
@@ -38,7 +38,10 @@ export function IconRail({ onTabChange, onNotify }: IconRailProps) {
         </button>
         <button
           aria-label="System graph"
-          onClick={() => onTabChange("graph")}
+          onClick={() => {
+            if (onTabChange) onTabChange("graph")
+            else onNotify("Open an incident to inspect its causal graph")
+          }}
           type="button"
         >
           <Icon name="git-fork" />

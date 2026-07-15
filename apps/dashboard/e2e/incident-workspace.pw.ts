@@ -70,3 +70,42 @@ test("persisted dark theme hydrates without a mismatch", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
   expect(hydrationErrors).toEqual([])
 })
+
+test("incident overview filters the inbox and opens the primary incident", async ({
+  page,
+}) => {
+  await page.goto("/incidents")
+  await expect(
+    page.getByRole("heading", { name: "Incidents", exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", {
+      name: /Open INC-042: Checkout memory growth after deploy/,
+    }),
+  ).toBeVisible()
+
+  await page.getByRole("tab", { name: /^Resolved/ }).click()
+  await expect(
+    page.getByRole("button", {
+      name: /Open INC-039: Elevated checkout 500 rate/,
+    }),
+  ).toBeVisible()
+
+  await page.getByRole("tab", { name: /^All/ }).click()
+  await page.getByRole("button", { name: "Next page" }).click()
+  await expect(
+    page.getByRole("button", {
+      name: /Open INC-035: Order export jobs timing out/,
+    }),
+  ).toBeVisible()
+
+  await page.getByRole("tab", { name: /^Active/ }).click()
+  await page
+    .getByRole("button", {
+      name: /Open INC-042: Checkout memory growth after deploy/,
+    })
+    .click()
+  await expect(
+    page.getByRole("heading", { name: "Checkout memory growth after deploy" }),
+  ).toBeVisible()
+})

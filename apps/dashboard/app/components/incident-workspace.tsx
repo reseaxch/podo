@@ -74,12 +74,20 @@ export function IncidentWorkspace({
     <main className="app-shell" ref={shellRef}>
       <IconRail onNotify={showToast} onTabChange={setActiveTab} />
       <Topbar
-        incident={incident}
+        current={incident.id}
         onNotify={showToast}
-        onOpenEvidence={openEvidence}
-        onQueryChange={setQuery}
-        onTabChange={setActiveTab}
+        onNotificationOpen={(id, message) => {
+          openEvidence(id)
+          showToast(message)
+        }}
+        onQueryChange={(value) => {
+          setQuery(value)
+          if (value) setActiveTab("evidence")
+        }}
+        owner={incident.owner}
         query={query}
+        searchLabel="Search evidence"
+        searchPlaceholder="Search evidence..."
       />
       <section className="workspace" id="workspace">
         <IncidentHeader incident={incident} onNotify={showToast} />

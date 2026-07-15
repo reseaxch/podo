@@ -5,27 +5,27 @@ import { useEffect, useRef, useState } from "react"
 
 import { useMenu } from "../../hooks/use-menu"
 import { useTheme } from "../../hooks/use-theme"
-import type {
-  IncidentTab,
-  IncidentWorkspaceViewModel,
-} from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
 
 type TopbarProps = {
-  incident: IncidentWorkspaceViewModel
+  owner: { name: string; avatar: string }
+  current?: string
   query: string
+  searchLabel: string
+  searchPlaceholder: string
   onQueryChange: (query: string) => void
-  onTabChange: (tab: IncidentTab) => void
-  onOpenEvidence: (id: string) => void
+  onNotificationOpen?: (id: string, message: string) => void
   onNotify: (message: string) => void
 }
 
 export function Topbar({
-  incident,
+  owner,
+  current,
   query,
+  searchLabel,
+  searchPlaceholder,
   onQueryChange,
-  onTabChange,
-  onOpenEvidence,
+  onNotificationOpen,
   onNotify,
 }: TopbarProps) {
   const [project, setProject] = useState("podo-cloud")
@@ -50,8 +50,8 @@ export function Topbar({
   function openNotification(id: string, message: string) {
     setNotificationsRead(true)
     closeMenu()
-    onOpenEvidence(id)
-    onNotify(message)
+    if (onNotificationOpen) onNotificationOpen(id, message)
+    else onNotify(message)
   }
 
   return (
@@ -105,18 +105,19 @@ export function Topbar({
       </div>
       <div className="breadcrumbs">
         <span>Incidents</span>
-        <b>/</b>
-        <strong>{incident.id}</strong>
+        {current ? (
+          <>
+            <b>/</b>
+            <strong>{current}</strong>
+          </>
+        ) : null}
       </div>
       <label className="command-search">
         <Icon name="magnifying-glass" size={17} />
         <input
-          aria-label="Search evidence"
-          onChange={(event) => {
-            onQueryChange(event.target.value)
-            if (event.target.value) onTabChange("evidence")
-          }}
-          placeholder="Search evidence..."
+          aria-label={searchLabel}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder={searchPlaceholder}
           ref={searchRef}
           type="search"
           value={query}
@@ -192,11 +193,11 @@ export function Topbar({
         ) : null}
       </div>
       <Image
-        alt={incident.owner.name}
+        alt={owner.name}
         className="avatar"
         height={34}
         priority
-        src={incident.owner.avatar}
+        src={owner.avatar}
         width={34}
       />
     </header>
