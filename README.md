@@ -238,6 +238,21 @@ bun run codex:smoke
 bun run check
 ```
 
+## Continuous integration
+
+GitHub Actions runs three required checks for every pull request and every push
+to `main`:
+
+- `Workspace`: frozen Bun install followed by all workspace typechecks, tests,
+  and builds;
+- `Dashboard`: formatting, lint, component tests, and Chromium Playwright flows;
+- `Codex compatibility`: installs Codex CLI `0.144.1`, matching the generated
+  protocol metadata, and performs the live App Server handshake.
+
+Production deployment is intentionally not automated yet. Durable Core state,
+reconciliation, authenticated actor identity, and the production secrets
+perimeter remain explicit prerequisites for CD.
+
 Run the complete canonical POC gate:
 
 ```sh
