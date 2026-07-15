@@ -2,12 +2,17 @@
 
 import { isAbsolute } from "node:path"
 
-import { createPodoClient, type PodoIncidentClient } from "@podo/client"
+import {
+  createPodoClient,
+  type PodoIncidentClient,
+  type PodoRemediationClient,
+} from "@podo/client"
 
 type UpdateSettingsRequest = Parameters<PodoIncidentClient["updateSettings"]>[0]
+type CliClient = PodoIncidentClient & PodoRemediationClient
 
 interface CliDependencies {
-  client?: PodoIncidentClient
+  client?: CliClient
   stdout?: (line: string) => void
   stderr?: (line: string) => void
 }
@@ -25,6 +30,12 @@ Usage:
                                             Show its evidence-specific causal path
   podo incidents investigate <incidentId> <absolute-cwd>
                                             Start its core-owned investigation
+  podo incidents remediate <incidentId>     Request an approval-gated remediation
+  podo incidents remediation <incidentId>   Show its remediation state
+  podo incidents approve-remediation <incidentId> <approvalId>
+                                            Approve its pending remediation
+  podo incidents deny-remediation <incidentId> <approvalId>
+                                            Deny its pending remediation
 
 Settings:
   autonomyMode       observe | recommend | act_with_approval
@@ -120,6 +131,66 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
         await client.startIncidentInvestigation(firstArgument, {
           cwd: secondArgument,
         }),
+        null,
+        2,
+      ),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "remediate") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents remediate <incidentId>")
+      return 1
+    }
+    output(
+      JSON.stringify(await client.startIncidentRemediation(firstArgument), null, 2),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "remediation") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents remediation <incidentId>")
+      return 1
+    }
+    output(
+      JSON.stringify(await client.getIncidentRemediation(firstArgument), null, 2),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "approve-remediation") {
+    if (
+      args.length !== 4
+      || !isNonBlank(firstArgument)
+      || !isNonBlank(secondArgument)
+    ) {
+      error(
+        "Invalid arguments. Usage: podo incidents approve-remediation <incidentId> <approvalId>",
+      )
+      return 1
+    }
+    output(
+      JSON.stringify(
+        await client.approveIncidentRemediation(firstArgument, secondArgument),
+        null,
+        2,
+      ),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "deny-remediation") {
+    if (
+      args.length !== 4
+      || !isNonBlank(firstArgument)
+      || !isNonBlank(secondArgument)
+    ) {
+      error(
+        "Invalid arguments. Usage: podo incidents deny-remediation <incidentId> <approvalId>",
+      )
+      return 1
+    }
+    output(
+      JSON.stringify(
+        await client.denyIncidentRemediation(firstArgument, secondArgument),
         null,
         2,
       ),

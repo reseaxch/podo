@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import type { PodoIncidentClient } from "@podo/client"
+import type { PodoIncidentClient, PodoRemediationClient } from "@podo/client"
 import { runCli } from "./index"
+
+type CliClient = PodoIncidentClient & PodoRemediationClient
 
 const settings = {
   autonomyMode: "observe" as const,
@@ -10,8 +12,8 @@ const settings = {
 }
 
 function client(
-  overrides: Partial<PodoIncidentClient> = {},
-): PodoIncidentClient {
+  overrides: Partial<CliClient> = {},
+): CliClient {
   return {
     health: async () => ({ service: "podo-core", status: "ok", version: "0.0.0" }),
     systemStatus: async () => { throw new Error("unused") },
@@ -22,6 +24,10 @@ function client(
     getIncident: async () => { throw new Error("unused") },
     getIncidentCausalPath: async () => { throw new Error("unused") },
     startIncidentInvestigation: async () => { throw new Error("unused") },
+    startIncidentRemediation: async () => { throw new Error("unused") },
+    getIncidentRemediation: async () => { throw new Error("unused") },
+    approveIncidentRemediation: async () => { throw new Error("unused") },
+    denyIncidentRemediation: async () => { throw new Error("unused") },
     start: async () => { throw new Error("unused") },
     get: async () => { throw new Error("unused") },
     cancel: async () => { throw new Error("unused") },
@@ -139,6 +145,19 @@ const causalPath = {
   },
 }
 
+const remediation = {
+  id: "remediation-1",
+  incidentId: "incident/1",
+  status: "pending_approval" as const,
+  target: "isolated_checkout" as const,
+  approval: {
+    id: "approval/1",
+    status: "pending" as const,
+  },
+  createdAt: "2026-07-14T09:03:00.000Z",
+  updatedAt: "2026-07-14T09:03:00.000Z",
+}
+
 describe("Podo CLI incidents", () => {
   test("shows one incident through the typed client", async () => {
     const calls: string[] = []
@@ -207,6 +226,56 @@ describe("Podo CLI incidents", () => {
     ])
   })
 
+  test("routes remediation lifecycle commands through the typed client", async () => {
+    const calls: Array<[string, ...string[]]> = []
+    const stdout: string[] = []
+    const fake = client({
+      startIncidentRemediation: async (incidentId) => {
+        calls.push(["remediate", incidentId])
+        return { remediation }
+      },
+      getIncidentRemediation: async (incidentId) => {
+        calls.push(["remediation", incidentId])
+        return { remediation }
+      },
+      approveIncidentRemediation: async (incidentId, approvalId) => {
+        calls.push(["approve-remediation", incidentId, approvalId])
+        return { remediation }
+      },
+      denyIncidentRemediation: async (incidentId, approvalId) => {
+        calls.push(["deny-remediation", incidentId, approvalId])
+        return { remediation }
+      },
+    })
+
+    expect(await runCli(["incidents", "remediate", "incident/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+    expect(await runCli(["incidents", "remediation", "incident/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+    expect(await runCli(["incidents", "approve-remediation", "incident/1", "approval/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+    expect(await runCli(["incidents", "deny-remediation", "incident/1", "approval/1"], {
+      client: fake,
+      stdout: (line) => stdout.push(line),
+    })).toBe(0)
+
+    expect(calls).toEqual([
+      ["remediate", "incident/1"],
+      ["remediation", "incident/1"],
+      ["approve-remediation", "incident/1", "approval/1"],
+      ["deny-remediation", "incident/1", "approval/1"],
+    ])
+    expect(stdout).toEqual(Array.from({ length: 4 }, () => (
+      JSON.stringify({ remediation }, null, 2)
+    )))
+  })
+
   test.each([
     [
       "show without an id",
@@ -253,6 +322,66 @@ describe("Podo CLI incidents", () => {
       ["incidents", "investigate", "incident-1", "/repo", "extra"],
       "Invalid arguments. Usage: podo incidents investigate <incidentId> <absolute-cwd>",
     ],
+    [
+      "remediate without an id",
+      ["incidents", "remediate"],
+      "Invalid arguments. Usage: podo incidents remediate <incidentId>",
+    ],
+    [
+      "remediate with a blank id",
+      ["incidents", "remediate", " "],
+      "Invalid arguments. Usage: podo incidents remediate <incidentId>",
+    ],
+    [
+      "remediate with extra args",
+      ["incidents", "remediate", "incident-1", "extra"],
+      "Invalid arguments. Usage: podo incidents remediate <incidentId>",
+    ],
+    [
+      "remediation without an id",
+      ["incidents", "remediation"],
+      "Invalid arguments. Usage: podo incidents remediation <incidentId>",
+    ],
+    [
+      "remediation with a blank id",
+      ["incidents", "remediation", " "],
+      "Invalid arguments. Usage: podo incidents remediation <incidentId>",
+    ],
+    [
+      "remediation with extra args",
+      ["incidents", "remediation", "incident-1", "extra"],
+      "Invalid arguments. Usage: podo incidents remediation <incidentId>",
+    ],
+    [
+      "approve-remediation without an approval id",
+      ["incidents", "approve-remediation", "incident-1"],
+      "Invalid arguments. Usage: podo incidents approve-remediation <incidentId> <approvalId>",
+    ],
+    [
+      "approve-remediation with a blank approval id",
+      ["incidents", "approve-remediation", "incident-1", " "],
+      "Invalid arguments. Usage: podo incidents approve-remediation <incidentId> <approvalId>",
+    ],
+    [
+      "approve-remediation with extra args",
+      ["incidents", "approve-remediation", "incident-1", "approval-1", "extra"],
+      "Invalid arguments. Usage: podo incidents approve-remediation <incidentId> <approvalId>",
+    ],
+    [
+      "deny-remediation without an approval id",
+      ["incidents", "deny-remediation", "incident-1"],
+      "Invalid arguments. Usage: podo incidents deny-remediation <incidentId> <approvalId>",
+    ],
+    [
+      "deny-remediation with a blank incident id",
+      ["incidents", "deny-remediation", " ", "approval-1"],
+      "Invalid arguments. Usage: podo incidents deny-remediation <incidentId> <approvalId>",
+    ],
+    [
+      "deny-remediation with extra args",
+      ["incidents", "deny-remediation", "incident-1", "approval-1", "extra"],
+      "Invalid arguments. Usage: podo incidents deny-remediation <incidentId> <approvalId>",
+    ],
   ])("fails locally for %s", async (_label, args, expectedError) => {
     let calls = 0
     const stdout: string[] = []
@@ -264,6 +393,10 @@ describe("Podo CLI incidents", () => {
         calls += 1
         return { incident, investigation }
       },
+      startIncidentRemediation: async () => { calls += 1; return { remediation } },
+      getIncidentRemediation: async () => { calls += 1; return { remediation } },
+      approveIncidentRemediation: async () => { calls += 1; return { remediation } },
+      denyIncidentRemediation: async () => { calls += 1; return { remediation } },
     })
 
     expect(
