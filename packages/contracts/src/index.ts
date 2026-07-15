@@ -80,6 +80,39 @@ export interface IncidentEvidence {
   deploymentId: string
 }
 
+export interface IncidentDiagnosisConfidence {
+  value: number
+  scale: "basis_points"
+}
+
+export interface ValidatedIncidentDiagnosis {
+  status: "validated"
+  schemaVersion: "podo.diagnosis.v1"
+  summary: string
+  affectedService: string
+  probableRootCause: string
+  confidence: IncidentDiagnosisConfidence
+  evidenceIds: string[]
+  recommendedAction: string
+  safeToAttemptFix: boolean
+}
+
+export type IncidentDiagnosisErrorCode =
+  | "invalid_output"
+  | "affected_service_mismatch"
+  | "investigation_failed"
+  | "investigation_cancelled"
+
+export interface FailedIncidentDiagnosis {
+  status: "failed"
+  error: {
+    code: IncidentDiagnosisErrorCode
+    message: string
+  }
+}
+
+export type IncidentDiagnosis = ValidatedIncidentDiagnosis | FailedIncidentDiagnosis
+
 export interface DetectedIncident {
   id: string
   status: "detected"
@@ -90,6 +123,7 @@ export interface DetectedIncident {
   updatedAt: string
   evidence: IncidentEvidence[]
   investigation?: IncidentInvestigationLink
+  diagnosis?: IncidentDiagnosis
 }
 
 export interface IncidentInvestigationLink {

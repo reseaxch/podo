@@ -1,5 +1,6 @@
 import type {
   DetectedIncident,
+  IncidentDiagnosis,
   IncidentInvestigationLink,
   Investigation,
   StartIncidentInvestigationRequest,
@@ -9,6 +10,8 @@ import {
   createEvidenceId,
   evaluateReaction,
   formatUntrustedEvidence,
+  parseStructuredDiagnosis,
+  STRUCTURED_DIAGNOSIS_SCHEMA_VERSION,
   validateEvidenceClaims,
   type PromptEvidence,
 } from "@podo/domain"
@@ -30,6 +33,8 @@ interface StartedIncidentInvestigation {
 
 export class IncidentInvestigationCoordinator {
   private readonly investigationByIncident = new Map<string, string>()
+  private readonly evidenceByIncident = new Map<string, PromptEvidence[]>()
+  private readonly diagnosisByIncident = new Map<string, IncidentDiagnosis>()
   private readonly pendingStarts = new Map<string, Promise<StartIncidentInvestigationResult>>()
 
   constructor(
@@ -62,7 +67,12 @@ export class IncidentInvestigationCoordinator {
 
   publicIncident(incident: DetectedIncident): DetectedIncident {
     const linked = this.getLink(incident.id)
-    return linked ? { ...incident, investigation: linked } : incident
+    const diagnosis = this.getDiagnosis(incident)
+    return {
+      ...incident,
+      ...(linked ? { investigation: linked } : {}),
+      ...(diagnosis ? { diagnosis } : {}),
+    }
   }
 
   private async startNew(
@@ -120,6 +130,19 @@ export class IncidentInvestigationCoordinator {
       policy.systemPrompt,
       `Allowed read tools: ${policy.allowedTools.join(", ")}.`,
       `Forbidden tools: ${policy.forbiddenTools.join(", ")}.`,
+      "Your final response must be exactly one JSON object with no markdown fences, commentary, or additional fields.",
+      `Required schema: ${JSON.stringify({
+        schemaVersion: STRUCTURED_DIAGNOSIS_SCHEMA_VERSION,
+        summary: "string",
+        affectedService: "string",
+        probableRootCause: "string",
+        confidence: { value: 0, scale: "basis_points" },
+        evidenceIds: ["supplied-evidence-id"],
+        recommendedAction: "string",
+        safeToAttemptFix: false,
+      })}.`,
+      "confidence.value must be an integer from 0 to 10000. affectedService must equal the incident's affected service.",
+      "Use only supplied evidence ids. safeToAttemptFix must be boolean and is not an approval or authorization.",
     ].join("\n")
     const prompt = [
       `Incident id: ${incident.id}`,
@@ -136,6 +159,7 @@ export class IncidentInvestigationCoordinator {
       prompt,
     }, { approvalPolicy: "deny_all", developerInstructions })
     this.investigationByIncident.set(incidentId, started.investigation.id)
+    this.evidenceByIncident.set(incidentId, evidence)
 
     return {
       ok: true,
@@ -164,6 +188,73 @@ export class IncidentInvestigationCoordinator {
       updatedAt: investigation.updatedAt,
     } : null
   }
+
+  private getDiagnosis(incident: DetectedIncident): IncidentDiagnosis | null {
+    const cached = this.diagnosisByIncident.get(incident.id)
+    if (cached) return structuredClone(cached)
+
+    const investigationId = this.investigationByIncident.get(incident.id)
+    if (!investigationId) return null
+    const investigation = this.investigations.get(investigationId)?.investigation
+    if (!investigation) return null
+
+    let diagnosis: IncidentDiagnosis | null = null
+    if (investigation.status === "completed") {
+      diagnosis = this.parseCompletedDiagnosis(incident, investigationId)
+    } else if (investigation.status === "failed") {
+      diagnosis = failedDiagnosis(
+        "investigation_failed",
+        "Investigation failed before producing a validated diagnosis",
+      )
+    } else if (investigation.status === "cancelled") {
+      diagnosis = failedDiagnosis(
+        "investigation_cancelled",
+        "Investigation was cancelled before producing a validated diagnosis",
+      )
+    }
+
+    if (!diagnosis) return null
+    this.diagnosisByIncident.set(incident.id, diagnosis)
+    return structuredClone(diagnosis)
+  }
+
+  private parseCompletedDiagnosis(incident: DetectedIncident, investigationId: string): IncidentDiagnosis {
+    const output = this.investigations.getCompletedOutput(investigationId)
+    const evidence = this.evidenceByIncident.get(incident.id)
+    if (output === null || !evidence) {
+      return failedDiagnosis("invalid_output", "Codex output did not satisfy the Podo diagnosis contract")
+    }
+
+    const parsed = parseStructuredDiagnosis(output, evidence)
+    if (!parsed.ok) {
+      return failedDiagnosis("invalid_output", "Codex output did not satisfy the Podo diagnosis contract")
+    }
+    if (parsed.diagnosis.affectedService !== incident.affectedService) {
+      return failedDiagnosis(
+        "affected_service_mismatch",
+        "Diagnosis affectedService does not match the incident",
+      )
+    }
+
+    return {
+      status: "validated",
+      schemaVersion: parsed.diagnosis.schemaVersion,
+      summary: parsed.diagnosis.summary,
+      affectedService: parsed.diagnosis.affectedService,
+      probableRootCause: parsed.diagnosis.probableRootCause,
+      confidence: { ...parsed.diagnosis.confidence },
+      evidenceIds: [...parsed.diagnosis.evidenceIds],
+      recommendedAction: parsed.diagnosis.recommendedAction,
+      safeToAttemptFix: parsed.diagnosis.safeToAttemptFix,
+    }
+  }
+}
+
+function failedDiagnosis(
+  code: Extract<IncidentDiagnosis, { status: "failed" }>["error"]["code"],
+  message: string,
+): IncidentDiagnosis {
+  return { status: "failed", error: { code, message } }
 }
 
 function toPromptEvidence(incident: DetectedIncident, events: readonly TelemetryEvent[]): PromptEvidence[] {

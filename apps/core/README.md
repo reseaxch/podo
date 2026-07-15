@@ -21,8 +21,14 @@ while `recommend` and `act_with_approval` may draft a diagnosis without granting
 mutation authority. Runtime approval requests from this investigator path are
 denied by core rather than exposed for approval.
 
-Durable persistence, graph-backed evidence, structured diagnosis validation,
-remediation, audit, and delivery remain workstream milestones.
+After the matching Codex turn completes, incident reads validate the assembled
+final text against `podo.diagnosis.v1`, the incident's affected service, and the
+core-owned evidence IDs. The public incident then exposes either a validated
+diagnosis or a stable failure state; raw model output is never included in that
+projection and no diagnosis field authorizes remediation.
+
+Durable persistence, graph-backed enrichment, remediation, audit, and delivery
+remain workstream milestones.
 
 ## Run and validate
 

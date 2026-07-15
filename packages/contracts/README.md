@@ -7,6 +7,13 @@ An incident may include an additive `investigation` link with its public status.
 evidence, sandbox, mode, and approval remain core-owned and are not part of the
 transport contract.
 
+After a linked investigation reaches a terminal state, an incident may include
+an additive `diagnosis`. The `validated` variant is the closed
+`podo.diagnosis.v1` transport shape. The `failed` variant contains only a stable
+error code/message and intentionally has no raw output or `safeToAttemptFix`.
+Absence means no terminal diagnosis has been projected yet. Diagnosis safety is
+informational and never represents remediation approval.
+
 Contracts should describe Podo concepts, not transport-library internals or raw Codex JSON-RPC. Keep them serializable and explicit about version-sensitive behavior.
 
 ## Normalized code graph

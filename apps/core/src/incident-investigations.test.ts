@@ -79,6 +79,42 @@ function testClient(runtime = new RecordingRuntime(), incidentMonitor?: Incident
   return { client, handler, runtime }
 }
 
+function validDiagnosis(evidenceIds: string[], overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    schemaVersion: "podo.diagnosis.v1",
+    summary: "Heap growth correlates with checkout failures",
+    affectedService: "checkout-service",
+    probableRootCause: "The deployed cache retains entries without a bound",
+    confidence: { value: 8750, scale: "basis_points" },
+    evidenceIds,
+    recommendedAction: "Inspect the cache retention policy",
+    safeToAttemptFix: false,
+    ...overrides,
+  })
+}
+
+function complete(runtime: RecordingRuntime, output: string): void {
+  const midpoint = Math.floor(output.length / 2)
+  runtime.emit({
+    kind: "output.delta",
+    threadId: "private-thread-1",
+    turnId: "private-turn-1",
+    text: output.slice(0, midpoint),
+  })
+  runtime.emit({
+    kind: "output.delta",
+    threadId: "private-thread-1",
+    turnId: "private-turn-1",
+    text: output.slice(midpoint),
+  })
+  runtime.emit({
+    kind: "turn.completed",
+    threadId: "private-thread-1",
+    turnId: "private-turn-1",
+    status: "completed",
+  })
+}
+
 describe("incident-scoped investigation", () => {
   test("starts one read-only investigation from core-owned prompt and evidence", async () => {
     const { client, runtime } = testClient()
@@ -98,6 +134,8 @@ describe("incident-scoped investigation", () => {
     expect(runtime.threadInputs[0]?.developerInstructions).toContain("You are the Podo incident investigator.")
     expect(runtime.threadInputs[0]?.developerInstructions).toContain("Allowed read tools:")
     expect(runtime.threadInputs[0]?.developerInstructions).toContain("Forbidden tools:")
+    expect(runtime.threadInputs[0]?.developerInstructions).toContain("podo.diagnosis.v1")
+    expect(runtime.threadInputs[0]?.developerInstructions).toContain("exactly one JSON object")
     expect(runtime.prompts[0]).not.toContain("You are the Podo incident investigator.")
     expect(runtime.prompts[0]).not.toContain("Allowed read tools:")
     expect(runtime.prompts[0]).not.toContain("Forbidden tools:")
@@ -110,6 +148,113 @@ describe("incident-scoped investigation", () => {
 
     const current = await client.getIncident(incidentId)
     expect(current.incident.investigation).toEqual(started.incident.investigation)
+    expect(current.incident.diagnosis).toBeUndefined()
+  })
+
+  test("projects a validated diagnosis only after the linked investigation completes", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const started = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+
+    expect((await client.getIncident(incidentId)).incident.diagnosis).toBeUndefined()
+    complete(runtime, validDiagnosis(started.incident.evidence.map((item) => item.id)))
+
+    const current = await client.getIncident(incidentId)
+    expect(current.incident.investigation?.status).toBe("completed")
+    expect(current.incident.diagnosis).toEqual({
+      status: "validated",
+      schemaVersion: "podo.diagnosis.v1",
+      summary: "Heap growth correlates with checkout failures",
+      affectedService: "checkout-service",
+      probableRootCause: "The deployed cache retains entries without a bound",
+      confidence: { value: 8750, scale: "basis_points" },
+      evidenceIds: started.incident.evidence.map((item) => item.id),
+      recommendedAction: "Inspect the cache retention policy",
+      safeToAttemptFix: false,
+    })
+    expect(JSON.stringify(current)).not.toContain("private-thread")
+  })
+
+  test("fails malformed and unknown-evidence output closed without leaking raw output or fix safety", async () => {
+    for (const output of [
+      '{"safeToAttemptFix":true',
+      validDiagnosis(["ev-model-invented"], { safeToAttemptFix: true }),
+    ]) {
+      const { client, runtime } = testClient()
+      const incidentId = await openIncident(client)
+      await client.updateSettings({ autonomyMode: "recommend" })
+      await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+      complete(runtime, output)
+
+      const current = await client.getIncident(incidentId)
+      expect(current.incident.investigation?.status).toBe("completed")
+      expect(current.incident.diagnosis).toEqual({
+        status: "failed",
+        error: {
+          code: "invalid_output",
+          message: "Codex output did not satisfy the Podo diagnosis contract",
+        },
+      })
+      expect(JSON.stringify(current.incident.diagnosis)).not.toContain("safeToAttemptFix")
+      expect(JSON.stringify(current.incident.diagnosis)).not.toContain("ev-model-invented")
+    }
+  })
+
+  test("fails a valid diagnosis for a different service closed", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const started = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    complete(runtime, validDiagnosis(started.incident.evidence.map((item) => item.id), {
+      affectedService: "inventory-service",
+      safeToAttemptFix: true,
+    }))
+
+    expect((await client.getIncident(incidentId)).incident.diagnosis).toEqual({
+      status: "failed",
+      error: {
+        code: "affected_service_mismatch",
+        message: "Diagnosis affectedService does not match the incident",
+      },
+    })
+  })
+
+  test("models an investigation failure without exposing its raw runtime error as diagnosis", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    runtime.emit({
+      kind: "runtime.error",
+      threadId: "private-thread-1",
+      turnId: "private-turn-1",
+      message: "sensitive raw runtime failure",
+    })
+
+    const diagnosis = (await client.getIncident(incidentId)).incident.diagnosis
+    expect(diagnosis).toEqual({
+      status: "failed",
+      error: {
+        code: "investigation_failed",
+        message: "Investigation failed before producing a validated diagnosis",
+      },
+    })
+    expect(JSON.stringify(diagnosis)).not.toContain("sensitive raw runtime failure")
+  })
+
+  test("reconciles completed output on an idempotent start without relying on a subscription", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const first = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    complete(runtime, validDiagnosis(first.incident.evidence.map((item) => item.id)))
+
+    const second = await client.startIncidentInvestigation(incidentId, { cwd: "/different-repo" })
+
+    expect(second.investigation.id).toBe(first.investigation.id)
+    expect(second.incident.diagnosis?.status).toBe("validated")
+    expect(runtime.threadInputs).toHaveLength(1)
   })
 
   test("fails closed in observe mode without touching Codex", async () => {
