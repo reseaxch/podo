@@ -7,8 +7,15 @@ The CLI consumes `@podo/client`; it does not own workflow decisions or connect t
 ```sh
 bun run dev:cli -- health
 bun run dev:cli -- incidents list
+bun run dev:cli -- incidents show <incidentId>
+bun run dev:cli -- incidents path <incidentId> <evidenceId>
+bun run dev:cli -- incidents investigate <incidentId> <absolute-cwd>
 bun run --cwd apps/cli typecheck
 bun run --cwd apps/cli build
 ```
 
-Add commands only after the corresponding public core/client contract exists.
+Incident commands pass raw identifiers and the requested absolute working
+directory to `@podo/client`; URL encoding and transport behavior remain owned by
+the client package. Missing or malformed command arguments fail locally without
+making a client call. Client and API failures continue through the CLI's
+top-level error boundary.

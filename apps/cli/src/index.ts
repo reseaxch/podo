@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 
-import { createPodoClient, type PodoClient } from "@podo/client"
+import { isAbsolute } from "node:path"
 
-type UpdateSettingsRequest = Parameters<PodoClient["updateSettings"]>[0]
+import { createPodoClient, type PodoIncidentClient } from "@podo/client"
+
+type UpdateSettingsRequest = Parameters<PodoIncidentClient["updateSettings"]>[0]
 
 interface CliDependencies {
-  client?: PodoClient
+  client?: PodoIncidentClient
   stdout?: (line: string) => void
   stderr?: (line: string) => void
 }
@@ -18,6 +20,11 @@ Usage:
   podo config show                         Show effective Podo settings
   podo config set <key> <value>            Update one Podo setting
   podo incidents list                      List detected incidents
+  podo incidents show <incidentId>         Show one incident
+  podo incidents path <incidentId> <evidenceId>
+                                            Show its evidence-specific causal path
+  podo incidents investigate <incidentId> <absolute-cwd>
+                                            Start its core-owned investigation
 
 Settings:
   autonomyMode       observe | recommend | act_with_approval
@@ -33,7 +40,7 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
   const error = dependencies.stderr ?? console.error
   const coreUrl = process.env.PODO_CORE_URL ?? "http://127.0.0.1:4100"
   const client = dependencies.client ?? createPodoClient({ baseUrl: coreUrl })
-  const [command = "help", subcommand, key, rawValue] = args
+  const [command = "help", subcommand, firstArgument, secondArgument] = args
 
   if (command === "health") {
     output(JSON.stringify(await client.health(), null, 2))
@@ -43,12 +50,16 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
     output(JSON.stringify(await client.systemStatus(), null, 2))
     return 0
   }
-  if (command === "config" && subcommand === "show" && key === undefined) {
+  if (
+    command === "config" &&
+    subcommand === "show" &&
+    firstArgument === undefined
+  ) {
     output(JSON.stringify(await client.getSettings(), null, 2))
     return 0
   }
   if (command === "config" && subcommand === "set") {
-    const patch = parseSetting(key, rawValue)
+    const patch = parseSetting(firstArgument, secondArgument)
     if (!patch) {
       error("Invalid setting key or value. Run `podo help` for accepted settings.")
       return 1
@@ -56,8 +67,63 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
     output(JSON.stringify(await client.updateSettings(patch), null, 2))
     return 0
   }
-  if (command === "incidents" && subcommand === "list" && key === undefined) {
+  if (
+    command === "incidents" &&
+    subcommand === "list" &&
+    firstArgument === undefined
+  ) {
     output(JSON.stringify(await client.listIncidents(), null, 2))
+    return 0
+  }
+  if (command === "incidents" && subcommand === "show") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents show <incidentId>")
+      return 1
+    }
+    output(JSON.stringify(await client.getIncident(firstArgument), null, 2))
+    return 0
+  }
+  if (command === "incidents" && subcommand === "path") {
+    if (
+      args.length !== 4 ||
+      !isNonBlank(firstArgument) ||
+      !isNonBlank(secondArgument)
+    ) {
+      error(
+        "Invalid arguments. Usage: podo incidents path <incidentId> <evidenceId>",
+      )
+      return 1
+    }
+    output(
+      JSON.stringify(
+        await client.getIncidentCausalPath(firstArgument, secondArgument),
+        null,
+        2,
+      ),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "investigate") {
+    if (
+      args.length !== 4 ||
+      !isNonBlank(firstArgument) ||
+      !isNonBlank(secondArgument) ||
+      !isAbsolute(secondArgument)
+    ) {
+      error(
+        "Invalid arguments. Usage: podo incidents investigate <incidentId> <absolute-cwd>",
+      )
+      return 1
+    }
+    output(
+      JSON.stringify(
+        await client.startIncidentInvestigation(firstArgument, {
+          cwd: secondArgument,
+        }),
+        null,
+        2,
+      ),
+    )
     return 0
   }
   if (command === "help" || command === "--help" || command === "-h") {
@@ -67,6 +133,10 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
 
   error(`Unknown command: ${args.join(" ")}`)
   return 1
+}
+
+function isNonBlank(value: string | undefined): value is string {
+  return value !== undefined && value.trim().length > 0
 }
 
 function parseSetting(key: string | undefined, value: string | undefined): UpdateSettingsRequest | null {
