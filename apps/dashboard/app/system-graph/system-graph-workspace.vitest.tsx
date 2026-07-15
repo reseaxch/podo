@@ -146,7 +146,51 @@ describe("SystemGraphWorkspace", () => {
 
     expect(
       screen.getByRole("link", { name: "Open incident INC-042" }),
-    ).toHaveAttribute("href", "/#workspace")
+    ).toHaveAttribute(
+      "href",
+      "/?incident=INC-042&tab=graph&node=code#workspace",
+    )
+  })
+
+  it("uses contextual inspector content instead of generic evidence actions", async () => {
+    const user = userEvent.setup()
+    render(<SystemGraphWorkspace graph={adaptSystemGraph()} />)
+
+    await user.click(
+      screen.getByRole("button", { name: /^Inspect notification-worker\b/ }),
+    )
+    const inspector = screen.getByRole("complementary", {
+      name: "Node details",
+    })
+
+    expect(within(inspector).getByText("Lifecycle")).toBeInTheDocument()
+    expect(
+      within(inspector).getByText("Connected topology"),
+    ).toBeInTheDocument()
+    expect(
+      within(inspector).queryByText("Why it matters"),
+    ).not.toBeInTheDocument()
+    expect(
+      within(inspector).queryByRole("link", { name: /View evidence/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(inspector).queryByRole("button", { name: "Explore traces" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("navigates between directly connected nodes from the inspector", async () => {
+    const user = userEvent.setup()
+    render(<SystemGraphWorkspace graph={adaptSystemGraph()} />)
+
+    const inspector = screen.getByRole("complementary", {
+      name: "Node details",
+    })
+    await user.click(
+      within(inspector).getByRole("button", { name: /payments-service/ }),
+    )
+    expect(
+      within(inspector).getByRole("heading", { name: "payments-service" }),
+    ).toBeInTheDocument()
   })
 
   it("renders a safe empty state when no topology is indexed", () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { useToast } from "../../hooks/use-toast"
 import type {
@@ -14,6 +14,7 @@ import { createMockEvidenceSourcesController } from "../../mocks/evidence-source
 import { IconRail } from "../shell/icon-rail"
 import { Topbar } from "../shell/topbar"
 import { Icon } from "../ui/pictogram"
+import { SelectMenu } from "../ui/select-menu"
 import styles from "./evidence-sources.module.css"
 
 type SourceFilter = "All" | EvidenceSourceStatus
@@ -38,9 +39,11 @@ function statusClass(status: EvidenceSourceStatus) {
 export function EvidenceSources({
   model,
   controller,
+  readOnly = false,
 }: {
   model: EvidenceSourcesViewModel
   controller?: EvidenceSourcesController
+  readOnly?: boolean
 }) {
   const controllerRef = useRef(
     controller ??
@@ -55,6 +58,8 @@ export function EvidenceSources({
   const [sources, setSources] = useState(() => structuredClone(model.sources))
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [dialogSourceId, setDialogSourceId] = useState<string | null>(null)
+  const [catalogOpen, setCatalogOpen] = useState(false)
   const { toast, showToast } = useToast()
 
   const categories = useMemo(
@@ -79,6 +84,8 @@ export function EvidenceSources({
 
   const selectedSource =
     resolvedSources.find((source) => source.id === selectedId) ?? null
+  const dialogSource =
+    resolvedSources.find((source) => source.id === dialogSourceId) ?? null
   const connectedCount = resolvedSources.filter(
     (source) => source.status === "Connected",
   ).length
@@ -90,33 +97,53 @@ export function EvidenceSources({
     0,
   )
 
-  async function connectSource(source: EvidenceSource) {
-    if (source.status === "Connected") {
-      showToast(`${source.name} connection settings opened`)
-      return
-    }
+  async function updateConnection(
+    source: EvidenceSource,
+    action: "connect" | "repair" | "disconnect",
+    instance?: string,
+  ): Promise<boolean> {
     setPendingId(source.id)
     setActionError(null)
     try {
-      const updated = await controllerRef.current.updateConnection({
-        sourceId: source.id,
-        action: source.status === "Available" ? "connect" : "repair",
-        expectedStatus: source.status,
-      })
+      const input =
+        action === "connect"
+          ? {
+              sourceId: source.id,
+              action,
+              expectedStatus: "Available" as const,
+              instance: instance?.trim() ?? "",
+            }
+          : action === "repair"
+            ? {
+                sourceId: source.id,
+                action,
+                expectedStatus: "Needs attention" as const,
+              }
+            : {
+                sourceId: source.id,
+                action,
+                expectedStatus: "Connected" as const,
+              }
+      const updated = await controllerRef.current.updateConnection(input)
       setSources((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       )
+      setFilter("All")
       showToast(
-        source.status === "Available"
+        action === "connect"
           ? `${source.name} connected to the evidence pipeline`
-          : `${source.name} permissions verified`,
+          : action === "repair"
+            ? `${source.name} permissions verified`
+            : `${source.name} disconnected`,
       )
+      return true
     } catch (caught) {
       setActionError(
         caught instanceof Error
           ? caught.message
           : "The connection was not changed",
       )
+      return false
     } finally {
       setPendingId(null)
     }
@@ -147,7 +174,7 @@ export function EvidenceSources({
             <span className={styles.eyebrow}>Evidence pipeline</span>
             <h1>Evidence sources</h1>
             <p>
-              Manage the systems Rootline can cite during investigation and
+              Manage the systems Podo can cite during investigation and
               remediation.
             </p>
           </div>
@@ -155,17 +182,18 @@ export function EvidenceSources({
             <span className={styles.updated}>
               <Icon name="clock" size={15} /> {model.generatedAt}
             </span>
-            <button
-              className={styles.primaryButton}
-              onClick={() => {
-                setFilter("Available")
-                setCategory("All")
-                showToast("Showing connectors ready to configure")
-              }}
-              type="button"
-            >
-              <Icon name="database" size={16} /> Add source
-            </button>
+            {readOnly ? null : (
+              <button
+                className={styles.primaryButton}
+                onClick={() => {
+                  setActionError(null)
+                  setCatalogOpen(true)
+                }}
+                type="button"
+              >
+                <Icon name="database" size={16} /> Add source
+              </button>
+            )}
           </div>
         </header>
 
@@ -240,22 +268,17 @@ export function EvidenceSources({
                   )
                 })}
               </div>
-              <label className={styles.categoryFilter}>
-                <span>Category</span>
-                <select
-                  aria-label="Filter by category"
-                  onChange={(event) =>
-                    setCategory(event.target.value as typeof category)
-                  }
-                  value={category}
-                >
-                  <option value="All">All categories</option>
-                  {categories.map((item) => (
-                    <option key={item}>{item}</option>
-                  ))}
-                </select>
-                <Icon name="caret-down" size={13} />
-              </label>
+              <SelectMenu
+                ariaLabel="Filter by category"
+                className={styles.categoryFilter}
+                label="Category"
+                onValueChange={setCategory}
+                options={[
+                  { value: "All", label: "All categories" },
+                  ...categories.map((item) => ({ value: item, label: item })),
+                ]}
+                value={category}
+              />
             </div>
 
             <div className={styles.catalogHeading}>
@@ -324,13 +347,41 @@ export function EvidenceSources({
           </div>
 
           <SourceInspector
-            error={actionError}
             pending={pendingId === selectedSource?.id}
+            readOnly={readOnly}
             source={selectedSource}
-            onAction={connectSource}
+            onManage={(source) => {
+              setActionError(null)
+              setDialogSourceId(source.id)
+            }}
           />
         </section>
       </section>
+      {catalogOpen ? (
+        <AddSourceDialog
+          onClose={() => setCatalogOpen(false)}
+          onSelect={(source) => {
+            setCatalogOpen(false)
+            setFilter("All")
+            setCategory("All")
+            setQuery("")
+            setSelectedId(source.id)
+            setDialogSourceId(source.id)
+          }}
+          sources={resolvedSources}
+        />
+      ) : null}
+      {dialogSource ? (
+        <ConnectionDialog
+          error={actionError}
+          onClose={() => {
+            if (!pendingId) setDialogSourceId(null)
+          }}
+          onSubmit={updateConnection}
+          pending={pendingId === dialogSource.id}
+          source={dialogSource}
+        />
+      ) : null}
       {toast ? (
         <div className="toast" role="status">
           <Icon name="check-circle" /> {toast}
@@ -343,13 +394,13 @@ export function EvidenceSources({
 function SourceInspector({
   source,
   pending,
-  error,
-  onAction,
+  onManage,
+  readOnly,
 }: {
   source: EvidenceSource | null
   pending: boolean
-  error: string | null
-  onAction: (source: EvidenceSource) => Promise<void>
+  onManage: (source: EvidenceSource) => void
+  readOnly: boolean
 }) {
   if (!source) {
     return (
@@ -451,47 +502,429 @@ function SourceInspector({
         <section className={styles.setupNote}>
           <Icon name="shield-check" size={17} />
           <p>
-            Credentials stay encrypted. Rootline requests read access unless a
+            Credentials stay encrypted. Podo requests read access unless a
             remediation action requires explicit approval.
           </p>
         </section>
       )}
 
       <footer className={styles.inspectorFooter}>
-        {error ? (
-          <p className={styles.actionError} role="alert">
-            {error}
-          </p>
-        ) : null}
-        <button
-          className={
-            source.status === "Connected"
-              ? styles.secondaryButton
-              : styles.primaryButton
-          }
-          disabled={pending}
-          onClick={() => void onAction(source)}
-          type="button"
-        >
-          {source.status === "Connected" ? (
-            <Icon name="gear-six" size={16} />
-          ) : (
-            <Icon name="share-network" size={16} />
-          )}
-          {pending ? "Saving..." : actionLabel}
-        </button>
-        {source.status === "Connected" ? (
+        {readOnly ? null : (
           <button
-            aria-label={`Open ${source.name} externally`}
-            className={styles.iconButton}
-            onClick={() => void onAction(source)}
-            title="Open source"
+            className={
+              source.status === "Connected"
+                ? styles.secondaryButton
+                : styles.primaryButton
+            }
+            disabled={pending}
+            onClick={() => onManage(source)}
             type="button"
           >
-            <Icon name="arrow-square-out" size={16} />
+            {source.status === "Connected" ? (
+              <Icon name="gear-six" size={16} />
+            ) : (
+              <Icon name="share-network" size={16} />
+            )}
+            {pending ? "Saving..." : actionLabel}
           </button>
+        )}
+        {source.status === "Connected" ? (
+          <a
+            aria-label={`Open ${source.name} externally`}
+            className={styles.iconButton}
+            href={source.externalUrl}
+            rel="noreferrer"
+            target="_blank"
+            title="Open source"
+          >
+            <Icon name="arrow-square-out" size={16} />
+          </a>
         ) : null}
       </footer>
     </aside>
+  )
+}
+
+function AddSourceDialog({
+  sources,
+  onClose,
+  onSelect,
+}: {
+  sources: EvidenceSource[]
+  onClose: () => void
+  onSelect: (source: EvidenceSource) => void
+}) {
+  const available = sources.filter((source) => source.status === "Available")
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose()
+    }
+    document.addEventListener("keydown", closeOnEscape)
+    return () => document.removeEventListener("keydown", closeOnEscape)
+  }, [onClose])
+
+  return (
+    <div
+      className={styles.dialogBackdrop}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        aria-labelledby="add-source-title"
+        aria-modal="true"
+        className={`${styles.dialog} ${styles.catalogDialog}`}
+        role="dialog"
+      >
+        <header>
+          <span className={styles.dialogIcon}>
+            <Icon name="database" size={21} />
+          </span>
+          <div>
+            <small>Connector catalog</small>
+            <h2 id="add-source-title">Add evidence source</h2>
+          </div>
+          <button
+            aria-label="Close source catalog"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="x" size={17} />
+          </button>
+        </header>
+        <div className={styles.dialogBody}>
+          <p className={styles.catalogIntro}>
+            Connect another read-only system so Podo can correlate its signals
+            with incidents and the system graph.
+          </p>
+          {available.length ? (
+            <div className={styles.connectorChoices}>
+              {available.map((source) => (
+                <button
+                  aria-label={`Configure ${source.name}`}
+                  key={source.id}
+                  onClick={() => onSelect(source)}
+                  type="button"
+                >
+                  <span className={styles.sourceIcon}>
+                    <Icon name={source.icon} size={19} />
+                  </span>
+                  <span>
+                    <strong>{source.name}</strong>
+                    <small>{source.description}</small>
+                    <i>{source.evidenceKinds.join(" · ")}</i>
+                  </span>
+                  <Icon name="caret-right" size={15} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.catalogComplete}>
+              <Icon name="check-circle" size={24} />
+              <strong>Every catalog source is configured</strong>
+              <p>Manage existing connectors from their detail panel.</p>
+            </div>
+          )}
+        </div>
+        <footer>
+          <button onClick={onClose} type="button">
+            Close
+          </button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
+function ConnectionDialog({
+  source,
+  pending,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  source: EvidenceSource
+  pending: boolean
+  error: string | null
+  onClose: () => void
+  onSubmit: (
+    source: EvidenceSource,
+    action: "connect" | "repair" | "disconnect",
+    instance?: string,
+  ) => Promise<boolean>
+}) {
+  const [instance, setInstance] = useState(
+    source.connection?.instance ?? `${source.name} workspace`,
+  )
+  const [confirmed, setConfirmed] = useState(false)
+  const [step, setStep] = useState<"configure" | "authorize" | "success">(
+    "configure",
+  )
+  const [action] = useState<"connect" | "repair" | "disconnect">(() =>
+    source.status === "Available"
+      ? "connect"
+      : source.status === "Needs attention"
+        ? "repair"
+        : "disconnect",
+  )
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape" && !pending) onClose()
+    }
+    document.addEventListener("keydown", closeOnEscape)
+    return () => document.removeEventListener("keydown", closeOnEscape)
+  }, [onClose, pending])
+
+  const title =
+    step === "success"
+      ? action === "connect"
+        ? `${source.name} connected`
+        : action === "repair"
+          ? `${source.name} verified`
+          : `${source.name} disconnected`
+      : action === "connect"
+        ? `Connect ${source.name}`
+        : action === "repair"
+          ? `Review ${source.name}`
+          : `Manage ${source.name}`
+  const canSubmit =
+    confirmed && (action !== "connect" || instance.trim().length >= 3)
+
+  return (
+    <div
+      className={styles.dialogBackdrop}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !pending) onClose()
+      }}
+    >
+      <section
+        aria-labelledby="evidence-connection-title"
+        aria-modal="true"
+        className={styles.dialog}
+        role="dialog"
+      >
+        <header>
+          <span className={styles.dialogIcon}>
+            <Icon name={source.icon} size={21} />
+          </span>
+          <div>
+            <small>{source.provider} connector</small>
+            <h2 id="evidence-connection-title">{title}</h2>
+          </div>
+          <button
+            aria-label="Close connection dialog"
+            disabled={pending}
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="x" size={17} />
+          </button>
+        </header>
+
+        <div className={styles.dialogBody}>
+          {step === "success" ? (
+            <section className={styles.connectionSuccess}>
+              <span>
+                <Icon name="check-circle" size={27} />
+              </span>
+              <strong>
+                {action === "connect"
+                  ? "Evidence ingestion is ready"
+                  : action === "repair"
+                    ? "Connector access is healthy"
+                    : "Evidence ingestion has stopped"}
+              </strong>
+              <p>
+                {action === "disconnect"
+                  ? "Existing evidence remains attached to incidents and the audit trail."
+                  : `${source.name} is mapped to the Podo evidence pipeline. New signals will appear after the first sync.`}
+              </p>
+              {action !== "disconnect" ? (
+                <div className={styles.successFacts}>
+                  <span>
+                    <small>Connection</small>
+                    <strong>Healthy</strong>
+                  </span>
+                  <span>
+                    <small>Access</small>
+                    <strong>Read only</strong>
+                  </span>
+                  <span>
+                    <small>First sync</small>
+                    <strong>Queued</strong>
+                  </span>
+                </div>
+              ) : null}
+            </section>
+          ) : step === "authorize" ? (
+            <section className={styles.authorizationStep}>
+              <div className={styles.authorizationRoute}>
+                <span className={styles.dialogIcon}>
+                  <Icon name="cube" size={20} />
+                </span>
+                <Icon name="caret-right" size={15} />
+                <span className={styles.dialogIcon}>
+                  <Icon name={source.icon} size={20} />
+                </span>
+              </div>
+              <strong>Authorize Podo in {source.name}</strong>
+              <p>
+                A provider window will verify the workspace and requested
+                scopes. In this mock, authorization is completed locally.
+              </p>
+              <div className={styles.authorizationTarget}>
+                <small>Connection target</small>
+                <strong>{instance}</strong>
+              </div>
+              <section className={styles.scopePanel}>
+                <div>
+                  <Icon name="shield-check" size={17} />
+                  <span>
+                    <strong>No production write access</strong>
+                    <small>
+                      Provider authorization is limited to the evidence scopes
+                      reviewed in the previous step.
+                    </small>
+                  </span>
+                </div>
+              </section>
+            </section>
+          ) : action === "connect" ? (
+            <label className={styles.dialogField}>
+              <span>Workspace or instance</span>
+              <input
+                autoFocus
+                onChange={(event) => setInstance(event.target.value)}
+                placeholder="Production workspace"
+                value={instance}
+              />
+              <small>
+                Credentials are collected by the provider authorization flow,
+                never stored in this form.
+              </small>
+            </label>
+          ) : (
+            <section className={styles.dialogSummary}>
+              <span
+                className={`${styles.status} ${statusClass(source.status)}`}
+              >
+                {source.status}
+              </span>
+              <strong>{source.connection?.instance}</strong>
+              <p>{source.health.detail}</p>
+            </section>
+          )}
+
+          {step === "configure" ? (
+            <section className={styles.scopePanel}>
+              <div>
+                <Icon name="shield-check" size={17} />
+                <span>
+                  <strong>Read-only evidence boundary</strong>
+                  <small>
+                    Podo can read the selected evidence types but cannot mutate
+                    production through this connector.
+                  </small>
+                </span>
+              </div>
+              <div className={styles.permissions}>
+                {(source.connection?.permissions ?? source.evidenceKinds).map(
+                  (permission) => (
+                    <code key={permission}>{permission}</code>
+                  ),
+                )}
+              </div>
+            </section>
+          ) : null}
+
+          {step === "configure" ? (
+            <label className={styles.confirmRow}>
+              <input
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                {action === "disconnect"
+                  ? "I understand new evidence will stop ingesting. Existing incident evidence remains available."
+                  : "I reviewed the requested scopes and connection target."}
+              </span>
+            </label>
+          ) : null}
+          {error ? (
+            <p className={styles.dialogError} role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <footer>
+          {step === "success" ? (
+            <>
+              {action !== "disconnect" ? (
+                <a
+                  className={styles.secondaryButton}
+                  href={source.externalUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open {source.name}
+                  <Icon name="arrow-square-out" size={14} />
+                </a>
+              ) : null}
+              <button
+                className={styles.primaryButton}
+                onClick={onClose}
+                type="button"
+              >
+                Done
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                disabled={pending}
+                onClick={() =>
+                  step === "authorize" ? setStep("configure") : onClose()
+                }
+                type="button"
+              >
+                {step === "authorize" ? "Back" : "Cancel"}
+              </button>
+              <button
+                className={
+                  action === "disconnect"
+                    ? styles.dangerButton
+                    : styles.primaryButton
+                }
+                disabled={(step === "configure" && !canSubmit) || pending}
+                onClick={() => {
+                  if (action === "connect" && step === "configure") {
+                    setStep("authorize")
+                    return
+                  }
+                  void onSubmit(source, action, instance).then((succeeded) => {
+                    if (succeeded) setStep("success")
+                  })
+                }}
+                type="button"
+              >
+                {pending
+                  ? "Authorizing..."
+                  : action === "connect" && step === "configure"
+                    ? "Continue to authorization"
+                    : action === "connect"
+                      ? `Authorize ${source.name}`
+                      : action === "repair"
+                        ? "Verify permissions"
+                        : "Disconnect source"}
+              </button>
+            </>
+          )}
+        </footer>
+      </section>
+    </div>
   )
 }

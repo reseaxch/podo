@@ -16,6 +16,7 @@ export const incidentOverviewMock: IncidentOverviewViewModel = {
       updated: "2 min ago",
       owner: { name: "Maya Chen", initials: "MC" },
       hasWorkspace: true,
+      attentionReason: "SLO breached",
     },
     {
       id: "INC-041",
@@ -29,6 +30,7 @@ export const incidentOverviewMock: IncidentOverviewViewModel = {
       updated: "11 min ago",
       owner: { name: "Alex Lee", initials: "AL" },
       hasWorkspace: false,
+      attentionReason: "Needs approval",
     },
     {
       id: "INC-040",
@@ -55,6 +57,7 @@ export const incidentOverviewMock: IncidentOverviewViewModel = {
       updated: "36 min ago",
       owner: { name: "Alex Lee", initials: "AL" },
       hasWorkspace: false,
+      attentionReason: "Escalating",
     },
     {
       id: "INC-036",

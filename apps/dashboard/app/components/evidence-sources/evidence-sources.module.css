@@ -93,6 +93,7 @@
   gap: 8px;
   padding: 0 13px;
   font-weight: 680;
+  text-decoration: none;
   white-space: nowrap;
 }
 
@@ -109,6 +110,15 @@
 .primaryButton:hover {
   border-color: var(--primary-solid-hover);
   background: var(--primary-solid-hover);
+}
+
+.primaryButton:disabled,
+.dangerButton:disabled {
+  border-color: var(--border);
+  color: var(--text-subtle);
+  background: var(--surface-hover);
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .secondaryButton,
@@ -315,30 +325,7 @@
 }
 
 .categoryFilter {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(112px, auto) auto;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 0 9px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--muted);
-  background: var(--surface);
-  font-size: 11px;
-}
-
-.categoryFilter select {
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  color: var(--text);
-  background: transparent;
-  font-size: 12px;
-  font-weight: 630;
-  appearance: none;
-  cursor: pointer;
+  width: 180px;
 }
 
 .catalogHeading {
@@ -653,6 +640,412 @@
   width: 38px;
   padding: 0;
   place-items: center;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.dialogBackdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, #071013 68%, transparent);
+  backdrop-filter: blur(5px);
+}
+
+.dialog {
+  width: min(520px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 28%);
+}
+
+.dialog > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 17px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialogIcon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.dialog header small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.dialog header h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+
+.dialog header > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dialog header > button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.dialogBody {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.catalogDialog {
+  width: min(610px, 100%);
+}
+
+.catalogIntro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.connectorChoices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.connectorChoices > button {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface-subtle);
+  cursor: pointer;
+}
+
+.connectorChoices > button:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.connectorChoices > button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.connectorChoices strong,
+.connectorChoices small,
+.connectorChoices i {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connectorChoices strong {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.connectorChoices small {
+  display: -webkit-box;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.connectorChoices i {
+  color: var(--primary);
+  font-size: 9px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.catalogComplete,
+.connectionSuccess,
+.authorizationStep {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  padding: 18px 8px;
+  text-align: center;
+}
+
+.catalogComplete {
+  color: var(--success-text);
+}
+
+.catalogComplete p,
+.connectionSuccess p,
+.authorizationStep p {
+  max-width: 410px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.authorizationStep {
+  padding-top: 6px;
+}
+
+.authorizationRoute {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  color: var(--muted);
+}
+
+.authorizationTarget {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  text-align: left;
+  background: var(--surface-subtle);
+}
+
+.authorizationTarget small {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.authorizationTarget strong {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.authorizationStep > .scopePanel {
+  width: 100%;
+  text-align: left;
+}
+
+.connectionSuccess > span {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 3px;
+  border: 1px solid var(--success-border);
+  border-radius: 50%;
+  place-items: center;
+  color: var(--success-text);
+  background: var(--success-surface);
+}
+
+.connectionSuccess > strong,
+.authorizationStep > strong {
+  font-size: 15px;
+}
+
+.successFacts {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  margin-top: 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.successFacts > span {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-right: 1px solid var(--border-soft);
+}
+
+.successFacts > span:last-child {
+  border-right: 0;
+}
+
+.successFacts small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.successFacts strong {
+  font-size: 11px;
+}
+
+.dialogField {
+  display: grid;
+  gap: 7px;
+}
+
+.dialogField > span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dialogField input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: 0;
+  color: var(--text);
+  background: var(--surface-subtle);
+}
+
+.dialogField input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.dialogField small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.dialogSummary {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.dialogSummary strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dialogSummary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.scopePanel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--success-border);
+  border-radius: 9px;
+  background: var(--success-surface);
+}
+
+.scopePanel > div:first-child {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--success-text);
+}
+
+.scopePanel span {
+  display: grid;
+  gap: 3px;
+}
+
+.scopePanel strong {
+  font-size: 11px;
+}
+
+.scopePanel small {
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.confirmRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.confirmRow input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--primary-solid);
+}
+
+.dialogError {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--critical);
+  border-radius: 7px;
+  color: var(--critical);
+  background: color-mix(in srgb, var(--critical) 8%, transparent);
+  font-size: 10px;
+}
+
+.dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+
+.dialog > footer > button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.dialog > footer > .primaryButton {
+  border-color: var(--primary);
+  color: #f5fbfc;
+  background: var(--primary-solid);
+}
+
+.dangerButton {
+  border-color: var(--critical) !important;
+  color: #fff !important;
+  background: var(--critical) !important;
+}
+
+.dangerButton:hover:not(:disabled) {
+  filter: brightness(0.92);
 }
 
 .emptyState,
@@ -770,7 +1163,6 @@
 
   .inspector {
     position: static;
-    grid-row: 1;
   }
 
   .toolbar {
@@ -852,5 +1244,20 @@
 
   .headingActions {
     justify-content: flex-end;
+  }
+
+  .dialogBackdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .dialog {
+    max-height: min(88vh, 680px);
+    overflow-y: auto;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .connectorChoices {
+    grid-template-columns: 1fr;
   }
 }

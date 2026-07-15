@@ -37,15 +37,41 @@ function titleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
+function createCoreSafetyController(): SafetyApprovalsController {
+  return {
+    async decide(input) {
+      const response = await fetch("/api/podo/safety", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      const result = (await response.json()) as
+        SafetyApprovalsViewModel | { message?: string }
+      if (!response.ok)
+        throw new Error(
+          "message" in result && result.message
+            ? result.message
+            : `Approval failed (${response.status})`,
+        )
+      return result as SafetyApprovalsViewModel
+    },
+  }
+}
+
 export function SafetyApprovals({
   initial,
   controller,
+  source = "demo",
 }: {
   initial: SafetyApprovalsViewModel
   controller?: SafetyApprovalsController
+  source?: "demo" | "core"
 }) {
   const controllerRef = useRef(
-    controller ?? createMockSafetyController(initial),
+    controller ??
+      (source === "core"
+        ? createCoreSafetyController()
+        : createMockSafetyController(initial)),
   )
   const [view, setView] = useState(initial)
   const [tab, setTab] = useState<SafetyTab>("pending")

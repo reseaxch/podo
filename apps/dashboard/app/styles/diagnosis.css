@@ -159,6 +159,7 @@
   font-size: 10px;
 }
 .text-link {
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
   gap: 3px;

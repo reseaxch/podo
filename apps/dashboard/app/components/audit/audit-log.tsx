@@ -1,9 +1,14 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { useToast } from "../../hooks/use-toast"
 import type { AuditEvent, AuditLogViewModel } from "../../lib/audit-types"
+import {
+  auditEventIncidentTab,
+  incidentWorkspaceHref,
+} from "../../lib/incident-links"
 import { IconRail } from "../shell/icon-rail"
 import { Topbar } from "../shell/topbar"
 import { Icon } from "../ui/pictogram"
@@ -32,13 +37,23 @@ function escapeCsv(value: string | number | null) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`
 }
 
-export function AuditLog({ audit }: { audit: AuditLogViewModel }) {
+export function AuditLog({
+  audit,
+  initialEventId,
+}: {
+  audit: AuditLogViewModel
+  initialEventId?: string | undefined
+}) {
   const [query, setQuery] = useState("")
   const [view, setView] = useState<AuditView>("All activity")
   const [category, setCategory] = useState("All categories")
   const [actor, setActor] = useState("All actors")
   const [outcome, setOutcome] = useState("All outcomes")
-  const [selectedId, setSelectedId] = useState(audit.events[0]?.id ?? "")
+  const [selectedId, setSelectedId] = useState(
+    initialEventId && audit.events.some((event) => event.id === initialEventId)
+      ? initialEventId
+      : (audit.events[0]?.id ?? ""),
+  )
   const [pageSize, setPageSize] = useState(defaultPageSize)
   const [page, setPage] = useState(1)
   const [live, setLive] = useState(true)
@@ -542,21 +557,19 @@ export function AuditLog({ audit }: { audit: AuditLogViewModel }) {
                 </section>
 
                 {selectedEvent.incidentId ? (
-                  <button
+                  <Link
+                    aria-label={`Open ${selectedEvent.incidentId} ${auditEventIncidentTab(selectedEvent)} context`}
                     className={styles.openIncident}
-                    onClick={() => {
-                      if (selectedEvent.incidentId === "INC-042")
-                        window.location.assign("/#workspace")
-                      else
-                        showToast(
-                          `${selectedEvent.incidentId} is waiting for backend data`,
-                        )
-                    }}
-                    type="button"
+                    href={incidentWorkspaceHref({
+                      eventId: selectedEvent.id,
+                      incidentId: selectedEvent.incidentId,
+                      tab: auditEventIncidentTab(selectedEvent),
+                    })}
                   >
-                    Open {selectedEvent.incidentId}
+                    Open {selectedEvent.incidentId} ·{" "}
+                    {auditEventIncidentTab(selectedEvent)}
                     <Icon name="arrow-square-out" size={15} />
-                  </button>
+                  </Link>
                 ) : null}
               </>
             ) : (

@@ -1,4 +1,8 @@
-import type { DetectedIncident } from "@podo/contracts"
+import type {
+  DetectedIncident,
+  IncidentDelivery,
+  IncidentRemediation,
+} from "@podo/contracts"
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
@@ -77,7 +81,9 @@ describe("ProductionIncidentWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument()
     expect(screen.queryByText(/probable root cause/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /prepare tested remediation/i }),
+    ).not.toBeInTheDocument()
   })
 
   it("renders a validated diagnosis and links only its core evidence", () => {
@@ -122,7 +128,9 @@ describe("ProductionIncidentWorkspace", () => {
     expect(
       screen.queryByRole("link", { name: "evidence_log" }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Prepare tested remediation" }),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/safe to attempt/i)).not.toBeInTheDocument()
   })
 
@@ -157,7 +165,9 @@ describe("ProductionIncidentWorkspace", () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText(/recommended action/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /prepare tested remediation/i }),
+    ).not.toBeInTheDocument()
   })
 
   it("fails closed when validated diagnosis cites evidence absent from the incident", () => {
@@ -193,7 +203,9 @@ describe("ProductionIncidentWorkspace", () => {
     ).toBeInTheDocument()
     expect(screen.queryByText("Must not render")).not.toBeInTheDocument()
     expect(screen.queryByText("99.99% confidence")).not.toBeInTheDocument()
-    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /prepare tested remediation/i }),
+    ).not.toBeInTheDocument()
   })
 
   it("fails closed when a completed investigation has no diagnosis state", () => {
@@ -213,6 +225,72 @@ describe("ProductionIncidentWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Diagnosis unavailable" }),
     ).toBeInTheDocument()
-    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /prepare tested remediation/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("opens the authoritative delivered pull request URL", () => {
+    const delivery: IncidentDelivery = {
+      id: "delivery_live",
+      incidentId: incident.id,
+      remediationId: "remediation_live",
+      artifactId: "artifact_live",
+      status: "delivered",
+      approval: { id: "approval_delivery", status: "approved" },
+      createdAt: incident.createdAt,
+      updatedAt: incident.updatedAt,
+      pullRequest: {
+        provider: "github",
+        repository: "reseaxch/podo",
+        number: 1842,
+        url: "https://github.com/reseaxch/podo/pull/1842",
+        baseCommit: "abc123",
+        baseBranch: "main",
+        headBranch: "fix/incident-live",
+        artifactId: "artifact_live",
+      },
+    }
+    render(
+      <ProductionIncidentWorkspace incident={incident} delivery={delivery} />,
+    )
+
+    expect(screen.getByRole("link", { name: "Open PR #1842" })).toHaveAttribute(
+      "href",
+      delivery.pullRequest?.url,
+    )
+  })
+
+  it("offers an issue fallback only after remediation failure", () => {
+    const remediation: IncidentRemediation = {
+      id: "remediation_live",
+      incidentId: incident.id,
+      status: "failed",
+      target: "isolated_checkout",
+      approval: { id: "approval_live", status: "approved" },
+      createdAt: incident.createdAt,
+      updatedAt: incident.updatedAt,
+      error: {
+        code: "verification_failed",
+        message: "Regression verification failed",
+      },
+    }
+    render(
+      <ProductionIncidentWorkspace
+        incident={incident}
+        remediation={remediation}
+      />,
+    )
+
+    const issue = screen.getByRole("link", {
+      name: "Open prefilled GitHub issue",
+    })
+    expect(issue).toHaveAttribute(
+      "href",
+      expect.stringContaining("github.com/reseaxch/podo/issues/new"),
+    )
+    expect(
+      screen.queryByRole("button", { name: /create pr/i }),
+    ).not.toBeInTheDocument()
   })
 })

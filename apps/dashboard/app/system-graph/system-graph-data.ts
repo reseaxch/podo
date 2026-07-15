@@ -1,3 +1,5 @@
+import { createDashboardClient, isDemoDashboard } from "../lib/dashboard-client"
+
 export type GraphLayer = "runtime" | "delivery" | "code"
 export type GraphHealth = "healthy" | "degraded" | "critical" | "changed"
 export type GraphNodeKind =
@@ -36,6 +38,12 @@ export type SystemGraphNode = {
     label: string
     value: string
     tone: "neutral" | "warning" | "critical"
+  }>
+  incidentId?: string
+  incidentNodeId?: "deploy" | "heap" | "trace" | "gc" | "code"
+  causalContext?: Array<{
+    label: string
+    value: string
   }>
   traces?: SystemTraceSample[]
 }
@@ -110,10 +118,17 @@ const nodes: SystemGraphNode[] = [
     updated: "8s ago",
     description:
       "Coordinates cart validation, inventory reservation, and payment authorization.",
+    incidentId: "INC-042",
+    incidentNodeId: "code",
     evidence: [
-      { label: "Open incident", value: "INC-042", tone: "critical" },
+      { label: "Incident", value: "INC-042", tone: "critical" },
       { label: "Heap", value: "91%", tone: "critical" },
       { label: "Trace samples", value: "312", tone: "warning" },
+    ],
+    causalContext: [
+      { label: "Deploy v1.8.4", value: "42m ago" },
+      { label: "Heap began climbing", value: "+9m" },
+      { label: "Checkout errors", value: "8.7%" },
     ],
     traces: [
       {
@@ -292,9 +307,16 @@ const nodes: SystemGraphNode[] = [
     updated: "42m ago",
     description:
       "Current checkout production deployment; anomaly began nine minutes after rollout.",
+    incidentId: "INC-042",
+    incidentNodeId: "deploy",
     evidence: [
       { label: "Change correlation", value: "94%", tone: "critical" },
       { label: "Rollback", value: "Available", tone: "neutral" },
+    ],
+    causalContext: [
+      { label: "Deploy completed", value: "10:02 AM" },
+      { label: "Heap crossed threshold", value: "+4m" },
+      { label: "Incident INC-042", value: "+11m" },
     ],
   },
   {
@@ -314,9 +336,16 @@ const nodes: SystemGraphNode[] = [
     environment: "main",
     updated: "1h ago",
     description: "Removes the cache size cap while simplifying session reuse.",
+    incidentId: "INC-042",
+    incidentNodeId: "deploy",
     evidence: [
       { label: "Risky hunk", value: "cache.ts:47", tone: "critical" },
       { label: "Tests", value: "+2 / −1", tone: "warning" },
+    ],
+    causalContext: [
+      { label: "Commit 8f3a2c1", value: "1h ago" },
+      { label: "Deployed as v1.8.4", value: "+18m" },
+      { label: "Correlated to incident", value: "94%" },
     ],
   },
   {
@@ -337,9 +366,16 @@ const nodes: SystemGraphNode[] = [
     updated: "1h ago",
     description:
       "Unbounded Map retains checkout sessions after requests complete.",
+    incidentId: "INC-042",
+    incidentNodeId: "code",
     evidence: [
       { label: "Heap retainers", value: "63.8 MB", tone: "critical" },
       { label: "Regression", value: "Reproduced", tone: "critical" },
+    ],
+    causalContext: [
+      { label: "session-cache.ts:47", value: "changed" },
+      { label: "Unbounded retention", value: "confirmed" },
+      { label: "Checkout errors", value: "8.7%" },
     ],
   },
 ]
@@ -455,6 +491,174 @@ export function adaptSystemGraph(): SystemGraphViewModel {
   }
 }
 
-export function getSystemGraph(): SystemGraphViewModel {
-  return adaptSystemGraph()
+export async function getSystemGraph(): Promise<SystemGraphViewModel> {
+  if (isDemoDashboard()) return adaptSystemGraph()
+  const client = createDashboardClient()
+  const { incidents } = await client.listIncidents()
+  const liveNodes: SystemGraphNode[] = []
+  const liveEdges: GraphEdge[] = []
+
+  for (const [index, incident] of incidents.entries()) {
+    const serviceId = `service-${incident.id}`
+    const deploymentId = `deployment-${incident.id}`
+    const y = 110 + index * 210
+    liveNodes.push(
+      {
+        id: serviceId,
+        label: incident.affectedService,
+        subtitle: `Detected incident · ${incident.id}`,
+        kind: "service",
+        layer: "runtime",
+        health: "critical",
+        x: 650,
+        y,
+        metrics: [
+          { label: "Evidence", value: String(incident.evidence.length) },
+        ],
+        owner: "Podo Core",
+        environment: "production",
+        updated: incident.updatedAt,
+        description: `Affected service for ${incident.id}.`,
+        evidence: [{ label: "Incident", value: incident.id, tone: "critical" }],
+        incidentId: incident.id,
+        incidentNodeId: "code",
+      },
+      {
+        id: deploymentId,
+        label: incident.deploymentId,
+        subtitle: "Authoritative deployment",
+        kind: "deployment",
+        layer: "delivery",
+        health: "changed",
+        x: 390,
+        y,
+        metrics: [{ label: "Incident", value: incident.id }],
+        owner: "Podo Core",
+        environment: "production",
+        updated: incident.updatedAt,
+        description: "Deployment linked to the detected incident.",
+        evidence: [
+          {
+            label: "Service",
+            value: incident.affectedService,
+            tone: "warning",
+          },
+        ],
+        incidentId: incident.id,
+        incidentNodeId: "deploy",
+      },
+    )
+    liveEdges.push({
+      id: `deployment-service-${incident.id}`,
+      from: deploymentId,
+      to: serviceId,
+      relation: "deployed-by",
+      label: "runs",
+      health: "critical",
+    })
+
+    const evidence = incident.evidence[0]
+    if (!evidence) continue
+    try {
+      const { causalPath } = await client.getIncidentCausalPath(
+        incident.id,
+        evidence.id,
+      )
+      const commitId = `commit-${incident.id}`
+      const fileId = `file-${incident.id}`
+      liveNodes.push(
+        {
+          id: commitId,
+          label: causalPath.commit.sha,
+          subtitle: "Causal commit",
+          kind: "commit",
+          layer: "code",
+          health: "changed",
+          x: 210,
+          y,
+          metrics: [{ label: "Evidence", value: evidence.id }],
+          owner: "Podo Core",
+          environment: "repository",
+          updated: causalPath.telemetryEvent.occurredAt,
+          description: "Commit resolved through the Core causal path.",
+          evidence: [
+            {
+              label: "Deployment",
+              value: incident.deploymentId,
+              tone: "warning",
+            },
+          ],
+          incidentId: incident.id,
+          incidentNodeId: "code",
+        },
+        {
+          id: fileId,
+          label: causalPath.file.label,
+          subtitle: causalPath.function.label,
+          kind: "file",
+          layer: "code",
+          health: "critical",
+          x: 30,
+          y,
+          metrics: [{ label: "Function", value: causalPath.function.label }],
+          owner: "Podo Core",
+          environment: "repository",
+          updated: causalPath.telemetryEvent.occurredAt,
+          description:
+            "Code location cited by the evidence-backed causal path.",
+          evidence: [
+            { label: "Evidence", value: evidence.id, tone: "critical" },
+          ],
+          incidentId: incident.id,
+          incidentNodeId: "code",
+        },
+      )
+      liveEdges.push(
+        {
+          id: `commit-deployment-${incident.id}`,
+          from: commitId,
+          to: deploymentId,
+          relation: "contains",
+          label: "deployed as",
+          health: "critical",
+        },
+        {
+          id: `file-commit-${incident.id}`,
+          from: fileId,
+          to: commitId,
+          relation: "causal",
+          label: "changed in",
+          health: "critical",
+        },
+      )
+    } catch {
+      // The graph remains useful with the incident/deployment boundary when a
+      // causal path is not yet available. No code node is invented.
+    }
+  }
+
+  return {
+    owner: { name: "Podo Core", avatar: "/icon.svg" },
+    capturedAt: "Live · Core API",
+    environment: "Core incident graph",
+    stats: {
+      services: incidents.length,
+      unhealthy: incidents.length,
+      changes: liveNodes.filter((node) => node.kind === "commit").length,
+      traces: String(
+        incidents
+          .flatMap((incident) => incident.evidence)
+          .filter((item) => item.sourceType === "trace").length,
+      ),
+    },
+    windows: [
+      {
+        label: "Current Core state",
+        traces: `${liveNodes.length} nodes`,
+        capturedAt: "No synthetic history",
+      },
+    ],
+    nodes: liveNodes,
+    edges: liveEdges,
+  }
 }

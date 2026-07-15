@@ -15,6 +15,7 @@ import { IconRail } from "../components/shell/icon-rail"
 import { Topbar } from "../components/shell/topbar"
 import { Icon } from "../components/ui/pictogram"
 import { useToast } from "../hooks/use-toast"
+import { incidentWorkspaceHref } from "../lib/incident-links"
 import type { IconName } from "../lib/incident-types"
 import type {
   GraphHealth,
@@ -133,9 +134,19 @@ export function SystemGraphWorkspace({
     selected?.traces?.find((trace) => trace.id === selectedTraceId) ??
     selected?.traces?.[0] ??
     null
-  const selectedIncident = selected?.evidence.find(
-    (item) => item.label === "Open incident",
-  )?.value
+  const selectedConnections = useMemo(() => {
+    if (!selected) return []
+    return graph.edges.flatMap((edge) => {
+      const outgoing = edge.from === selected.id
+      const incoming = edge.to === selected.id
+      if (!outgoing && !incoming) return []
+      const otherId = outgoing ? edge.to : edge.from
+      if (!visibleIds.has(otherId)) return []
+      const node = graph.nodes.find((candidate) => candidate.id === otherId)
+      if (!node) return []
+      return [{ edge, node, direction: outgoing ? "outgoing" : "incoming" }]
+    })
+  }, [graph.edges, graph.nodes, selected, visibleIds])
 
   const fitGraph = useCallback(() => {
     const canvas = canvasRef.current
@@ -587,6 +598,17 @@ export function SystemGraphWorkspace({
               </div>
               <p className={styles.description}>{selected.description}</p>
 
+              <dl className={styles.nodeMeta} aria-label="Node ownership">
+                <div>
+                  <dt>Owner</dt>
+                  <dd>{selected.owner}</dd>
+                </div>
+                <div>
+                  <dt>Layer</dt>
+                  <dd>{selected.layer}</dd>
+                </div>
+              </dl>
+
               <section className={styles.metricGrid} aria-label="Node metrics">
                 {selected.metrics.map((metric) => (
                   <span key={metric.label}>
@@ -612,51 +634,85 @@ export function SystemGraphWorkspace({
                 ))}
               </section>
 
-              <section className={styles.causalBlock}>
-                <div className={styles.sectionTitle}>
-                  <span>Why it matters</span>
-                  <small>causal context</small>
-                </div>
-                <div className={styles.causalFlow}>
-                  <span>
-                    <i>1</i>
-                    <b>Deploy v1.8.4</b>
-                    <small>42m ago</small>
-                  </span>
-                  <span>
-                    <i>2</i>
-                    <b>Heap began climbing</b>
-                    <small>+9m</small>
-                  </span>
-                  <span>
-                    <i>3</i>
-                    <b>Checkout errors</b>
-                    <small>8.7%</small>
-                  </span>
-                </div>
-              </section>
+              {selectedConnections.length ? (
+                <section className={styles.connectionBlock}>
+                  <div className={styles.sectionTitle}>
+                    <span>Connected topology</span>
+                    <small>{selectedConnections.length} relations</small>
+                  </div>
+                  <div className={styles.connectionList}>
+                    {selectedConnections.map(({ direction, edge, node }) => (
+                      <button
+                        key={edge.id}
+                        onClick={() => {
+                          setSelectedId(node.id)
+                          setInspectorEngaged(true)
+                          setTracesOpen(false)
+                        }}
+                        type="button"
+                      >
+                        <span className={styles.connectionIcon}>
+                          <Icon name={nodeIcons[node.kind]} size={14} />
+                        </span>
+                        <span>
+                          <strong>{node.label}</strong>
+                          <small>
+                            {direction === "incoming" ? "From" : "To"} ·{" "}
+                            {edge.relation.replaceAll("-", " ")}
+                          </small>
+                        </span>
+                        <Icon name="caret-right" size={13} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
-              <div className={styles.inspectorActions}>
-                <button
-                  onClick={() => {
-                    setSelectedTraceId(selected.traces?.[0]?.id ?? null)
-                    setTracesOpen(true)
-                  }}
-                  type="button"
-                >
-                  <Icon name="activity" size={15} /> Explore traces
-                </button>
-                {selectedIncident ? (
-                  <Link href="/#workspace">
-                    Open incident <Icon name="caret-right" size={14} />
-                    <span className="sr-only"> {selectedIncident}</span>
-                  </Link>
-                ) : (
-                  <Link href="/evidence-sources">
-                    View evidence <Icon name="caret-right" size={14} />
-                  </Link>
-                )}
-              </div>
+              {selected.causalContext?.length ? (
+                <section className={styles.causalBlock}>
+                  <div className={styles.sectionTitle}>
+                    <span>Why it matters</span>
+                    <small>causal context</small>
+                  </div>
+                  <div className={styles.causalFlow}>
+                    {selected.causalContext.map((step, index) => (
+                      <span key={`${step.label}-${step.value}`}>
+                        <i>{index + 1}</i>
+                        <b>{step.label}</b>
+                        <small>{step.value}</small>
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {selected.traces?.length || selected.incidentId ? (
+                <div className={styles.inspectorActions}>
+                  {selected.traces?.length ? (
+                    <button
+                      onClick={() => {
+                        setSelectedTraceId(selected.traces?.[0]?.id ?? null)
+                        setTracesOpen(true)
+                      }}
+                      type="button"
+                    >
+                      <Icon name="activity" size={15} /> Explore traces
+                    </button>
+                  ) : null}
+                  {selected.incidentId ? (
+                    <Link
+                      href={incidentWorkspaceHref({
+                        incidentId: selected.incidentId,
+                        nodeId: selected.incidentNodeId ?? selected.id,
+                        tab: "graph",
+                      })}
+                    >
+                      Open incident <Icon name="caret-right" size={14} />
+                      <span className="sr-only"> {selected.incidentId}</span>
+                    </Link>
+                  ) : null}
+                </div>
+              ) : null}
             </aside>
           ) : null}
         </div>
@@ -753,10 +809,18 @@ export function SystemGraphWorkspace({
                         <i /> CheckoutCache.set <small>518 ms</small>
                       </span>
                     </div>
-                    <Link href="/#workspace">
-                      Open related incident
-                      <Icon name="caret-right" size={14} />
-                    </Link>
+                    {selected.incidentId ? (
+                      <Link
+                        href={incidentWorkspaceHref({
+                          incidentId: selected.incidentId,
+                          nodeId: selected.incidentNodeId ?? selected.id,
+                          tab: "graph",
+                        })}
+                      >
+                        Open related incident
+                        <Icon name="caret-right" size={14} />
+                      </Link>
+                    ) : null}
                   </aside>
                 ) : null}
               </div>

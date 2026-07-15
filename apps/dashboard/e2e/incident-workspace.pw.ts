@@ -108,4 +108,15 @@ test("incident overview filters the inbox and opens the primary incident", async
   await expect(
     page.getByRole("heading", { name: "Checkout memory growth after deploy" }),
   ).toBeVisible()
+  await expect(page).toHaveURL(/incident=INC-042/)
+})
+
+test("approved demo remediation exposes the actual pull request URL", async ({
+  page,
+}) => {
+  await page.goto("/?mode=demo&incident=INC-042&tab=changes#workspace")
+  await page.getByRole("button", { name: "Approve & create PR" }).click()
+  await expect(
+    page.getByRole("link", { name: "Open PR #1842" }),
+  ).toHaveAttribute("href", "https://github.com/podo/podo/pull/1842")
 })

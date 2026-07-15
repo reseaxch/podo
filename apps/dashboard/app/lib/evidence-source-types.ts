@@ -13,6 +13,7 @@ export type EvidenceSource = {
   status: EvidenceSourceStatus
   icon: IconName
   description: string
+  externalUrl: string
   evidenceKinds: string[]
   signalCount: number
   lastSync: string
@@ -35,11 +36,23 @@ export type EvidenceSourcesViewModel = {
   generatedAt: string
 }
 
-export type EvidenceSourceMutation = {
-  sourceId: string
-  action: "connect" | "repair"
-  expectedStatus: "Available" | "Needs attention"
-}
+export type EvidenceSourceMutation =
+  | {
+      sourceId: string
+      action: "connect"
+      expectedStatus: "Available"
+      instance: string
+    }
+  | {
+      sourceId: string
+      action: "repair"
+      expectedStatus: "Needs attention"
+    }
+  | {
+      sourceId: string
+      action: "disconnect"
+      expectedStatus: "Connected"
+    }
 
 export type EvidenceSourcesController = {
   updateConnection(input: EvidenceSourceMutation): Promise<EvidenceSource>
@@ -53,6 +66,7 @@ export type EvidenceSourceRecord = {
   connection_state: "active" | "degraded" | "not_configured"
   pictogram: IconName
   summary: string
+  external_url: string
   evidence_kinds: string[]
   signal_count_24h: number
   last_sync_label: string

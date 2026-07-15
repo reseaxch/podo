@@ -676,6 +676,43 @@
   line-height: 1.55;
 }
 
+.nodeMeta {
+  display: grid;
+  margin: 0 15px 14px;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.nodeMeta > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 8px 10px;
+}
+
+.nodeMeta > div + div {
+  border-left: 1px solid var(--border-soft);
+}
+
+.nodeMeta dt {
+  color: var(--text-subtle);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.nodeMeta dd {
+  overflow: hidden;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
 .metricGrid {
   display: grid;
   margin: 0 15px 14px;
@@ -710,8 +747,67 @@
 }
 
 .evidenceBlock,
+.connectionBlock,
 .causalBlock {
   padding: 0 15px 14px;
+}
+
+.connectionList {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.connectionList button {
+  display: grid;
+  min-height: 46px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  color: var(--text);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.connectionList button + button {
+  border-top: 1px solid var(--border-soft);
+}
+
+.connectionList button:hover {
+  background: var(--surface-hover);
+}
+
+.connectionIcon {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface-muted);
+}
+
+.connectionList button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.connectionList strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connectionList small {
+  color: var(--text-subtle);
+  font-size: 8px;
+  text-transform: capitalize;
 }
 .sectionTitle {
   display: flex;

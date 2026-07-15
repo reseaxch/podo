@@ -65,6 +65,22 @@ describe("AuditLog", () => {
     expect(inspector).toHaveTextContent("None")
   })
 
+  it("opens the incident surface that matches the selected audit event", () => {
+    render(<AuditLog audit={auditLogMock} initialEventId="evt-016" />)
+
+    expect(
+      screen.getByRole("heading", { name: "Regression suite passed" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", {
+        name: "Open INC-042 changes context",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/?incident=INC-042&tab=changes&event=evt-016#workspace",
+    )
+  })
+
   it("paginates a long event stream without infinite scrolling", async () => {
     const user = userEvent.setup()
     const events = Array.from({ length: 30 }, (_, index) => ({
