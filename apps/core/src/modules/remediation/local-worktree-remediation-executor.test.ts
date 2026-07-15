@@ -95,6 +95,45 @@ describe("LocalWorktreeRemediationExecutor", () => {
     expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
   })
 
+  test("rejects a passing post-patch regression command that mutates the candidate patch", async () => {
+    const fixture = await createRepository()
+    const executor = new LocalWorktreeRemediationExecutor({
+      ...config(fixture, successfulProducer()),
+      regressionCommand: [process.execPath, "-e", [
+        'const path = "src/cache.ts"',
+        "const source = await Bun.file(path).text()",
+        'if (source.includes("cacheLimit = 0")) process.exit(1)',
+        'await Bun.write(path, "export const cacheLimit = 11\\n")',
+      ].join(";")],
+    })
+
+    const execution = executor.execute(input())
+    await expect(execution).rejects.toThrow("verification_command_mutated_worktree")
+    await expect(execution).rejects.not.toThrow("cacheLimit = 11")
+    expect(await readdir(fixture.scratchParent)).toEqual([])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await Bun.file(join(fixture.repositoryRoot, "src/cache.ts")).text()).toBe("export const cacheLimit = 0\n")
+  })
+
+  test("rejects a passing validation command that adds an untracked file", async () => {
+    const fixture = await createRepository()
+    const executor = new LocalWorktreeRemediationExecutor({
+      ...config(fixture, successfulProducer()),
+      validationCommands: [[
+        process.execPath,
+        "-e",
+        'await Bun.write("validation-output.txt", "must not enter the artifact\\n")',
+      ]],
+    })
+
+    const execution = executor.execute(input())
+    await expect(execution).rejects.toThrow("verification_command_mutated_worktree")
+    await expect(execution).rejects.not.toThrow("validation-output.txt")
+    expect(await readdir(fixture.scratchParent)).toEqual([])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await Bun.file(join(fixture.repositoryRoot, "validation-output.txt")).exists()).toBe(false)
+  })
+
   test("passes argv literally and rejects repository and scratch path escapes", async () => {
     const fixture = await createRepository()
     const injectedPath = join(fixture.parent, "command-injected")

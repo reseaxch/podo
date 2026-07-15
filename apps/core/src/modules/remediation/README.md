@@ -47,6 +47,12 @@ detached worktree beneath the owned scratch parent, and performs this sequence:
 6. Git emits the bounded binary diff and exact safe changed-file list; core
    builds a deterministic sanitized PR preview.
 
+The executor snapshots the complete tracked and untracked candidate diff
+immediately after `applyFix`. The passing post-patch regression and every
+passing validation command must leave that snapshot byte-for-byte unchanged.
+Any added, deleted, staged, or modified file fails the attempt with the stable
+sanitized `verification_command_mutated_worktree` code; no artifact is returned.
+
 The executor never creates a branch, stages files, stashes, resets, pushes,
 merges, or writes to the default worktree. Untracked files are represented with
 per-file `git diff --no-index` rather than index mutation. Git override

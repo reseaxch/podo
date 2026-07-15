@@ -53,6 +53,11 @@ interface CapturedStream {
   exceeded: boolean
 }
 
+interface PatchSnapshot {
+  unifiedDiff: string
+  changedFiles: string[]
+}
+
 export class LocalWorktreeRemediationExecutor implements IncidentRemediationExecutor {
   private readonly config: ValidatedConfig
 
@@ -95,6 +100,7 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
       } catch {
         throw failure("fix_producer_failed")
       }
+      const candidatePatch = await this.collectPatch(worktreePath)
       const hashesAfterFix = await this.hashFiles(worktreePath, regressionPatch.changedFiles)
       if (hashesAfterFix.some((hash, index) => hash !== regressionFileHashes[index])) {
         throw failure("fix_mutated_regression")
@@ -102,18 +108,19 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
 
       const postPatch = await this.command(this.config.regressionCommand, worktreePath)
       if (postPatch.exitCode !== 0) throw failure("regression_failed_after_patch")
+      await this.requirePatchUnchanged(worktreePath, candidatePatch)
 
       for (const command of this.config.validationCommands) {
         const validation = await this.command(command, worktreePath)
         if (validation.exitCode !== 0) throw failure("remediation_validation_failed")
+        await this.requirePatchUnchanged(worktreePath, candidatePatch)
       }
 
-      const patch = await this.collectPatch(worktreePath)
       return buildResult(
         input,
         this.config.trustedBaseRef,
         repository.baseCommit,
-        patch,
+        candidatePatch,
         this.config.validationCommands.map((_, index) => `validation-${index + 1}`),
       )
     } finally {
@@ -173,7 +180,7 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
     return status.stdout.length > 0
   }
 
-  private async collectPatch(worktreePath: string): Promise<{ unifiedDiff: string; changedFiles: string[] }> {
+  private async collectPatch(worktreePath: string): Promise<PatchSnapshot> {
     const staged = await this.git(["diff", "--cached", "--quiet", "--no-ext-diff", "--no-textconv", "--"], worktreePath)
     if (staged.exitCode !== 0) throw failure("producer_staged_changes")
 
@@ -206,6 +213,20 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
     const unifiedDiff = decode(concat(fragments, totalBytes))
     if (!unifiedDiff.startsWith("diff --git ") || unifiedDiff.length === 0) throw failure("diff_collect_failed")
     return { unifiedDiff, changedFiles }
+  }
+
+  private async requirePatchUnchanged(worktreePath: string, candidate: PatchSnapshot): Promise<void> {
+    let current: PatchSnapshot
+    try {
+      current = await this.collectPatch(worktreePath)
+    } catch {
+      throw failure("verification_command_mutated_worktree")
+    }
+    if (current.unifiedDiff !== candidate.unifiedDiff
+      || current.changedFiles.length !== candidate.changedFiles.length
+      || current.changedFiles.some((path, index) => path !== candidate.changedFiles[index])) {
+      throw failure("verification_command_mutated_worktree")
+    }
   }
 
   private async hashFiles(worktreePath: string, paths: string[]): Promise<string[]> {
