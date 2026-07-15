@@ -4,17 +4,20 @@ import type {
   GetInvestigationResponse,
   GetIncidentCausalPathResponse,
   GetIncidentResponse,
+  GetIncidentDeliveryResponse,
   GetIncidentRemediationAuditResponse,
   GetSettingsResponse,
   HealthResponse,
   IngestTelemetryResponse,
   GetIncidentRemediationResponse,
   IncidentRemediationDecisionResponse,
+  IncidentDeliveryDecisionResponse,
   InvestigationEvent,
   ListIncidentsResponse,
   StartIncidentInvestigationRequest,
   StartIncidentInvestigationResponse,
   StartIncidentRemediationResponse,
+  StartIncidentDeliveryResponse,
   StartInvestigationRequest,
   StartInvestigationResponse,
   SystemStatusResponse,
@@ -63,6 +66,10 @@ export interface PodoRemediationClient {
   getIncidentRemediationAudit(id: string): Promise<GetIncidentRemediationAuditResponse>
   approveIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
   denyIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
+  startIncidentDelivery(id: string): Promise<StartIncidentDeliveryResponse>
+  getIncidentDelivery(id: string): Promise<GetIncidentDeliveryResponse>
+  approveIncidentDelivery(id: string, approvalId: string): Promise<IncidentDeliveryDecisionResponse>
+  denyIncidentDelivery(id: string, approvalId: string): Promise<IncidentDeliveryDecisionResponse>
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -97,6 +104,10 @@ export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentC
     getIncidentRemediationAudit: async (id) => readJson<GetIncidentRemediationAuditResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/audit`)),
     approveIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "approve" }),
     denyIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "deny" }),
+    startIncidentDelivery: (id) => command<StartIncidentDeliveryResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery`, "POST", {}),
+    getIncidentDelivery: async (id) => readJson<GetIncidentDeliveryResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery`)),
+    approveIncidentDelivery: (id, approvalId) => command<IncidentDeliveryDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "approve" }),
+    denyIncidentDelivery: (id, approvalId) => command<IncidentDeliveryDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "deny" }),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
     get: async (id) => readJson<GetInvestigationResponse>(await request(investigationUrl(id))),
     cancel: (id) => command<CancelInvestigationResponse>(investigationUrl(id), "DELETE"),

@@ -23,6 +23,9 @@ export interface IncidentRemediationExecutorInput {
 }
 
 export interface IncidentRemediationExecutorResult {
+  provenance: {
+    baseCommit: string
+  }
   patch: {
     summary: string
     changedFiles: string[]
@@ -154,6 +157,13 @@ export class IncidentRemediationService {
   audit(incidentId: string): { ok: true; events: IncidentRemediationAuditEvent[] } | { ok: false } {
     const record = this.byIncident.get(incidentId)
     return record ? { ok: true, events: copy(record.audit) } : { ok: false }
+  }
+
+  appendAudit(incidentId: string, event: RemediationAuditInput): boolean {
+    const record = this.byIncident.get(incidentId)
+    if (!record) return false
+    this.recordAudit(record, event)
+    return true
   }
 
   async decide(
@@ -289,6 +299,36 @@ export class IncidentRemediationService {
         return
       case "remediation.verification_succeeded":
         record.audit.push({ ...base, kind: event.kind, artifactSha256: event.artifactSha256 })
+        return
+      case "delivery.requested":
+      case "delivery.started":
+        record.audit.push({
+          ...base,
+          kind: event.kind,
+          deliveryId: event.deliveryId,
+          artifactSha256: event.artifactSha256,
+        })
+        return
+      case "delivery.approval_decided":
+        record.audit.push({
+          ...base,
+          kind: event.kind,
+          deliveryId: event.deliveryId,
+          approvalId: event.approvalId,
+          decision: event.decision,
+        })
+        return
+      case "delivery.failed":
+        record.audit.push({ ...base, kind: event.kind, deliveryId: event.deliveryId, code: event.code })
+        return
+      case "delivery.succeeded":
+        record.audit.push({
+          ...base,
+          kind: event.kind,
+          deliveryId: event.deliveryId,
+          artifactSha256: event.artifactSha256,
+          pullRequestUrl: event.pullRequestUrl,
+        })
     }
   }
 }
@@ -299,7 +339,8 @@ type ParsedExecutorResult =
 
 function parseExecutorResult(value: unknown): ParsedExecutorResult {
   if (!isPlainObject(value)
-    || !hasExactKeys(value, ["patch", "regression", "validation", "pullRequestPreview"])
+    || !hasExactKeys(value, ["provenance", "patch", "regression", "validation", "pullRequestPreview"])
+    || !isProvenance(value.provenance)
     || !isPatch(value.patch)
     || !isRegression(value.regression)
     || !isValidation(value.validation)
@@ -335,6 +376,13 @@ function isPatch(value: unknown): value is IncidentRemediationExecutorResult["pa
     && declaredFiles.every((path, index) => path === discoveredFiles[index])
 }
 
+function isProvenance(value: unknown): value is IncidentRemediationExecutorResult["provenance"] {
+  return isPlainObject(value)
+    && hasExactKeys(value, ["baseCommit"])
+    && typeof value.baseCommit === "string"
+    && /^[a-f0-9]{40,64}$/.test(value.baseCommit)
+}
+
 function isRegression(value: unknown): value is IncidentRemediationExecutorResult["regression"] {
   return isPlainObject(value)
     && hasExactKeys(value, ["test", "prePatch", "postPatch"])
@@ -364,6 +412,7 @@ function isPullRequestPreview(value: unknown): value is IncidentRemediationExecu
 }
 
 function toPublicArtifact(result: IncidentRemediationExecutorResult): IncidentRemediationArtifact {
+  const provenance = { baseCommit: result.provenance.baseCommit }
   const patch = {
     summary: result.patch.summary.trim(),
     changedFiles: result.patch.changedFiles.map((path) => path.trim()),
@@ -378,8 +427,8 @@ function toPublicArtifact(result: IncidentRemediationExecutorResult): IncidentRe
     baseBranch: result.pullRequestPreview.baseBranch,
     headBranch: result.pullRequestPreview.headBranch,
   }
-  const id = `pr_preview_${createHash("sha256").update(JSON.stringify({ patch, regression, validation, preview })).digest("hex").slice(0, 24)}`
-  return { patch, regression, validation, pullRequestPreview: { id, ...preview } }
+  const id = `pr_preview_${createHash("sha256").update(JSON.stringify({ provenance, patch, regression, validation, preview })).digest("hex").slice(0, 24)}`
+  return { provenance, patch, regression, validation, pullRequestPreview: { id, ...preview } }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

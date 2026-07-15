@@ -81,6 +81,7 @@ function completeDiagnosis(runtime: DiagnosisRuntime, evidenceIds: string[], saf
 
 function verifiedExecutorResult() {
   return {
+    provenance: { baseCommit: "a".repeat(40) },
     patch: {
       summary: "Bound checkout cache retention",
       changedFiles: ["demo/services/checkout-service/src/cache.ts"],

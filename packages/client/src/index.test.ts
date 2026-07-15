@@ -104,6 +104,10 @@ describe("createPodoClient", () => {
     await client.getIncidentRemediationAudit("incident/1")
     await client.approveIncidentRemediation("incident/1", "approval/1")
     await client.denyIncidentRemediation("incident/1", "approval/2")
+    await client.startIncidentDelivery("incident/1")
+    await client.getIncidentDelivery("incident/1")
+    await client.approveIncidentDelivery("incident/1", "delivery-approval/1")
+    await client.denyIncidentDelivery("incident/1", "delivery-approval/2")
 
     expect(requests).toEqual([
       {
@@ -126,6 +130,25 @@ describe("createPodoClient", () => {
       },
       {
         url: "http://podo.test/api/incidents/incident%2F1/remediation/approvals/approval%2F2",
+        method: "POST",
+        body: { decision: "deny" },
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation/delivery",
+        method: "POST",
+        body: {},
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation/delivery",
+        method: "GET",
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation/delivery/approvals/delivery-approval%2F1",
+        method: "POST",
+        body: { decision: "approve" },
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation/delivery/approvals/delivery-approval%2F2",
         method: "POST",
         body: { decision: "deny" },
       },

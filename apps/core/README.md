@@ -50,8 +50,9 @@ making remediation availability a process-readiness requirement.
 
 This composition is a local/POC operator capability, not a broad production
 rollout gate. Core keeps a minimum in-memory audit boundary for every configured
-remediation: request, approval or denial, execution start, and sanitized
-verification success/failure. `GET /api/incidents/:id/remediation/audit`
+remediation and delivery: request, approval or denial, execution start, and
+sanitized verification or delivery success/failure.
+`GET /api/incidents/:id/remediation/audit`
 returns the ordered typed events. It records stable Core identifiers, decisions,
 sanitized failure codes, and the verified artifact hash; it never records raw
 Codex output, command output, private runtime IDs, secrets, diffs, or unverified
@@ -79,9 +80,18 @@ to start. Directory existence, canonical paths, repository identity, and the
 trusted base ref are revalidated immediately before an isolated worktree is
 created; those checks fail the remediation without mutating the source checkout.
 
-Durable persistence/replay, authenticated actor identity, complete tool-level
-audit history, and GitHub delivery remain explicitly out of scope for this
-slice and are required before broader production use.
+After verification, `POST /api/incidents/:id/remediation/delivery` creates a
+separate pending delivery approval. Approval is the only path that invokes the
+configured `PullRequestDeliveryPort`, and repeated or concurrent approval
+invokes it at most once. Core passes only the snapshotted artifact, including
+its immutable base commit, and accepts only a strictly validated GitHub PR
+result. Denial, missing verification, changed artifacts, adapter errors, and
+invalid results expose no pull-request record or provider output.
+
+The actual networked GitHub adapter is not part of this slice. Durable
+persistence/replay, authenticated actor identity, complete tool-level audit
+history, and real GitHub delivery remain required before broader production
+use.
 
 ## Run and validate
 
