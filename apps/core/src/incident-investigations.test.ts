@@ -32,6 +32,22 @@ class RecordingRuntime implements CodexRuntime {
   async close() {}
 }
 
+class SynchronousApprovalRuntime extends RecordingRuntime {
+  override async startTurn(threadId: string, prompt: string) {
+    this.prompts.push(prompt)
+    this.emit({
+      kind: "approval.requested",
+      requestId: 91,
+      approvalKind: "command",
+      threadId,
+      turnId: "private-turn-1",
+      itemId: "private-item-1",
+      command: "cat /private/runtime/secret",
+    })
+    return { turnId: "private-turn-1" }
+  }
+}
+
 function incidentTelemetry() {
   const base = Date.parse("2026-07-14T09:00:00.000Z")
   const metric = (step: number, value: number) => ({
@@ -374,5 +390,104 @@ describe("incident-scoped investigation", () => {
       id: started.investigation.id,
       status: "failed",
     })
+
+    const audit = await client.getIncidentAudit(incidentId)
+    expect(audit.events.map(({ kind }) => kind)).toEqual([
+      "investigation.requested",
+      "investigation.started",
+      "investigation.approval_denied",
+      "investigation.failed",
+      "investigation.diagnosis_rejected",
+    ])
+    expect(audit.events[2]).toMatchObject({ approvalKind: "command" })
+    expect(JSON.stringify(audit)).not.toContain("curl production.example")
+    expect(JSON.stringify(audit)).not.toContain("sensitive raw runtime failure")
+  })
+
+  test("audits an approval denied synchronously during investigation startup", async () => {
+    const runtime = new SynchronousApprovalRuntime()
+    const { client } = testClient(runtime)
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+
+    const started = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    await Promise.resolve()
+    const audit = await client.getIncidentAudit(incidentId)
+
+    expect(started.investigation.status).toBe("failed")
+    expect(runtime.decisions).toEqual([{ requestId: 91, decision: "deny" }])
+    expect(audit.events.map(({ kind }) => kind)).toEqual([
+      "investigation.requested",
+      "investigation.started",
+      "investigation.approval_denied",
+      "investigation.failed",
+      "investigation.diagnosis_rejected",
+    ])
+    expect(audit.events[2]).toMatchObject({
+      investigationId: started.investigation.id,
+      approvalKind: "command",
+    })
+    expect(JSON.stringify(audit)).not.toContain("cat /private/runtime/secret")
+  })
+
+  test("audits validated investigation outcome once before any incident read", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const started = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    const evidenceIds = started.incident.evidence.map(({ id }) => id)
+    complete(runtime, validDiagnosis(evidenceIds))
+
+    const firstAudit = await client.getIncidentAudit(incidentId)
+    const repeatedAudit = await client.getIncidentAudit(incidentId)
+
+    expect(firstAudit.events.map(({ kind }) => kind)).toEqual([
+      "investigation.requested",
+      "investigation.started",
+      "investigation.completed",
+      "investigation.diagnosis_validated",
+    ])
+    expect(firstAudit.events[3]).toMatchObject({ evidenceIds })
+    expect(repeatedAudit).toEqual(firstAudit)
+  })
+
+  test("audits rejected diagnosis outcome once before any incident read", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const started = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    complete(runtime, validDiagnosis(["ev-model-invented"]))
+
+    const firstAudit = await client.getIncidentAudit(incidentId)
+    const repeatedAudit = await client.getIncidentAudit(incidentId)
+
+    expect(firstAudit.events.map(({ kind }) => kind)).toEqual([
+      "investigation.requested",
+      "investigation.started",
+      "investigation.completed",
+      "investigation.diagnosis_rejected",
+    ])
+    expect(firstAudit.events[3]).toMatchObject({
+      investigationId: started.investigation.id,
+      code: "invalid_output",
+    })
+    expect(repeatedAudit).toEqual(firstAudit)
+  })
+
+  test("bounds repeated policy-denied audit attempts per incident", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+
+    for (let attempt = 0; attempt < 300; attempt++) {
+      await expect(client.startIncidentInvestigation(incidentId, { cwd: "/repo" })).rejects.toThrow(
+        '"error":"policy_denied"',
+      )
+    }
+
+    const audit = await client.getIncidentAudit(incidentId)
+    expect(runtime.threadInputs).toEqual([])
+    expect(audit.events).toHaveLength(256)
+    expect(audit.events[0]).toMatchObject({ sequence: 45, kind: "investigation.requested" })
+    expect(audit.events.at(-1)).toMatchObject({ sequence: 300, kind: "investigation.requested" })
   })
 })
