@@ -7,7 +7,8 @@
     "@podo/codex-app-server-client": "workspace:*",
     "@podo/contracts": "workspace:*",
     "@podo/domain": "workspace:*",
-    "@podo/plugin-github": "workspace:*"
+    "@podo/plugin-github": "workspace:*",
+    "@podo/plugin-graphify": "workspace:*"
   },
   "scripts": {
     "dev": "bun --watch src/index.ts",

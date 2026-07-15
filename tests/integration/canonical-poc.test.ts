@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import type {
   CodexRuntime,
   CodexRuntimeEvent,
@@ -16,7 +17,6 @@ import type {
   NormalizedCodeGraphSnapshot,
 } from "../../packages/contracts/src/index"
 import { createPodoClient } from "../../packages/client/src/index"
-import { decodeGraphifyNetworkxV1 } from "../../plugins/graphify/src/index"
 import {
   replayTelemetry,
   type ReplayScheduler,
@@ -28,8 +28,9 @@ import { CodexRemediationPatchProducer } from "../../apps/core/src/modules/remed
 import {
   LocalWorktreeRemediationExecutor,
 } from "../../apps/core/src/modules/remediation/local-worktree-remediation-executor"
+import { loadProductionIncidentGraph } from "../../apps/core/src/runtime/production-incident-graph"
 
-const TRUSTED_CORRELATION = {
+const EXPECTED_CORRELATION = {
   deploymentId: "deploy-1042",
   containerId: "checkout-service-7b9c",
   commitSha: "d34db33fd34db33fd34db33fd34db33fd34db33f",
@@ -95,11 +96,11 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
       id: proof.selectedSourceEventId,
       occurredAt: proof.selectedObservedAt,
     },
-    container: { id: TRUSTED_CORRELATION.containerId },
-    deployment: { id: TRUSTED_CORRELATION.deploymentId },
+    container: { id: EXPECTED_CORRELATION.containerId },
+    deployment: { id: EXPECTED_CORRELATION.deploymentId },
     commit: {
-      id: TRUSTED_CORRELATION.commitSha,
-      sha: TRUSTED_CORRELATION.commitSha,
+      id: EXPECTED_CORRELATION.commitSha,
+      sha: EXPECTED_CORRELATION.commitSha,
     },
     file: {
       id: proof.cacheFile.id,
@@ -301,25 +302,27 @@ async function runCanonicalPocProof(): Promise<{
   requestLog: string[]
   publicResponseBodies: string[]
 }> {
-  const [rawScenario, rawGraph, rawTelemetry] = await Promise.all([
+  const [rawScenario, rawTelemetry, incidentGraph] = await Promise.all([
     Bun.file(new URL("../../scenarios/cache-growth/scenario.json", import.meta.url)).json(),
-    Bun.file(new URL("../../scenarios/cache-growth/fixtures/graph.json", import.meta.url)).json(),
     Bun.file(new URL("../../scenarios/cache-growth/fixtures/telemetry.json", import.meta.url)).json(),
+    loadProductionIncidentGraph({
+      PODO_INCIDENT_GRAPH_ENABLED: "true",
+      PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH: fileURLToPath(new URL(
+        "../../scenarios/cache-growth/graph-bootstrap.json",
+        import.meta.url,
+      )),
+    }),
   ])
   const canonicalExpected = parseCanonicalExpectedOutcome(rawScenario)
   if (!Array.isArray(rawTelemetry)) throw new Error("Canonical telemetry fixture must be an array")
-
-  const decoded = decodeGraphifyNetworkxV1(rawGraph, { graphId: "cache-growth" })
-  if (!decoded.ok) {
-    throw new Error(`Canonical graph failed to decode: ${JSON.stringify(decoded.rejection)}`)
-  }
+  if (!incidentGraph) throw new Error("Canonical incident graph bootstrap is disabled")
   const cacheFile = exactlyOne(
-    decoded.snapshot,
+    incidentGraph.codeGraph,
     (node) => node.kind === "file" && node.label === "cache.ts",
     "cache.ts file",
   )
   const checkoutCache = exactlyOne(
-    decoded.snapshot,
+    incidentGraph.codeGraph,
     (node) => node.kind === "function" && node.label === "CheckoutCache",
     "CheckoutCache function",
   )
@@ -346,13 +349,7 @@ async function runCanonicalPocProof(): Promise<{
   const handler = createCoreHandler({
     runtime,
     remediationExecutor,
-    incidentGraph: {
-      codeGraph: decoded.snapshot,
-      trustedCorrelations: [{
-        ...TRUSTED_CORRELATION,
-        changedFileNodeId: cacheFile.id,
-      }],
-    },
+    incidentGraph,
   })
   const client = createPodoClient({
     baseUrl: "http://podo.integration.test",

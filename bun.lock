@@ -30,6 +30,7 @@
         "@podo/contracts": "workspace:*",
         "@podo/domain": "workspace:*",
         "@podo/plugin-github": "workspace:*",
+        "@podo/plugin-graphify": "workspace:*",
       },
     },
     "apps/dashboard": {
