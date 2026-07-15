@@ -60,12 +60,19 @@ describe("createPodoClient", () => {
     })
 
     await client.startIncidentInvestigation("incident/1", { cwd: "/repo" })
+    await client.getIncidentAudit("incident/1")
 
-    expect(requests).toEqual([{
-      url: "http://podo.test/api/incidents/incident%2F1/investigation",
-      method: "POST",
-      body: { cwd: "/repo" },
-    }])
+    expect(requests).toEqual([
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/investigation",
+        method: "POST",
+        body: { cwd: "/repo" },
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/audit",
+        method: "GET",
+      },
+    ])
   })
 
   test("reads an evidence-specific causal path with encoded identities", async () => {

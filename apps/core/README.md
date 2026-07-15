@@ -49,9 +49,12 @@ connection. `/api/system` and `/readyz` expose `remediation.configured` without
 making remediation availability a process-readiness requirement.
 
 This composition is a local/POC operator capability, not a broad production
-rollout gate. Core keeps a minimum in-memory audit boundary for every configured
-remediation and delivery: request, approval or denial, execution start, and
-sanitized verification or delivery success/failure.
+rollout gate. Core keeps a minimum in-memory audit boundary for investigation,
+remediation, and delivery: request, approval or denial, execution start,
+diagnosis outcome, and sanitized verification or delivery success/failure.
+`GET /api/incidents/:id/audit` returns the incident-wide investigation and
+diagnosis lifecycle with evidence attribution. It omits raw prompts, model
+output, commands, diffs, and provider errors.
 `GET /api/incidents/:id/remediation/audit`
 returns the ordered typed events. It records stable Core identifiers, decisions,
 sanitized failure codes, and the stable full-artifact ID; it never records raw

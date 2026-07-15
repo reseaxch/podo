@@ -12,6 +12,7 @@ import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 import { IncidentCausalPathService, type IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
+import { IncidentAuditStore } from "./modules/audit/incident-audit"
 import { IncidentRemediationService, type IncidentRemediationExecutor } from "./modules/remediation/incident-remediation"
 import { IncidentDeliveryService, type PullRequestDeliveryConfig } from "./modules/remediation/incident-delivery"
 import { SettingsStore } from "./settings"
@@ -46,7 +47,8 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   })
   const settings = new SettingsStore()
   const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
-  const incidentInvestigations = new IncidentInvestigationCoordinator(incidentMonitor, investigations, settings)
+  const incidentAudit = new IncidentAuditStore()
+  const incidentInvestigations = new IncidentInvestigationCoordinator(incidentMonitor, investigations, settings, incidentAudit)
   const incidentCausalPaths = new IncidentCausalPathService(incidentMonitor, options.incidentGraph)
   const remediationExecutor = options.remediationExecutor
     ?? options.remediationExecutorFactory?.(() => investigations.acquireRuntime())
@@ -104,6 +106,14 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       return request.method === "GET"
         ? json({ incidents: incidentMonitor.listIncidents().map((incident) => incidentInvestigations.publicIncident(incident)) })
         : json({ error: "method_not_allowed" }, 405)
+    }
+
+    const incidentAuditMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/audit$/)
+    if (incidentAuditMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      const incidentId = decodeURIComponent(incidentAuditMatch[1])
+      if (!incidentMonitor.getIncident(incidentId)) return json({ error: "not_found" }, 404)
+      return json({ events: incidentAudit.get(incidentId) })
     }
 
     const incidentInvestigationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/investigation$/)

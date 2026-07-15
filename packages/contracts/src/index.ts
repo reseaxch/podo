@@ -327,6 +327,38 @@ export interface GetIncidentRemediationAuditResponse {
   events: IncidentRemediationAuditEvent[]
 }
 
+interface IncidentAuditEventBase {
+  sequence: number
+  occurredAt: string
+  incidentId: string
+}
+
+export type IncidentAuditEvent =
+  | IncidentAuditEventBase & { kind: "investigation.requested" }
+  | IncidentAuditEventBase & { kind: "investigation.started"; investigationId: string }
+  | IncidentAuditEventBase & {
+    kind: "investigation.approval_denied"
+    investigationId: string
+    approvalKind: InvestigationApproval["kind"]
+  }
+  | IncidentAuditEventBase & { kind: "investigation.completed"; investigationId: string }
+  | IncidentAuditEventBase & { kind: "investigation.failed"; investigationId: string }
+  | IncidentAuditEventBase & { kind: "investigation.cancelled"; investigationId: string }
+  | IncidentAuditEventBase & {
+    kind: "investigation.diagnosis_validated"
+    investigationId: string
+    evidenceIds: string[]
+  }
+  | IncidentAuditEventBase & {
+    kind: "investigation.diagnosis_rejected"
+    investigationId: string
+    code: IncidentDiagnosisErrorCode
+  }
+
+export interface GetIncidentAuditResponse {
+  events: IncidentAuditEvent[]
+}
+
 export type IncidentDeliveryErrorCode =
   | "policy_denied"
   | "artifact_changed"

@@ -374,5 +374,38 @@ describe("incident-scoped investigation", () => {
       id: started.investigation.id,
       status: "failed",
     })
+
+    const audit = await client.getIncidentAudit(incidentId)
+    expect(audit.events.map(({ kind }) => kind)).toEqual([
+      "investigation.requested",
+      "investigation.started",
+      "investigation.approval_denied",
+      "investigation.failed",
+      "investigation.diagnosis_rejected",
+    ])
+    expect(audit.events[2]).toMatchObject({ approvalKind: "command" })
+    expect(JSON.stringify(audit)).not.toContain("curl production.example")
+    expect(JSON.stringify(audit)).not.toContain("sensitive raw runtime failure")
+  })
+
+  test("audits validated investigation outcome once with evidence attribution", async () => {
+    const { client, runtime } = testClient()
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const started = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    const evidenceIds = started.incident.evidence.map(({ id }) => id)
+    complete(runtime, validDiagnosis(evidenceIds))
+
+    await client.getIncident(incidentId)
+    await client.getIncident(incidentId)
+    const audit = await client.getIncidentAudit(incidentId)
+
+    expect(audit.events.map(({ kind }) => kind)).toEqual([
+      "investigation.requested",
+      "investigation.started",
+      "investigation.completed",
+      "investigation.diagnosis_validated",
+    ])
+    expect(audit.events[3]).toMatchObject({ evidenceIds })
   })
 })

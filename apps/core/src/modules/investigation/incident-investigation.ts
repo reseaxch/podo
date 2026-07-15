@@ -17,6 +17,7 @@ import {
 } from "@podo/domain"
 import type { InvestigationService } from "../../investigations"
 import type { SettingsStore } from "../../settings"
+import type { IncidentAuditStore } from "../audit/incident-audit"
 import type { IncidentMonitor } from "../incidents/incident-monitor"
 import type { TelemetryEvent } from "../telemetry"
 
@@ -36,11 +37,14 @@ export class IncidentInvestigationCoordinator {
   private readonly evidenceByIncident = new Map<string, PromptEvidence[]>()
   private readonly diagnosisByIncident = new Map<string, IncidentDiagnosis>()
   private readonly pendingStarts = new Map<string, Promise<StartIncidentInvestigationResult>>()
+  private readonly terminalAuditByIncident = new Set<string>()
+  private readonly diagnosisAuditByIncident = new Set<string>()
 
   constructor(
     private readonly incidents: IncidentMonitor,
     private readonly investigations: InvestigationService,
     private readonly settings: SettingsStore,
+    private readonly audit: IncidentAuditStore,
   ) {}
 
   async start(
@@ -83,6 +87,8 @@ export class IncidentInvestigationCoordinator {
     if (!incident) {
       return { ok: false, status: 404, error: "not_found", message: "Incident was not found" }
     }
+
+    this.audit.append(incidentId, { kind: "investigation.requested" })
 
     const mode = this.settings.get().autonomyMode
     const decision = evaluateReaction({
@@ -157,7 +163,19 @@ export class IncidentInvestigationCoordinator {
       cwd: input.cwd,
       sandbox: "read-only",
       prompt,
-    }, { approvalPolicy: "deny_all", developerInstructions })
+    }, {
+      approvalPolicy: "deny_all",
+      developerInstructions,
+      onEvent: (event) => this.auditInvestigationEvent(incidentId, event),
+      onApprovalDenied: (approvalKind) => {
+        const investigationId = this.investigationByIncident.get(incidentId)
+        if (investigationId) this.audit.append(incidentId, {
+          kind: "investigation.approval_denied",
+          investigationId,
+          approvalKind,
+        })
+      },
+    })
     this.investigationByIncident.set(incidentId, started.investigation.id)
     this.evidenceByIncident.set(incidentId, evidence)
 
@@ -215,7 +233,35 @@ export class IncidentInvestigationCoordinator {
 
     if (!diagnosis) return null
     this.diagnosisByIncident.set(incident.id, diagnosis)
+    if (!this.diagnosisAuditByIncident.has(incident.id)) {
+      this.diagnosisAuditByIncident.add(incident.id)
+      if (diagnosis.status === "validated") {
+        this.audit.append(incident.id, {
+          kind: "investigation.diagnosis_validated",
+          investigationId,
+          evidenceIds: [...diagnosis.evidenceIds],
+        })
+      } else {
+        this.audit.append(incident.id, {
+          kind: "investigation.diagnosis_rejected",
+          investigationId,
+          code: diagnosis.error.code,
+        })
+      }
+    }
     return structuredClone(diagnosis)
+  }
+
+  private auditInvestigationEvent(incidentId: string, event: import("@podo/contracts").InvestigationEvent): void {
+    if (event.kind === "investigation.started") {
+      this.audit.append(incidentId, { kind: "investigation.started", investigationId: event.investigationId })
+      return
+    }
+    if (this.terminalAuditByIncident.has(incidentId)) return
+    if (event.kind === "investigation.completed" || event.kind === "investigation.failed" || event.kind === "investigation.cancelled") {
+      this.terminalAuditByIncident.add(incidentId)
+      this.audit.append(incidentId, { kind: event.kind, investigationId: event.investigationId })
+    }
   }
 
   private parseCompletedDiagnosis(incident: DetectedIncident, investigationId: string): IncidentDiagnosis {

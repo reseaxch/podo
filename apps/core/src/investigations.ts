@@ -26,6 +26,8 @@ interface InternalInvestigation {
   approval?: InternalApproval
   listeners: Set<(event: InvestigationEvent) => void>
   approvalPolicy: "interactive" | "deny_all"
+  onEvent?: (event: InvestigationEvent) => void
+  onApprovalDenied?: (approvalKind: InvestigationApproval["kind"]) => void
 }
 
 export interface InvestigationServiceOptions {
@@ -64,6 +66,8 @@ export class InvestigationService {
     options: {
       approvalPolicy?: "interactive" | "deny_all"
       developerInstructions?: string
+      onEvent?: (event: InvestigationEvent) => void
+      onApprovalDenied?: (approvalKind: InvestigationApproval["kind"]) => void
     } = {},
   ): Promise<StartInvestigationResponse> {
     const now = new Date().toISOString()
@@ -83,6 +87,8 @@ export class InvestigationService {
       outputDeltas: [],
       listeners: new Set(),
       approvalPolicy: options.approvalPolicy ?? "interactive",
+      ...(options.onEvent ? { onEvent: options.onEvent } : {}),
+      ...(options.onApprovalDenied ? { onApprovalDenied: options.onApprovalDenied } : {}),
     }
     this.investigations.set(investigation.public.id, investigation)
     this.append(investigation, { kind: "investigation.started", payload: { status: "starting" } })
@@ -235,6 +241,7 @@ export class InvestigationService {
         break
       case "approval.requested": {
         if (investigation.approvalPolicy === "deny_all") {
+          investigation.onApprovalDenied?.(event.approvalKind)
           this.denyRuntimeApproval(investigation, event.requestId)
           this.fail(investigation, `Investigator requested forbidden ${event.approvalKind} approval`)
           return
@@ -312,6 +319,7 @@ export class InvestigationService {
     investigation.events.push(event)
     if (investigation.events.length > this.eventLogLimit) investigation.events.splice(0, investigation.events.length - this.eventLogLimit)
     for (const listener of investigation.listeners) listener(event)
+    investigation.onEvent?.(structuredClone(event))
   }
 
   private fail(investigation: InternalInvestigation, message: string): void {
