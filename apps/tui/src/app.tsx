@@ -20,7 +20,7 @@ export interface TuiSettings {
   timeoutSeconds: number
 }
 
-export interface RootlineTuiViewModel {
+export interface PodoTuiViewModel {
   status: TuiRunStatus
   statusDetail?: string
   incidentTitle?: string
@@ -32,17 +32,17 @@ export interface RootlineTuiViewModel {
   settings: TuiSettings
 }
 
-export interface RootlineTuiController {
+export interface PodoTuiController {
   approve(approvalId: string): void
   deny(approvalId: string): void
   cancel(): void
   saveSettings(settings: TuiSettings): void
 }
 
-export interface RootlineTuiProps {
+export interface PodoTuiProps {
   coreUrl: string
-  viewModel?: RootlineTuiViewModel
-  controller?: RootlineTuiController
+  viewModel?: PodoTuiViewModel
+  controller?: PodoTuiController
 }
 
 type FocusArea = "run" | "settings"
@@ -52,7 +52,7 @@ const SETTINGS_FIELDS: readonly SettingsField[] = ["mode", "monitoringEnabled", 
 const MODES: readonly TuiAutonomyMode[] = ["observe", "recommend", "act_with_approval"]
 const TIMEOUT_STEP_SECONDS = 15
 
-const defaultViewModel: RootlineTuiViewModel = {
+const defaultViewModel: PodoTuiViewModel = {
   status: "loading",
   statusDetail: "Connecting to core",
   evidence: [],
@@ -64,7 +64,7 @@ const defaultViewModel: RootlineTuiViewModel = {
   },
 }
 
-const noOpController: RootlineTuiController = {
+const noOpController: PodoTuiController = {
   approve() {},
   deny() {},
   cancel() {},
@@ -138,7 +138,7 @@ function isPlainSinglePress(key: {
   )
 }
 
-export function RootlineTui({ coreUrl, viewModel = defaultViewModel, controller = noOpController }: RootlineTuiProps) {
+export function PodoTui({ coreUrl, viewModel = defaultViewModel, controller = noOpController }: PodoTuiProps) {
   const renderer = useRenderer()
   const { width } = useTerminalDimensions()
   const [focus, setFocus] = useState<FocusArea>("run")
@@ -214,7 +214,7 @@ export function RootlineTui({ coreUrl, viewModel = defaultViewModel, controller 
 
   return (
     <box style={{ flexDirection: "column", gap: 1, padding: 1 }}>
-      <box title="Rootline" style={{ border: true, paddingX: 1, height: 3, flexDirection: "row" }}>
+      <box title="Podo" style={{ border: true, paddingX: 1, height: 3, flexDirection: "row" }}>
         <text fg="#7dd3fc">incident → evidence → root cause → tested fix → pull request</text>
         {!narrow && <text fg="#64748b">  Core: {coreUrl}</text>}
       </box>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { CodexRuntime, CodexRuntimeEvent, StartCodexThreadInput } from "@rootline/codex-app-server-client"
-import type { InvestigationEvent } from "@rootline/contracts"
+import type { CodexRuntime, CodexRuntimeEvent, StartCodexThreadInput } from "@podo/codex-app-server-client"
+import type { InvestigationEvent } from "@podo/contracts"
 import { createCoreHandler } from "./app"
 
 class FakeRuntime implements CodexRuntime {
@@ -21,7 +21,7 @@ class FakeRuntime implements CodexRuntime {
 }
 
 async function start(handler: ReturnType<typeof createCoreHandler>) {
-  const response = await handler(new Request("http://rootline.test/api/investigations", {
+  const response = await handler(new Request("http://podo.test/api/investigations", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ prompt: "investigate", cwd: "/repo", sandbox: "workspace-write" }),
@@ -33,7 +33,7 @@ async function start(handler: ReturnType<typeof createCoreHandler>) {
 describe("investigation orchestration", () => {
   test("requires explicit cwd and sandbox policy", async () => {
     const handler = createCoreHandler({ runtime: new FakeRuntime() })
-    const response = await handler(new Request("http://rootline.test/api/investigations", { method: "POST", body: JSON.stringify({ prompt: "x" }) }))
+    const response = await handler(new Request("http://podo.test/api/investigations", { method: "POST", body: JSON.stringify({ prompt: "x" }) }))
     expect(response.status).toBe(400)
     expect(await response.json()).toMatchObject({ error: "invalid_request" })
   })
@@ -41,7 +41,7 @@ describe("investigation orchestration", () => {
   test("rejects client-supplied developer instructions at the public boundary", async () => {
     const runtime = new FakeRuntime()
     const handler = createCoreHandler({ runtime })
-    const response = await handler(new Request("http://rootline.test/api/investigations", {
+    const response = await handler(new Request("http://podo.test/api/investigations", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -61,13 +61,13 @@ describe("investigation orchestration", () => {
     const handler = createCoreHandler({ runtime })
     const id = await start(handler)
     runtime.emit({ kind: "approval.requested", requestId: 44, approvalKind: "file_change", threadId: "internal-thread-1", turnId: "internal-turn-1", itemId: "item", reason: "write patch" })
-    const current = await handler(new Request(`http://rootline.test/api/investigations/${id}`))
+    const current = await handler(new Request(`http://podo.test/api/investigations/${id}`))
     const body = await current.json() as { investigation: Record<string, unknown> }
     expect(JSON.stringify(body)).not.toContain("internal-thread")
     expect(body.investigation.status).toBe("waiting_for_approval")
     expect(runtime.decisions).toEqual([])
     const approval = body.investigation.pendingApproval as { id: string }
-    const denied = await handler(new Request(`http://rootline.test/api/investigations/${id}/approvals/${approval.id}`, {
+    const denied = await handler(new Request(`http://podo.test/api/investigations/${id}/approvals/${approval.id}`, {
       method: "POST",
       body: JSON.stringify({ decision: "deny" }),
     }))
@@ -81,7 +81,7 @@ describe("investigation orchestration", () => {
     const id = await start(handler)
     runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "evidence" })
     runtime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "internal-turn-1", status: "completed" })
-    const response = await handler(new Request(`http://rootline.test/api/investigations/${id}/events`, { headers: { "last-event-id": "1" } }))
+    const response = await handler(new Request(`http://podo.test/api/investigations/${id}/events`, { headers: { "last-event-id": "1" } }))
     expect(response.status).toBe(200)
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
@@ -102,7 +102,7 @@ describe("investigation orchestration", () => {
     const handler = createCoreHandler({ runtime })
     const id = await start(handler)
     runtime.emit({ kind: "runtime.error", message: "app-server EOF" })
-    const response = await handler(new Request(`http://rootline.test/api/investigations/${id}`))
+    const response = await handler(new Request(`http://podo.test/api/investigations/${id}`))
     expect(await response.json()).toMatchObject({ investigation: { status: "failed", error: "app-server EOF" } })
   })
 
@@ -117,16 +117,16 @@ describe("investigation orchestration", () => {
     })
     const firstId = await start(handler)
     crashed.emit({ kind: "runtime.error", message: "app-server EOF" })
-    const degraded = await handler(new Request("http://rootline.test/readyz"))
+    const degraded = await handler(new Request("http://podo.test/readyz"))
     expect(degraded.status).toBe(503)
     expect(await degraded.json()).toMatchObject({ status: "degraded", codex: { available: false, error: "app-server EOF" } })
     const secondId = await start(handler)
     expect(factoryCalls).toBe(1)
     expect({ crashedStarts: crashed.starts, crashedTurns: crashed.turns, crashedResumes: crashed.resumes }).toEqual({ crashedStarts: 1, crashedTurns: 1, crashedResumes: 0 })
     expect({ freshStarts: fresh.starts, freshTurns: fresh.turns, freshResumes: fresh.resumes }).toEqual({ freshStarts: 1, freshTurns: 1, freshResumes: 0 })
-    expect((await (await handler(new Request(`http://rootline.test/api/investigations/${firstId}`))).json() as { investigation: { status: string } }).investigation.status).toBe("failed")
-    expect((await (await handler(new Request(`http://rootline.test/api/investigations/${secondId}`))).json() as { investigation: { status: string } }).investigation.status).toBe("running")
-    const ready = await handler(new Request("http://rootline.test/readyz"))
+    expect((await (await handler(new Request(`http://podo.test/api/investigations/${firstId}`))).json() as { investigation: { status: string } }).investigation.status).toBe("failed")
+    expect((await (await handler(new Request(`http://podo.test/api/investigations/${secondId}`))).json() as { investigation: { status: string } }).investigation.status).toBe("running")
+    const ready = await handler(new Request("http://podo.test/readyz"))
     expect(ready.status).toBe(200)
     expect(await ready.json()).toMatchObject({ status: "ready", codex: { available: true } })
   })
@@ -136,10 +136,10 @@ describe("investigation orchestration", () => {
     const handler = createCoreHandler({ runtime })
     const id = await start(handler)
     runtime.emit({ kind: "approval.requested", requestId: 45, approvalKind: "user_input", threadId: "internal-thread-1", turnId: "internal-turn-1", itemId: "item", questions: [] })
-    const current = await handler(new Request(`http://rootline.test/api/investigations/${id}`))
+    const current = await handler(new Request(`http://podo.test/api/investigations/${id}`))
     const approvalId = ((await current.json() as { investigation: { pendingApproval: { id: string } } }).investigation.pendingApproval.id)
     for (const answers of [null, [], { question: "not-an-array" }, { question: ["ok", 1] }]) {
-      const response = await handler(new Request(`http://rootline.test/api/investigations/${id}/approvals/${approvalId}`, {
+      const response = await handler(new Request(`http://podo.test/api/investigations/${id}/approvals/${approvalId}`, {
         method: "POST",
         body: JSON.stringify({ decision: "approve", answers }),
       }))
@@ -154,7 +154,7 @@ describe("investigation orchestration", () => {
     const id = await start(handler)
     runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "one" })
     runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "two" })
-    const response = await handler(new Request(`http://rootline.test/api/investigations/${id}/events`, { headers: { "last-event-id": "0" } }))
+    const response = await handler(new Request(`http://podo.test/api/investigations/${id}/events`, { headers: { "last-event-id": "0" } }))
     expect(response.status).toBe(409)
     expect(await response.json()).toMatchObject({ error: "event_replay_expired" })
   })

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import type { CodexRuntime, CodexRuntimeEvent } from "@rootline/codex-app-server-client"
-import { createRootlineClient } from "../../../packages/client/src/index"
+import type { CodexRuntime, CodexRuntimeEvent } from "@podo/codex-app-server-client"
+import { createPodoClient } from "../../../packages/client/src/index"
 import { createCoreHandler } from "./app"
 
 test("typed client consumes the core investigation and event contracts", async () => {
@@ -17,8 +17,8 @@ test("typed client consumes the core investigation and event contracts", async (
     async close() {},
   }
   const handler = createCoreHandler({ runtime })
-  const client = createRootlineClient({
-    baseUrl: "http://rootline.test",
+  const client = createPodoClient({
+    baseUrl: "http://podo.test",
     fetch: (input, init) => handler(new Request(input, init)),
   })
   const started = await client.start({ prompt: "investigate", cwd: "/repo", sandbox: "read-only" })
@@ -52,8 +52,8 @@ test("typed client consumes the core investigation and event contracts", async (
 
 test("typed client reads and updates the core-owned settings contract", async () => {
   const handler = createCoreHandler()
-  const client = createRootlineClient({
-    baseUrl: "http://rootline.test",
+  const client = createPodoClient({
+    baseUrl: "http://podo.test",
     fetch: (input, init) => handler(new Request(input, init)),
   })
 
@@ -79,8 +79,8 @@ test("typed client reads and updates the core-owned settings contract", async ()
 
 test("typed client ingests telemetry and reads core-owned incidents", async () => {
   const handler = createCoreHandler()
-  const client = createRootlineClient({
-    baseUrl: "http://rootline.test",
+  const client = createPodoClient({
+    baseUrl: "http://podo.test",
     fetch: (input, init) => handler(new Request(input, init)),
   })
   const base = Date.parse("2026-07-14T09:00:00.000Z")

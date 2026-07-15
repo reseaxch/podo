@@ -4,7 +4,7 @@
 // the incident: a deployment removes the checkout cache bound, heap usage climbs
 // monotonically, then the endpoint starts returning HTTP 500 with traces.
 //
-// Every event conforms to @rootline/contracts TelemetryEvent so the otel-replay
+// Every event conforms to @podo/contracts TelemetryEvent so the otel-replay
 // adapter and domain normalizer accept it unchanged. Output is fully
 // deterministic (fixed base time, fixed step, no randomness) so the replay is
 // reproducible per FR-2.

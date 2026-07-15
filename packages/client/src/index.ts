@@ -16,9 +16,9 @@ import type {
   TelemetryEventInput,
   UpdateSettingsRequest,
   UpdateSettingsResponse,
-} from "@rootline/contracts"
+} from "@podo/contracts"
 
-export interface RootlineClientOptions {
+export interface PodoClientOptions {
   baseUrl?: string
   fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 }
@@ -28,7 +28,7 @@ export interface SubscribeEventsOptions {
   signal?: AbortSignal
 }
 
-export interface RootlineClient {
+export interface PodoClient {
   health(): Promise<HealthResponse>
   systemStatus(): Promise<SystemStatusResponse>
   getSettings(): Promise<GetSettingsResponse>
@@ -47,19 +47,19 @@ export interface RootlineClient {
   subscribeEvents(id: string, options?: SubscribeEventsOptions): AsyncIterable<InvestigationEvent>
 }
 
-export interface RootlineIncidentClient extends RootlineClient {
+export interface PodoIncidentClient extends PodoClient {
   startIncidentInvestigation(id: string, input: StartIncidentInvestigationRequest): Promise<StartIncidentInvestigationResponse>
 }
 
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = await response.text()
-    throw new Error(`Rootline request failed (${response.status}): ${detail}`)
+    throw new Error(`Podo request failed (${response.status}): ${detail}`)
   }
   return (await response.json()) as T
 }
 
-export function createRootlineClient(options: RootlineClientOptions = {}): RootlineIncidentClient {
+export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentClient {
   const baseUrl = (options.baseUrl ?? "http://127.0.0.1:4100").replace(/\/$/, "")
   const request = options.fetch ?? globalThis.fetch
   const investigationUrl = (id: string) => `${baseUrl}/api/investigations/${encodeURIComponent(id)}`
@@ -92,7 +92,7 @@ export function createRootlineClient(options: RootlineClientOptions = {}): Rootl
 }
 
 async function* streamEvents(
-  request: NonNullable<RootlineClientOptions["fetch"]>,
+  request: NonNullable<PodoClientOptions["fetch"]>,
   url: string,
   options: SubscribeEventsOptions,
 ): AsyncGenerator<InvestigationEvent> {
@@ -102,7 +102,7 @@ async function* streamEvents(
   })
   if (!response.ok || !response.body) {
     const detail = await response.text()
-    throw new Error(`Rootline event stream failed (${response.status}): ${detail}`)
+    throw new Error(`Podo event stream failed (${response.status}): ${detail}`)
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()

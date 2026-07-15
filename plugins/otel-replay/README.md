@@ -1,14 +1,14 @@
 # OpenTelemetry replay plugin
 
-`@rootline/plugin-otel-replay` deterministically replays normalized telemetry into an injected Rootline ingestion boundary. It does not access core storage and it does not own incident decisions.
+`@podo/plugin-otel-replay` deterministically replays normalized telemetry into an injected Podo ingestion boundary. It does not access core storage and it does not own incident decisions.
 
 ## Public boundary
 
 ```ts
-import { createRootlineClient } from "@rootline/client"
-import { replayTelemetry } from "@rootline/plugin-otel-replay"
+import { createPodoClient } from "@podo/client"
+import { replayTelemetry } from "@podo/plugin-otel-replay"
 
-const client = createRootlineClient({ baseUrl: "http://127.0.0.1:4100" })
+const client = createPodoClient({ baseUrl: "http://127.0.0.1:4100" })
 const summary = await replayTelemetry(events, client, {
   acceleration: 100,
   batchSize: 50,
@@ -16,7 +16,7 @@ const summary = await replayTelemetry(events, client, {
 })
 ```
 
-`TelemetryReplaySink` is structurally compatible with the `ingestTelemetry` method on `RootlineClient`, so tests can inject an in-memory sink and production callers can inject the typed client. A sink may also consume the optional `AbortSignal`; the adapter never creates network or persistence side effects by itself.
+`TelemetryReplaySink` is structurally compatible with the `ingestTelemetry` method on `PodoClient`, so tests can inject an in-memory sink and production callers can inject the typed client. A sink may also consume the optional `AbortSignal`; the adapter never creates network or persistence side effects by itself.
 
 `ReplaySummary` is audit-oriented and reports:
 

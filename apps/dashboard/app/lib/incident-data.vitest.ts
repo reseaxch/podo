@@ -1,5 +1,5 @@
-import type { RootlineClient } from "@rootline/client"
-import type { DetectedIncident } from "@rootline/contracts"
+import type { PodoClient } from "@podo/client"
+import type { DetectedIncident } from "@podo/contracts"
 import { describe, expect, it, vi } from "vitest"
 
 import { getIncidentWorkspace } from "./incident-data"
@@ -23,7 +23,7 @@ describe("getIncidentWorkspace", () => {
     const client = {
       getIncident: vi.fn(async () => ({ incident: selected })),
       listIncidents: vi.fn(),
-    } as unknown as RootlineClient
+    } as unknown as PodoClient
 
     await expect(
       getIncidentWorkspace({ client, incidentId: selected.id }),
@@ -38,7 +38,7 @@ describe("getIncidentWorkspace", () => {
     const incidents = [newest, older]
     const client = {
       listIncidents: vi.fn(async () => ({ incidents })),
-    } as unknown as RootlineClient
+    } as unknown as PodoClient
 
     await expect(getIncidentWorkspace({ client })).resolves.toEqual(newest)
     expect(incidents).toEqual([newest, older])
@@ -47,7 +47,7 @@ describe("getIncidentWorkspace", () => {
   it("returns null when core has no detected incidents", async () => {
     const client = {
       listIncidents: vi.fn(async () => ({ incidents: [] })),
-    } as unknown as RootlineClient
+    } as unknown as PodoClient
 
     await expect(getIncidentWorkspace({ client })).resolves.toBeNull()
   })

@@ -21,5 +21,5 @@ status when one exists. The monitor also resolves each incident evidence record
 back to its normalized telemetry event for the core-owned investigator prompt;
 this internal provenance API is not exposed to clients.
 
-Clients start the transition through `@rootline/client`, never this module
+Clients start the transition through `@podo/client`, never this module
 directly, and cannot submit replacement prompt text or evidence.

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { toRootlineSettings, toTuiSettings, toTuiViewModel } from "./connected"
+import { toPodoSettings, toTuiSettings, toTuiViewModel } from "./connected"
 
 const settings = {
   autonomyMode: "act_with_approval" as const,
@@ -11,13 +11,13 @@ const settings = {
 
 describe("connected TUI adapter", () => {
   test("maps shared settings without changing wire values", () => {
-    expect(toRootlineSettings(toTuiSettings(settings))).toEqual(settings)
+    expect(toPodoSettings(toTuiSettings(settings))).toEqual(settings)
   })
 
   test("maps core readiness and incident evidence into the terminal view model", () => {
     const viewModel = toTuiViewModel(
       {
-        service: "rootline-core",
+        service: "podo-core",
         status: "ready",
         version: "0.0.0",
         codex: { available: true, binary: "codex", transport: "stdio", version: "0.142.0" },

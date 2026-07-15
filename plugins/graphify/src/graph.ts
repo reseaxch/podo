@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 
 export const GRAPHIFY_SCHEMA_VERSION = "1.0" as const
-export const ROOTLINE_CODE_GRAPH_SCHEMA_VERSION = "rootline.code-graph.v1" as const
+export const PODO_CODE_GRAPH_SCHEMA_VERSION = "podo.code-graph.v1" as const
 
 export const GRAPHIFY_NODE_KINDS = [
   "repository",
@@ -57,7 +57,7 @@ export interface GraphifyGraphInput {
   relations: readonly GraphifyRelationInput[]
 }
 
-export interface RootlineCodeGraphNode {
+export interface PodoCodeGraphNode {
   id: string
   externalId: string
   kind: GraphifyNodeKind
@@ -66,7 +66,7 @@ export interface RootlineCodeGraphNode {
   location?: GraphifySourceLocation
 }
 
-export interface RootlineCodeGraphLink {
+export interface PodoCodeGraphLink {
   id: string
   externalId: string
   type: GraphifyRelationType
@@ -78,16 +78,16 @@ export interface RootlineCodeGraphLink {
   location?: GraphifySourceLocation
 }
 
-export interface RootlineCodeGraphSnapshot {
+export interface PodoCodeGraphSnapshot {
   id: string
-  schemaVersion: typeof ROOTLINE_CODE_GRAPH_SCHEMA_VERSION
+  schemaVersion: typeof PODO_CODE_GRAPH_SCHEMA_VERSION
   source: {
     provider: "graphify"
     graphId: string
     schemaVersion: typeof GRAPHIFY_SCHEMA_VERSION
   }
-  nodes: RootlineCodeGraphNode[]
-  links: RootlineCodeGraphLink[]
+  nodes: PodoCodeGraphNode[]
+  links: PodoCodeGraphLink[]
 }
 
 export type GraphifyImportIssueCode =
@@ -108,7 +108,7 @@ export interface GraphifyImportIssue {
 }
 
 export type GraphifyImportResult =
-  | { ok: true; snapshot: RootlineCodeGraphSnapshot }
+  | { ok: true; snapshot: PodoCodeGraphSnapshot }
   | {
       ok: false
       rejection: {
@@ -536,8 +536,8 @@ export function normalizeGraphifyGraph(input: unknown): GraphifyImportResult {
   }
 
   const normalizedNodes = nodes
-    .map((node): RootlineCodeGraphNode => {
-      const normalized: RootlineCodeGraphNode = {
+    .map((node): PodoCodeGraphNode => {
+      const normalized: PodoCodeGraphNode = {
         id: contentId("graph_node", ["graphify", graphId, "node", node.id]),
         externalId: node.id,
         kind: node.kind,
@@ -553,8 +553,8 @@ export function normalizeGraphifyGraph(input: unknown): GraphifyImportResult {
     normalizedNodes.map((node) => [node.externalId, node.id] as const),
   )
   const normalizedLinks = relations
-    .map((relation): RootlineCodeGraphLink => {
-      const normalized: RootlineCodeGraphLink = {
+    .map((relation): PodoCodeGraphLink => {
+      const normalized: PodoCodeGraphLink = {
         id: contentId("graph_link", ["graphify", graphId, "relation", relation.id]),
         externalId: relation.id,
         type: relation.type,
@@ -570,7 +570,7 @@ export function normalizeGraphifyGraph(input: unknown): GraphifyImportResult {
     .sort((left, right) => compareStrings(left.externalId, right.externalId))
 
   const snapshotContent = {
-    schemaVersion: ROOTLINE_CODE_GRAPH_SCHEMA_VERSION,
+    schemaVersion: PODO_CODE_GRAPH_SCHEMA_VERSION,
     source: {
       provider: "graphify" as const,
       graphId,

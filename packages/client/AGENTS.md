@@ -1,6 +1,6 @@
 # Typed client ownership
 
-- Keep the API typed against `@rootline/contracts`.
+- Keep the API typed against `@podo/contracts`.
 - Centralize HTTP and SSE mechanics here instead of duplicating them in applications.
 - Preserve event ordering, reconnect cursors, abort behavior, and useful error decoding.
 - Do not add product decisions, persistence access, or raw Codex JSON-RPC.

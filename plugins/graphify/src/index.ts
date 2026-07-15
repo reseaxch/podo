@@ -1,9 +1,9 @@
-import type { PluginManifest } from "@rootline/plugin-sdk"
+import type { PluginManifest } from "@podo/plugin-sdk"
 
 export * from "./graph"
 
 export const graphifyPluginManifest = {
-  id: "rootline.graphify",
+  id: "podo.graphify",
   displayName: "Graphify code graph",
   version: "0.0.0",
   capabilities: ["code_graph"],

@@ -1,6 +1,6 @@
 # Codex runtime
 
-Owns the core-side Codex runtime boundary. Protocol transport and the stable `CodexRuntime` adapter live in `@rootline/codex-app-server-client`; core maps those runtime events into authoritative investigation, approval, audit, and terminal state.
+Owns the core-side Codex runtime boundary. Protocol transport and the stable `CodexRuntime` adapter live in `@podo/codex-app-server-client`; core maps those runtime events into authoritative investigation, approval, audit, and terminal state.
 
 MVP invariants:
 

@@ -1,7 +1,7 @@
 # Graphify plugin
 
-`@rootline/plugin-graphify` validates and normalizes a Graphify code-graph export into a
-complete Rootline-owned snapshot. It is a pure adapter boundary: it does not read files,
+`@podo/plugin-graphify` validates and normalizes a Graphify code-graph export into a
+complete Podo-owned snapshot. It is a pure adapter boundary: it does not read files,
 call Graphify, access storage, or emit network requests. Callers own those concerns and may
 persist a successful snapshot atomically.
 
@@ -58,11 +58,11 @@ rejection. The adapter never silently drops an invalid node or relation.
 
 ## Normalized snapshot and identity
 
-A successful import returns `rootline.code-graph.v1`, retaining every external node/link ID,
+A successful import returns `podo.code-graph.v1`, retaining every external node/link ID,
 relation type, provenance value, and source location. Nodes and links are sorted by external
 ID, making the serialized snapshot independent of input array order.
 
-Rootline IDs use SHA-256-derived identities:
+Podo IDs use SHA-256-derived identities:
 
 - node ID: provider + `graphId` + external node ID;
 - link ID: provider + `graphId` + external relation ID;
@@ -74,7 +74,7 @@ creates a distinct identity namespace.
 
 ## Current limitation
 
-Schema `1.0` is Rootline's explicit compatibility boundary for the MVP; the repository does
+Schema `1.0` is Podo's explicit compatibility boundary for the MVP; the repository does
 not yet contain a pinned upstream Graphify export or official schema fixture. When that
 artifact is selected, adapt it into this exact payload (or add a separately tested versioned
 decoder) rather than weakening validation. Persistence/upsert, operational overlay nodes, and

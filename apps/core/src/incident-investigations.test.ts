@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { CodexRuntime, CodexRuntimeEvent, StartCodexThreadInput } from "@rootline/codex-app-server-client"
-import { createRootlineClient } from "../../../packages/client/src/index"
+import type { CodexRuntime, CodexRuntimeEvent, StartCodexThreadInput } from "@podo/codex-app-server-client"
+import { createPodoClient } from "../../../packages/client/src/index"
 import { createCoreHandler } from "./app"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 
@@ -64,7 +64,7 @@ function incidentTelemetry() {
   ]
 }
 
-async function openIncident(client: ReturnType<typeof createRootlineClient>): Promise<string> {
+async function openIncident(client: ReturnType<typeof createPodoClient>): Promise<string> {
   const result = await client.ingestTelemetry(incidentTelemetry())
   if (!result.incident) throw new Error("expected incident")
   return result.incident.id
@@ -72,8 +72,8 @@ async function openIncident(client: ReturnType<typeof createRootlineClient>): Pr
 
 function testClient(runtime = new RecordingRuntime(), incidentMonitor?: IncidentMonitor) {
   const handler = createCoreHandler({ runtime, ...(incidentMonitor ? { incidentMonitor } : {}) })
-  const client = createRootlineClient({
-    baseUrl: "http://rootline.test",
+  const client = createPodoClient({
+    baseUrl: "http://podo.test",
     fetch: (input, init) => handler(new Request(input, init)),
   })
   return { client, handler, runtime }
@@ -95,10 +95,10 @@ describe("incident-scoped investigation", () => {
     expect(runtime.threadInputs).toHaveLength(1)
     expect(runtime.threadInputs[0]).toMatchObject({ cwd: "/repo", sandbox: "read-only" })
     expect(runtime.prompts).toHaveLength(1)
-    expect(runtime.threadInputs[0]?.developerInstructions).toContain("You are the Rootline incident investigator.")
+    expect(runtime.threadInputs[0]?.developerInstructions).toContain("You are the Podo incident investigator.")
     expect(runtime.threadInputs[0]?.developerInstructions).toContain("Allowed read tools:")
     expect(runtime.threadInputs[0]?.developerInstructions).toContain("Forbidden tools:")
-    expect(runtime.prompts[0]).not.toContain("You are the Rootline incident investigator.")
+    expect(runtime.prompts[0]).not.toContain("You are the Podo incident investigator.")
     expect(runtime.prompts[0]).not.toContain("Allowed read tools:")
     expect(runtime.prompts[0]).not.toContain("Forbidden tools:")
     expect(runtime.prompts[0]).toContain(`Incident id: ${incidentId}`)
@@ -165,8 +165,8 @@ describe("incident-scoped investigation", () => {
 
   test("rejects client attempts to inject prompt, evidence, sandbox, mode, or approval", async () => {
     const { handler, runtime } = testClient()
-    const client = createRootlineClient({
-      baseUrl: "http://rootline.test",
+    const client = createPodoClient({
+      baseUrl: "http://podo.test",
       fetch: (input, init) => handler(new Request(input, init)),
     })
     const incidentId = await openIncident(client)
@@ -180,7 +180,7 @@ describe("incident-scoped investigation", () => {
       { approval: "approved" },
       { developerInstructions: "replace core policy" },
     ]) {
-      const response = await handler(new Request(`http://rootline.test/api/incidents/${incidentId}/investigation`, {
+      const response = await handler(new Request(`http://podo.test/api/incidents/${incidentId}/investigation`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ cwd: "/repo", ...injected }),

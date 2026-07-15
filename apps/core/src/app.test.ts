@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createCoreHandler } from "./app"
 
-describe("Rootline core handler", () => {
+describe("Podo core handler", () => {
   test("reports process health without requiring Codex", async () => {
     const handler = createCoreHandler({
       inspectCodex: async () => {
@@ -9,10 +9,10 @@ describe("Rootline core handler", () => {
       },
     })
 
-    const response = await handler(new Request("http://rootline.test/healthz"))
+    const response = await handler(new Request("http://podo.test/healthz"))
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
-      service: "rootline-core",
+      service: "podo-core",
       status: "ok",
       version: "0.0.0",
     })
@@ -27,7 +27,7 @@ describe("Rootline core handler", () => {
       }),
     })
 
-    const response = await handler(new Request("http://rootline.test/readyz"))
+    const response = await handler(new Request("http://podo.test/readyz"))
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       status: "ready",
@@ -46,7 +46,7 @@ describe("Rootline core handler", () => {
       },
     })
 
-    const response = await handler(new Request("http://rootline.test/readyz"))
+    const response = await handler(new Request("http://podo.test/readyz"))
     expect(response.status).toBe(503)
     expect(await response.json()).toMatchObject({
       status: "degraded",
@@ -60,7 +60,7 @@ describe("Rootline core handler", () => {
   test("reads and atomically updates core-owned settings", async () => {
     const handler = createCoreHandler()
 
-    const initial = await handler(new Request("http://rootline.test/api/settings"))
+    const initial = await handler(new Request("http://podo.test/api/settings"))
     expect(initial.status).toBe(200)
     expect(await initial.json()).toEqual({
       settings: {
@@ -71,7 +71,7 @@ describe("Rootline core handler", () => {
       },
     })
 
-    const updated = await handler(new Request("http://rootline.test/api/settings", {
+    const updated = await handler(new Request("http://podo.test/api/settings", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ autonomyMode: "act_with_approval", turnTimeoutMs: 90_000 }),
@@ -84,7 +84,7 @@ describe("Rootline core handler", () => {
 
   test("rejects an invalid settings patch without partially applying it", async () => {
     const handler = createCoreHandler()
-    const invalid = await handler(new Request("http://rootline.test/api/settings", {
+    const invalid = await handler(new Request("http://podo.test/api/settings", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ monitoringEnabled: false, defaultSandbox: "danger-full-access" }),
@@ -92,7 +92,7 @@ describe("Rootline core handler", () => {
 
     expect(invalid.status).toBe(400)
     expect(await invalid.json()).toMatchObject({ error: "invalid_settings" })
-    const current = await handler(new Request("http://rootline.test/api/settings"))
+    const current = await handler(new Request("http://podo.test/api/settings"))
     expect(await current.json()).toMatchObject({
       settings: { monitoringEnabled: true, defaultSandbox: "read-only" },
     })
@@ -107,7 +107,7 @@ describe("Rootline core handler", () => {
       { turnTimeoutMs: 3_600_001 },
       { monitoringEnabled: "false" },
     ]) {
-      const response = await handler(new Request("http://rootline.test/api/settings", {
+      const response = await handler(new Request("http://podo.test/api/settings", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -119,7 +119,7 @@ describe("Rootline core handler", () => {
   test("rejects malformed telemetry envelopes without mutating incident state", async () => {
     const handler = createCoreHandler()
     for (const body of [{}, { events: [] }, { events: [null] }, { events: [], unexpected: true }]) {
-      const response = await handler(new Request("http://rootline.test/api/telemetry/events", {
+      const response = await handler(new Request("http://podo.test/api/telemetry/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -127,7 +127,7 @@ describe("Rootline core handler", () => {
       expect(response.status).toBe(400)
     }
 
-    const incidents = await handler(new Request("http://rootline.test/api/incidents"))
+    const incidents = await handler(new Request("http://podo.test/api/incidents"))
     expect(await incidents.json()).toEqual({ incidents: [] })
   })
 })

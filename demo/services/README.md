@@ -1,7 +1,7 @@
 # Demo monorepo — cache-growth scenario
 
 Three TypeScript services used as the fixed input for the canonical
-`cache-growth` incident. This is demo fixture code, not a Rootline package; it is
+`cache-growth` incident. This is demo fixture code, not a Podo package; it is
 intentionally outside the root Bun workspace.
 
 ## Services

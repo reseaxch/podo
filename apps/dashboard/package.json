@@ -1,5 +1,5 @@
 {
-  "name": "@rootline/dashboard",
+  "name": "@podo/dashboard",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -15,8 +15,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@rootline/client": "workspace:*",
-    "@rootline/contracts": "workspace:*",
+    "@podo/client": "workspace:*",
+    "@podo/contracts": "workspace:*",
     "next": "^16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

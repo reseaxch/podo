@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto"
-import type { IngestTelemetryResponse, TelemetryEventInput } from "@rootline/contracts"
-import type { PluginManifest } from "@rootline/plugin-sdk"
+import type { IngestTelemetryResponse, TelemetryEventInput } from "@podo/contracts"
+import type { PluginManifest } from "@podo/plugin-sdk"
 
 export const otelReplayPluginManifest = {
-  id: "rootline.otel-replay",
+  id: "podo.otel-replay",
   displayName: "OpenTelemetry replay",
   version: "0.0.0",
   capabilities: ["telemetry_source"],

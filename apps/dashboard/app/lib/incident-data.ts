@@ -1,14 +1,14 @@
-import { createRootlineClient, type RootlineClient } from "@rootline/client"
-import type { DetectedIncident } from "@rootline/contracts"
+import { createPodoClient, type PodoClient } from "@podo/client"
+import type { DetectedIncident } from "@podo/contracts"
 
 type GetIncidentWorkspaceOptions = {
-  client?: RootlineClient
+  client?: PodoClient
   incidentId?: string
 }
 
-function createDashboardClient(): RootlineClient {
-  return createRootlineClient({
-    baseUrl: process.env.ROOTLINE_CORE_URL ?? "http://127.0.0.1:4100",
+function createDashboardClient(): PodoClient {
+  return createPodoClient({
+    baseUrl: process.env.PODO_CORE_URL ?? "http://127.0.0.1:4100",
     fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
   })
 }

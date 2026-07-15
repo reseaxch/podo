@@ -21,7 +21,7 @@ export interface PluginContext {
   }): void
 }
 
-export interface RootlinePlugin {
+export interface PodoPlugin {
   manifest: PluginManifest
   setup(context: PluginContext): Promise<void>
   dispose?(): Promise<void>

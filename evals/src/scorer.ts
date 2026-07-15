@@ -152,7 +152,7 @@ export function scoreEvaluation(
 
   return {
     schemaVersion: 1,
-    suite: "rootline-reaction-matrix",
+    suite: "podo-reaction-matrix",
     fixtureAdapterVersion: 2,
     scenarioFingerprint: scenarioFingerprint(cases),
     status: failedCases === 0 && contractErrors.length === 0 ? "passed" : "failed",

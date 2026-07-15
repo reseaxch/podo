@@ -1,11 +1,11 @@
 {
-  "name": "@rootline/plugin-github",
+  "name": "@podo/plugin-github",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@rootline/plugin-sdk": "workspace:*"
+    "@podo/plugin-sdk": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

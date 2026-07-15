@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { IngestTelemetryResponse, TelemetryEventInput } from "@rootline/contracts"
+import type { IngestTelemetryResponse, TelemetryEventInput } from "@podo/contracts"
 import {
   ReplayAbortedError,
   ReplayInputError,

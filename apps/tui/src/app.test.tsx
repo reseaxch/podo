@@ -2,12 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test"
 import type { KeyEvent } from "@opentui/core"
 import { testRender } from "@opentui/react/test-utils"
 import { act } from "react"
-import { RootlineTui, type RootlineTuiController, type RootlineTuiViewModel, type TuiRunStatus } from "./app"
+import { PodoTui, type PodoTuiController, type PodoTuiViewModel, type TuiRunStatus } from "./app"
 
 type Setup = Awaited<ReturnType<typeof testRender>>
 const activeRenderers: Setup[] = []
 
-const baseViewModel: RootlineTuiViewModel = {
+const baseViewModel: PodoTuiViewModel = {
   status: "idle",
   statusDetail: "Monitoring is healthy",
   incidentTitle: "checkout cache growth",
@@ -25,9 +25,9 @@ function createController() {
     approved: [] as string[],
     denied: [] as string[],
     cancelled: 0,
-    settings: [] as RootlineTuiViewModel["settings"][],
+    settings: [] as PodoTuiViewModel["settings"][],
   }
-  const controller: RootlineTuiController = {
+  const controller: PodoTuiController = {
     approve: (id) => calls.approved.push(id),
     deny: (id) => calls.denied.push(id),
     cancel: () => calls.cancelled++,
@@ -36,11 +36,11 @@ function createController() {
   return { controller, calls }
 }
 
-async function render(viewModel: RootlineTuiViewModel, controller?: RootlineTuiController, width = 100, height = 24) {
+async function render(viewModel: PodoTuiViewModel, controller?: PodoTuiController, width = 100, height = 24) {
   let setup!: Setup
   await act(async () => {
     setup = await testRender(
-      <RootlineTui
+      <PodoTui
         coreUrl="http://127.0.0.1:4100"
         viewModel={viewModel}
         {...(controller ? { controller } : {})}
@@ -87,7 +87,7 @@ afterEach(async () => {
   }
 })
 
-describe("RootlineTui states", () => {
+describe("PodoTui states", () => {
   const expected: Record<TuiRunStatus, string> = {
     loading: "LOADING",
     idle: "READY / IDLE",
@@ -123,7 +123,7 @@ describe("RootlineTui states", () => {
   })
 })
 
-describe("RootlineTui keyboard contract", () => {
+describe("PodoTui keyboard contract", () => {
   test("does not approve by default and requires an explicit approval key", async () => {
     const { controller, calls } = createController()
     const setup = await render(
@@ -158,7 +158,7 @@ describe("RootlineTui keyboard contract", () => {
 
   test("denies and cancels only through explicit keys", async () => {
     const { controller, calls } = createController()
-    const viewModel: RootlineTuiViewModel = {
+    const viewModel: PodoTuiViewModel = {
       ...baseViewModel,
       status: "waiting_for_approval",
       pendingApproval: { id: "approval-8", summary: "Run tests?" },

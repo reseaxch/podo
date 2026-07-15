@@ -12,7 +12,7 @@ afterEach(async () => {
 
 describe("eval CLI", () => {
   test("returns nonzero and machine-readable JSON for a failed candidate", async () => {
-    const directory = await mkdtemp(resolve(tmpdir(), "rootline-eval-"))
+    const directory = await mkdtemp(resolve(tmpdir(), "podo-eval-"))
     temporaryDirectories.push(directory)
     const cases = await buildEvaluationCases()
     const decisions = createReferenceDecisions(cases)

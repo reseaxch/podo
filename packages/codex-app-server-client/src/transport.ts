@@ -1,14 +1,14 @@
-import type { ClientRequest } from "@rootline/codex-protocol/generated/ClientRequest.ts"
-import type { InitializeResponse } from "@rootline/codex-protocol/generated/InitializeResponse.ts"
-import type { RequestId } from "@rootline/codex-protocol/generated/RequestId.ts"
-import type { ServerNotification } from "@rootline/codex-protocol/generated/ServerNotification.ts"
-import type { ServerRequest } from "@rootline/codex-protocol/generated/ServerRequest.ts"
-import type { ThreadReadResponse } from "@rootline/codex-protocol/generated/v2/ThreadReadResponse.ts"
-import type { ThreadResumeResponse } from "@rootline/codex-protocol/generated/v2/ThreadResumeResponse.ts"
-import type { ThreadStartResponse } from "@rootline/codex-protocol/generated/v2/ThreadStartResponse.ts"
-import type { TurnInterruptResponse } from "@rootline/codex-protocol/generated/v2/TurnInterruptResponse.ts"
-import type { TurnStartResponse } from "@rootline/codex-protocol/generated/v2/TurnStartResponse.ts"
-import type { TurnSteerResponse } from "@rootline/codex-protocol/generated/v2/TurnSteerResponse.ts"
+import type { ClientRequest } from "@podo/codex-protocol/generated/ClientRequest.ts"
+import type { InitializeResponse } from "@podo/codex-protocol/generated/InitializeResponse.ts"
+import type { RequestId } from "@podo/codex-protocol/generated/RequestId.ts"
+import type { ServerNotification } from "@podo/codex-protocol/generated/ServerNotification.ts"
+import type { ServerRequest } from "@podo/codex-protocol/generated/ServerRequest.ts"
+import type { ThreadReadResponse } from "@podo/codex-protocol/generated/v2/ThreadReadResponse.ts"
+import type { ThreadResumeResponse } from "@podo/codex-protocol/generated/v2/ThreadResumeResponse.ts"
+import type { ThreadStartResponse } from "@podo/codex-protocol/generated/v2/ThreadStartResponse.ts"
+import type { TurnInterruptResponse } from "@podo/codex-protocol/generated/v2/TurnInterruptResponse.ts"
+import type { TurnStartResponse } from "@podo/codex-protocol/generated/v2/TurnStartResponse.ts"
+import type { TurnSteerResponse } from "@podo/codex-protocol/generated/v2/TurnSteerResponse.ts"
 
 export interface CodexRuntimeInfo {
   binary: string
@@ -129,7 +129,7 @@ export class AppServerConnection {
       connection._initializeResult = await connection.request(
         "initialize",
         {
-          clientInfo: { name: "rootline", title: "Rootline", version: "0.0.0" },
+          clientInfo: { name: "podo", title: "Podo", version: "0.0.0" },
           capabilities: null,
         },
         { timeoutMs: options.initializeTimeoutMs ?? 10_000 },
@@ -308,7 +308,7 @@ export class AppServerConnection {
     if (typeof message.id === "number" || typeof message.id === "string") {
       const request = message as unknown as ServerRequest
       if (this.serverRequestListeners.size === 0) {
-        void this.rejectServerRequest(request.id, -32601, `Rootline has no handler for ${request.method}`)
+        void this.rejectServerRequest(request.id, -32601, `Podo has no handler for ${request.method}`)
       } else {
         for (const listener of this.serverRequestListeners) listener(request)
       }

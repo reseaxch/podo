@@ -1,7 +1,7 @@
-import type { PluginManifest } from "@rootline/plugin-sdk"
+import type { PluginManifest } from "@podo/plugin-sdk"
 
 export const githubPluginManifest = {
-  id: "rootline.github",
+  id: "podo.github",
   displayName: "GitHub",
   version: "0.0.0",
   capabilities: ["repository_read", "issue_write", "pull_request_write"],

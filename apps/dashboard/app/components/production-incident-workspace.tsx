@@ -2,7 +2,7 @@ import type {
   DetectedIncident,
   IncidentEvidence,
   TelemetryKind,
-} from "@rootline/contracts"
+} from "@podo/contracts"
 
 import { Icon } from "./ui/pictogram"
 
@@ -76,11 +76,11 @@ export function ProductionIncidentWorkspace({
   return (
     <main className="production-shell" data-ready="true">
       <header className="production-topbar">
-        <a aria-label="Rootline home" className="brand-mark" href="#incident">
+        <a aria-label="Podo home" className="brand-mark" href="#incident">
           <Icon name="cube" size={21} />
         </a>
         <div>
-          <strong>Rootline</strong>
+          <strong>Podo</strong>
           <span>Live core data</span>
         </div>
         <span className="production-connection">

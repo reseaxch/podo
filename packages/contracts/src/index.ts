@@ -1,5 +1,5 @@
 export interface HealthResponse {
-  service: "rootline-core"
+  service: "podo-core"
   status: "ok"
   version: string
 }
@@ -13,7 +13,7 @@ export interface CodexRuntimeStatus {
 }
 
 export interface SystemStatusResponse {
-  service: "rootline-core"
+  service: "podo-core"
   status: "ready" | "degraded"
   version: string
   codex: CodexRuntimeStatus
@@ -21,7 +21,7 @@ export interface SystemStatusResponse {
 
 export type AutonomyMode = "observe" | "recommend" | "act_with_approval"
 
-export interface RootlineSettings {
+export interface PodoSettings {
   autonomyMode: AutonomyMode
   monitoringEnabled: boolean
   defaultSandbox: InvestigationSandbox
@@ -29,13 +29,13 @@ export interface RootlineSettings {
 }
 
 export interface GetSettingsResponse {
-  settings: RootlineSettings
+  settings: PodoSettings
 }
 
-export type UpdateSettingsRequest = Partial<RootlineSettings>
+export type UpdateSettingsRequest = Partial<PodoSettings>
 
 export interface UpdateSettingsResponse {
-  settings: RootlineSettings
+  settings: PodoSettings
 }
 
 export type TelemetryKind = "log" | "trace" | "metric"

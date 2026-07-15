@@ -1,4 +1,4 @@
-import { inspectCodexRuntime, type CodexRuntime, type CodexRuntimeInfo } from "@rootline/codex-app-server-client"
+import { inspectCodexRuntime, type CodexRuntime, type CodexRuntimeInfo } from "@podo/codex-app-server-client"
 import type {
   ApprovalDecisionRequest,
   HealthResponse,
@@ -6,7 +6,7 @@ import type {
   InvestigationEvent,
   StartInvestigationRequest,
   SystemStatusResponse,
-} from "@rootline/contracts"
+} from "@podo/contracts"
 import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
@@ -41,7 +41,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
     const url = new URL(request.url)
 
     if (request.method === "GET" && url.pathname === "/healthz") {
-      const response: HealthResponse = { service: "rootline-core", status: "ok", version: serviceVersion }
+      const response: HealthResponse = { service: "podo-core", status: "ok", version: serviceVersion }
       return json(response)
     }
 
@@ -51,10 +51,10 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         const runtime = await inspectCodex()
         const runtimeError = investigations.runtimeError
         response = runtimeError
-          ? { service: "rootline-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: runtime.binary, transport: "stdio", version: runtime.version, error: runtimeError } }
-          : { service: "rootline-core", status: "ready", version: serviceVersion, codex: { available: true, binary: runtime.binary, transport: "stdio", version: runtime.version } }
+          ? { service: "podo-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: runtime.binary, transport: "stdio", version: runtime.version, error: runtimeError } }
+          : { service: "podo-core", status: "ready", version: serviceVersion, codex: { available: true, binary: runtime.binary, transport: "stdio", version: runtime.version } }
       } catch (error) {
-        response = { service: "rootline-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: process.env.CODEX_BIN ?? "codex", transport: "stdio", version: null, error: error instanceof Error ? error.message : String(error) } }
+        response = { service: "podo-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: process.env.CODEX_BIN ?? "codex", transport: "stdio", version: null, error: error instanceof Error ? error.message : String(error) } }
       }
       return json(response, url.pathname === "/readyz" && response.status !== "ready" ? 503 : 200)
     }

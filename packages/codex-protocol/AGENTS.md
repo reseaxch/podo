@@ -5,7 +5,7 @@
 - Keep compatibility metadata synchronized with the generated artifacts.
 - Review generation diffs for unexpected method or schema churn.
 - Coordinate protocol changes with `packages/codex-app-server-client` and core.
-- Do not expose the raw Codex protocol as Rootline's public client contract.
+- Do not expose the raw Codex protocol as Podo's public client contract.
 
 Validate with:
 

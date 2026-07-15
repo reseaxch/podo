@@ -1,11 +1,11 @@
 {
-  "name": "@rootline/client",
+  "name": "@podo/client",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@rootline/contracts": "workspace:*"
+    "@podo/contracts": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

@@ -1,8 +1,20 @@
-# Rootline
+# Podo
 
-Rootline is an AI system for investigating engineering incidents. It connects infrastructure signals, runtime evidence, deployments, commits, and code into a living system graph, then uses Codex to produce a tested remediation through an approval-gated workflow.
+**Podo** is short for **Podoroznyk** (Ukrainian: **подорожник**, plantain). In
+folklore, its leaf is placed on a small wound to help it heal. Podo follows the
+same metaphor for software: it finds an engineering incident, traces the wound
+back to its cause, and prepares a safe, tested fix.
 
-> Status: runnable foundation. Health/readiness and the in-memory Codex investigation vertical slice are implemented; durable incident, evidence, remediation, and delivery modules remain to be built.
+Podo connects infrastructure signals, runtime evidence, deployments, commits,
+and code into a living system graph, then uses Codex to produce remediation
+through an approval-gated workflow.
+
+> **Status:** active POC development. Codex App Server supervision, typed clients,
+> deterministic telemetry replay, incident detection, evidence-backed
+> investigation start, and a strict Graphify import boundary are runnable. The
+> remaining POC work is structured diagnosis, graph overlay/query integration,
+> production dashboard control, isolated remediation, regression validation, and
+> a reproducible pull-request preview.
 
 ## MVP outcome
 
@@ -18,11 +30,31 @@ The canonical product documents are:
 - [Use cases](docs/USE_CASES.md)
 - [Workstream ownership](docs/WORKSTREAMS.md)
 
+## POC completion path
+
+Podo is built as one real vertical flow, not as disconnected feature demos:
+
+```text
+canonical graph + telemetry replay
+  → detected incident with evidence
+  → structured Codex diagnosis with validated evidence references
+  → explicit remediation approval
+  → isolated patch and regression test
+  → passing validation
+  → reproducible pull-request preview
+```
+
+The POC may keep state in memory and use a local pull-request preview. It is not
+complete if the dashboard displays fixture-only diagnosis/remediation state or
+if failed validation can reach delivery. The MVP adds durable operations,
+GitHub delivery, full audit coverage, judge setup, eval baselines, benchmarks,
+and the final submission artifacts.
+
 ## System shape
 
 ```mermaid
 flowchart LR
-    CLI["CLI"] --> Core["Rootline core"]
+    CLI["CLI"] --> Core["Podo core"]
     TUI["OpenTUI client"] --> Core
     Dashboard["Dashboard"] --> Core
     Core --> Graph["System knowledge graph"]
@@ -38,14 +70,14 @@ flowchart LR
 
 | Path | Responsibility |
 | --- | --- |
-| `apps/core` | Rootline core service, orchestration, incident engine, approvals, and audit trail |
+| `apps/core` | Podo core service, orchestration, incident engine, approvals, and audit trail |
 | `apps/cli` | Scriptable, non-interactive commands and machine-readable output |
 | `apps/tui` | Interactive terminal client built with OpenTUI |
 | `apps/dashboard` | Primary browser dashboard for the demo flow |
 | `packages/codex-protocol` | Generated TypeScript and JSON Schema for the pinned Codex app-server version |
 | `packages/codex-app-server-client` | JSON-RPC lifecycle, event streaming, approvals, and process communication |
-| `packages/contracts` | Shared Rootline API, event, and persistence-boundary schemas |
-| `packages/client` | Typed Rootline client used by CLI, TUI, and dashboard |
+| `packages/contracts` | Shared Podo API, event, and persistence-boundary schemas |
+| `packages/client` | Typed Podo client used by CLI, TUI, and dashboard |
 | `packages/domain` | Incident, evidence, autonomy, and safety rules |
 | `packages/plugin-sdk` | Plugin manifests and capability contracts |
 | `plugins` | First-party Graphify, OpenTelemetry replay, and GitHub adapters |
@@ -67,11 +99,11 @@ The intended boundary is:
 pinned Codex runtime
   → generated protocol
   → codex app-server client
-  → Rootline core
+  → Podo core
   → CLI / TUI / dashboard
 ```
 
-Core owns one supervised `codex app-server --stdio` connection. The transport initializes it once, frames JSONL, correlates requests, surfaces notifications and server-initiated requests, and fails pending work on timeout, abort, EOF, or process exit. The runtime adapter starts or resumes one Codex thread per investigation and maps Codex messages into stable Rootline runtime events. Raw Codex protocol and thread IDs do not cross the core boundary.
+Core owns one supervised `codex app-server --stdio` connection. The transport initializes it once, frames JSONL, correlates requests, surfaces notifications and server-initiated requests, and fails pending work on timeout, abort, EOF, or process exit. The runtime adapter starts or resumes one Codex thread per investigation and maps Codex messages into stable Podo runtime events. Raw Codex protocol and thread IDs do not cross the core boundary.
 
 The pinned TypeScript SDK was evaluated but is not used by this path. At the pinned revision it launches `codex exec --experimental-json` per turn and exposes batch item/turn events, but not the long-lived App Server approval, user-input, steer, or server-request contract. It may later fit isolated batch/eval adapters behind the same runtime port; Direct App Server remains the default interactive runtime and the only state authority is core.
 
@@ -81,6 +113,7 @@ The current core implementation is intentionally in-memory. It owns investigatio
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| `POST` | `/api/incidents/:id/investigation` | Start a core-owned, evidence-backed, read-only investigation for a detected incident |
 | `POST` | `/api/investigations` | Start with required `prompt`, absolute `cwd`, and `sandbox` (`read-only` or `workspace-write`) |
 | `GET` | `/api/investigations/:id` | Read authoritative state and the current pending approval |
 | `DELETE` | `/api/investigations/:id` | Deny a pending approval, interrupt the active turn, and cancel |
@@ -89,7 +122,9 @@ The current core implementation is intentionally in-memory. It owns investigatio
 
 The lifecycle exposed to clients is `starting → running ↔ waiting_for_approval → completed | cancelled | failed`. Approval requests never receive a default approval. A Codex EOF or crash fails every active investigation explicitly and degrades readiness. A later investigation performs one controlled lazy connection replacement; old thread/turn mutations are never retried, and readiness recovers only after the fresh runtime is established. If an SSE cursor predates the bounded retained log, core returns `409 event_replay_expired` rather than silently skipping events.
 
-The typed `@rootline/client` exposes `start`, `get`, `cancel`, `approve`, `deny`, and `subscribeEvents` (plus descriptive investigation aliases). For a local HTTP check:
+The typed `@podo/client` exposes the safe incident command
+`startIncidentInvestigation` plus lower-level investigation lifecycle methods.
+For a local HTTP check:
 
 ```sh
 bun run dev:core
@@ -105,7 +140,7 @@ Do not manually edit generated Codex protocol files. Regenerate them from the pi
 These areas answer different questions:
 
 - `scenarios`: what reproducible incident happened and what outcome is expected?
-- `evals`: did Rootline identify the right cause, cite valid evidence, and make a safe decision?
+- `evals`: did Podo identify the right cause, cite valid evidence, and make a safe decision?
 - `benchmarks`: how fast, stable, and expensive was the run?
 - `tests`: did the implementation satisfy its software contracts?
 

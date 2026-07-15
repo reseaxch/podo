@@ -1,6 +1,6 @@
-# Rootline domain
+# Podo domain
 
-`@rootline/domain` is reserved for framework-independent incident, evidence, autonomy, remediation, and safety rules that are genuinely shared across owning modules.
+`@podo/domain` is reserved for framework-independent incident, evidence, autonomy, remediation, and safety rules that are genuinely shared across owning modules.
 
 It should not become a generic utilities package or a duplicate state authority. Core remains responsible for orchestration and persistence boundaries.
 

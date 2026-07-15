@@ -1,4 +1,4 @@
-import { AppServerRuntime, type CodexRuntime, type CodexRuntimeEvent } from "@rootline/codex-app-server-client"
+import { AppServerRuntime, type CodexRuntime, type CodexRuntimeEvent } from "@podo/codex-app-server-client"
 import type {
   ApprovalDecisionRequest,
   ApprovalDecisionResponse,
@@ -9,7 +9,7 @@ import type {
   InvestigationEvent,
   StartInvestigationRequest,
   StartInvestigationResponse,
-} from "@rootline/contracts"
+} from "@podo/contracts"
 
 interface InternalApproval {
   public: InvestigationApproval

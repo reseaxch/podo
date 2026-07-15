@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { RootlineClient } from "@rootline/client"
+import type { PodoClient } from "@podo/client"
 import { runCli } from "./index"
 
 const settings = {
@@ -9,9 +9,9 @@ const settings = {
   turnTimeoutMs: 60_000,
 }
 
-function client(overrides: Partial<RootlineClient> = {}): RootlineClient {
+function client(overrides: Partial<PodoClient> = {}): PodoClient {
   return {
-    health: async () => ({ service: "rootline-core", status: "ok", version: "0.0.0" }),
+    health: async () => ({ service: "podo-core", status: "ok", version: "0.0.0" }),
     systemStatus: async () => { throw new Error("unused") },
     getSettings: async () => ({ settings }),
     updateSettings: async (patch) => ({ settings: { ...settings, ...patch } }),
@@ -31,7 +31,7 @@ function client(overrides: Partial<RootlineClient> = {}): RootlineClient {
   }
 }
 
-describe("Rootline CLI config", () => {
+describe("Podo CLI config", () => {
   test("prints settings as JSON", async () => {
     const stdout: string[] = []
     const exitCode = await runCli(["config", "show"], { client: client(), stdout: (line) => stdout.push(line) })

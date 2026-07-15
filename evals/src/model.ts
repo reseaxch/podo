@@ -88,7 +88,7 @@ export interface ContractError {
 
 export interface EvaluationReport {
   schemaVersion: 1
-  suite: "rootline-reaction-matrix"
+  suite: "podo-reaction-matrix"
   fixtureAdapterVersion: 2
   scenarioFingerprint: string
   status: "passed" | "failed"

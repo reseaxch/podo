@@ -1,6 +1,6 @@
-# Rootline core
+# Podo core
 
-`@rootline/core` is the authoritative service boundary. It owns investigation lifecycle, approval state, ordered runtime events, readiness, and the mapping between Rootline investigations and Codex threads/turns.
+`@podo/core` is the authoritative service boundary. It owns investigation lifecycle, approval state, ordered runtime events, readiness, and the mapping between Podo investigations and Codex threads/turns.
 
 ## Current foundation
 
@@ -32,4 +32,4 @@ bun run --cwd apps/core typecheck
 bun test apps/core
 ```
 
-Core consumes stable Codex behavior from `@rootline/codex-app-server-client` and exposes Rootline contracts rather than raw Codex JSON-RPC.
+Core consumes stable Codex behavior from `@podo/codex-app-server-client` and exposes Podo contracts rather than raw Codex JSON-RPC.

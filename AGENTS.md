@@ -4,7 +4,7 @@ This file applies to the entire repository. A deeper `AGENTS.md` may add narrowe
 
 ## Product contract
 
-Rootline must demonstrate one evidence-backed flow:
+Podo must demonstrate one evidence-backed flow:
 
 ```text
 incident → evidence → root cause → tested fix → pull request

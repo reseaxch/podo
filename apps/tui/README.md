@@ -1,8 +1,8 @@
-# Rootline TUI
+# Podo TUI
 
-`@rootline/tui` is the interactive terminal surface built with OpenTUI React. It will present the same incident, evidence, investigation, approval, and remediation state as the dashboard.
+`@podo/tui` is the interactive terminal surface built with OpenTUI React. It will present the same incident, evidence, investigation, approval, and remediation state as the dashboard.
 
-The TUI is a client of core. Keep network access behind `@rootline/client`, product decisions in core, and terminal-specific behavior inside this package.
+The TUI is a client of core. Keep network access behind `@podo/client`, product decisions in core, and terminal-specific behavior inside this package.
 
 ```sh
 bun run dev:tui
@@ -15,8 +15,8 @@ Keyboard escape paths, resize behavior, cleanup, and observable rendering are pa
 
 ## Control surface contract
 
-`RootlineTui` consumes an injected `RootlineTuiViewModel` and `RootlineTuiController`.
-`ConnectedRootlineTui` is the `@rootline/client` adapter: it loads readiness,
+`PodoTui` consumes an injected `PodoTuiViewModel` and `PodoTuiController`.
+`ConnectedPodoTui` is the `@podo/client` adapter: it loads readiness,
 settings, and incidents, and persists complete settings drafts. The renderer
 does not call core, persistence, or Codex directly. Investigation selection and
 live approval synchronization are the next adapter increment; until then the

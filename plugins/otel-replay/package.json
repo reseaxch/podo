@@ -1,12 +1,12 @@
 {
-  "name": "@rootline/plugin-otel-replay",
+  "name": "@podo/plugin-otel-replay",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@rootline/contracts": "workspace:*",
-    "@rootline/plugin-sdk": "workspace:*"
+    "@podo/contracts": "workspace:*",
+    "@podo/plugin-sdk": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

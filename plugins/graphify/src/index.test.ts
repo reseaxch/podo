@@ -60,7 +60,7 @@ describe("normalizeGraphifyGraph", () => {
     if (!result.ok) return
 
     expect(result.snapshot.id).toMatch(/^graph_snapshot_[a-f0-9]{24}$/)
-    expect(result.snapshot.schemaVersion).toBe("rootline.code-graph.v1")
+    expect(result.snapshot.schemaVersion).toBe("podo.code-graph.v1")
     expect(result.snapshot.source).toEqual({
       provider: "graphify",
       graphId: "demo-monorepo",

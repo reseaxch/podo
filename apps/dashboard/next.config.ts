@@ -5,7 +5,7 @@ const workspaceRoot = resolve(process.cwd(), "../..")
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: workspaceRoot,
-  transpilePackages: ["@rootline/contracts", "@rootline/client"],
+  transpilePackages: ["@podo/contracts", "@podo/client"],
   turbopack: {
     root: workspaceRoot,
   },

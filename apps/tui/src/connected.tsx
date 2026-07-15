@@ -1,15 +1,15 @@
-import { createRootlineClient, type RootlineClient } from "@rootline/client"
-import type { DetectedIncident, RootlineSettings, SystemStatusResponse } from "@rootline/contracts"
+import { createPodoClient, type PodoClient } from "@podo/client"
+import type { DetectedIncident, PodoSettings, SystemStatusResponse } from "@podo/contracts"
 import { useEffect, useMemo, useState } from "react"
 
 import {
-  RootlineTui,
-  type RootlineTuiController,
-  type RootlineTuiViewModel,
+  PodoTui,
+  type PodoTuiController,
+  type PodoTuiViewModel,
   type TuiSettings,
 } from "./app"
 
-const initialViewModel: RootlineTuiViewModel = {
+const initialViewModel: PodoTuiViewModel = {
   status: "loading",
   statusDetail: "Connecting to core",
   evidence: [],
@@ -21,7 +21,7 @@ const initialViewModel: RootlineTuiViewModel = {
   },
 }
 
-export function toTuiSettings(settings: RootlineSettings): TuiSettings {
+export function toTuiSettings(settings: PodoSettings): TuiSettings {
   return {
     mode: settings.autonomyMode,
     monitoringEnabled: settings.monitoringEnabled,
@@ -30,7 +30,7 @@ export function toTuiSettings(settings: RootlineSettings): TuiSettings {
   }
 }
 
-export function toRootlineSettings(settings: TuiSettings): RootlineSettings {
+export function toPodoSettings(settings: TuiSettings): PodoSettings {
   return {
     autonomyMode: settings.mode,
     monitoringEnabled: settings.monitoringEnabled,
@@ -41,9 +41,9 @@ export function toRootlineSettings(settings: TuiSettings): RootlineSettings {
 
 export function toTuiViewModel(
   system: SystemStatusResponse,
-  settings: RootlineSettings,
+  settings: PodoSettings,
   incidents: readonly DetectedIncident[],
-): RootlineTuiViewModel {
+): PodoTuiViewModel {
   const latest = incidents.at(-1)
   return {
     status: system.status === "ready" ? "idle" : "degraded",
@@ -56,18 +56,18 @@ export function toTuiViewModel(
   }
 }
 
-export function ConnectedRootlineTui({
+export function ConnectedPodoTui({
   coreUrl,
   client: injectedClient,
 }: {
   coreUrl: string
-  client?: RootlineClient
+  client?: PodoClient
 }) {
   const client = useMemo(
-    () => injectedClient ?? createRootlineClient({ baseUrl: coreUrl }),
+    () => injectedClient ?? createPodoClient({ baseUrl: coreUrl }),
     [coreUrl, injectedClient],
   )
-  const [viewModel, setViewModel] = useState<RootlineTuiViewModel>(initialViewModel)
+  const [viewModel, setViewModel] = useState<PodoTuiViewModel>(initialViewModel)
 
   useEffect(() => {
     let active = true
@@ -88,7 +88,7 @@ export function ConnectedRootlineTui({
     }
   }, [client])
 
-  const controller = useMemo<RootlineTuiController>(() => ({
+  const controller = useMemo<PodoTuiController>(() => ({
     approve() {
       setViewModel((current) => ({ ...current, status: "degraded", statusDetail: "No active investigation selected" }))
     },
@@ -99,7 +99,7 @@ export function ConnectedRootlineTui({
       setViewModel((current) => ({ ...current, status: "degraded", statusDetail: "No active investigation selected" }))
     },
     saveSettings(settings) {
-      void client.updateSettings(toRootlineSettings(settings))
+      void client.updateSettings(toPodoSettings(settings))
         .then((response) => {
           setViewModel((current) => ({ ...current, settings: toTuiSettings(response.settings) }))
         })
@@ -113,5 +113,5 @@ export function ConnectedRootlineTui({
     },
   }), [client])
 
-  return <RootlineTui coreUrl={coreUrl} controller={controller} viewModel={viewModel} />
+  return <PodoTui coreUrl={coreUrl} controller={controller} viewModel={viewModel} />
 }

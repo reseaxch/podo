@@ -1,4 +1,4 @@
-import type { DetectedIncident } from "@rootline/contracts"
+import type { DetectedIncident } from "@podo/contracts"
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 

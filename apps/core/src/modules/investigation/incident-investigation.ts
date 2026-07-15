@@ -3,7 +3,7 @@ import type {
   IncidentInvestigationLink,
   Investigation,
   StartIncidentInvestigationRequest,
-} from "@rootline/contracts"
+} from "@podo/contracts"
 import {
   buildInvestigatorPrompt,
   createEvidenceId,
@@ -11,7 +11,7 @@ import {
   formatUntrustedEvidence,
   validateEvidenceClaims,
   type PromptEvidence,
-} from "@rootline/domain"
+} from "@podo/domain"
 import type { InvestigationService } from "../../investigations"
 import type { SettingsStore } from "../../settings"
 import type { IncidentMonitor } from "../incidents/incident-monitor"

@@ -9,7 +9,7 @@ import type {
   IncidentReaction,
   TelemetryEventInput,
   TelemetryIngestionResult,
-} from "@rootline/contracts"
+} from "@podo/contracts"
 
 const MIB = 1024 * 1024
 

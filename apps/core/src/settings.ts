@@ -1,13 +1,13 @@
-import type { RootlineSettings, UpdateSettingsRequest } from "@rootline/contracts"
+import type { PodoSettings, UpdateSettingsRequest } from "@podo/contracts"
 
-const settingKeys = new Set<keyof RootlineSettings>([
+const settingKeys = new Set<keyof PodoSettings>([
   "autonomyMode",
   "monitoringEnabled",
   "defaultSandbox",
   "turnTimeoutMs",
 ])
 
-export const defaultSettings: Readonly<RootlineSettings> = Object.freeze({
+export const defaultSettings: Readonly<PodoSettings> = Object.freeze({
   autonomyMode: "observe",
   monitoringEnabled: true,
   defaultSandbox: "read-only",
@@ -15,13 +15,13 @@ export const defaultSettings: Readonly<RootlineSettings> = Object.freeze({
 })
 
 export class SettingsStore {
-  private current: RootlineSettings = { ...defaultSettings }
+  private current: PodoSettings = { ...defaultSettings }
 
-  get(): RootlineSettings {
+  get(): PodoSettings {
     return { ...this.current }
   }
 
-  update(input: unknown): RootlineSettings | null {
+  update(input: unknown): PodoSettings | null {
     if (!isSettingsPatch(input)) return null
     this.current = { ...this.current, ...input }
     return this.get()
@@ -32,7 +32,7 @@ function isSettingsPatch(value: unknown): value is UpdateSettingsRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const input = value as Record<string, unknown>
   const keys = Object.keys(input)
-  if (keys.length === 0 || keys.some((key) => !settingKeys.has(key as keyof RootlineSettings))) return false
+  if (keys.length === 0 || keys.some((key) => !settingKeys.has(key as keyof PodoSettings))) return false
 
   if ("autonomyMode" in input && !["observe", "recommend", "act_with_approval"].includes(input.autonomyMode as string)) return false
   if ("monitoringEnabled" in input && typeof input.monitoringEnabled !== "boolean") return false

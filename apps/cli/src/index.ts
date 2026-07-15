@@ -1,23 +1,23 @@
 #!/usr/bin/env bun
 
-import { createRootlineClient, type RootlineClient } from "@rootline/client"
+import { createPodoClient, type PodoClient } from "@podo/client"
 
-type UpdateSettingsRequest = Parameters<RootlineClient["updateSettings"]>[0]
+type UpdateSettingsRequest = Parameters<PodoClient["updateSettings"]>[0]
 
 interface CliDependencies {
-  client?: RootlineClient
+  client?: PodoClient
   stdout?: (line: string) => void
   stderr?: (line: string) => void
 }
 
-const help = `Rootline CLI
+const help = `Podo CLI
 
 Usage:
-  rootline health                              Check the core process
-  rootline status                              Check core and Codex readiness
-  rootline config show                         Show effective Rootline settings
-  rootline config set <key> <value>            Update one Rootline setting
-  rootline incidents list                      List detected incidents
+  podo health                              Check the core process
+  podo status                              Check core and Codex readiness
+  podo config show                         Show effective Podo settings
+  podo config set <key> <value>            Update one Podo setting
+  podo incidents list                      List detected incidents
 
 Settings:
   autonomyMode       observe | recommend | act_with_approval
@@ -26,13 +26,13 @@ Settings:
   turnTimeoutMs      integer milliseconds (1000..3600000)
 
 Environment:
-  ROOTLINE_CORE_URL  Core base URL (default: http://127.0.0.1:4100)`
+  PODO_CORE_URL  Core base URL (default: http://127.0.0.1:4100)`
 
 export async function runCli(args: string[], dependencies: CliDependencies = {}): Promise<number> {
   const output = dependencies.stdout ?? console.log
   const error = dependencies.stderr ?? console.error
-  const coreUrl = process.env.ROOTLINE_CORE_URL ?? "http://127.0.0.1:4100"
-  const client = dependencies.client ?? createRootlineClient({ baseUrl: coreUrl })
+  const coreUrl = process.env.PODO_CORE_URL ?? "http://127.0.0.1:4100"
+  const client = dependencies.client ?? createPodoClient({ baseUrl: coreUrl })
   const [command = "help", subcommand, key, rawValue] = args
 
   if (command === "health") {
@@ -50,7 +50,7 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
   if (command === "config" && subcommand === "set") {
     const patch = parseSetting(key, rawValue)
     if (!patch) {
-      error("Invalid setting key or value. Run `rootline help` for accepted settings.")
+      error("Invalid setting key or value. Run `podo help` for accepted settings.")
       return 1
     }
     output(JSON.stringify(await client.updateSettings(patch), null, 2))

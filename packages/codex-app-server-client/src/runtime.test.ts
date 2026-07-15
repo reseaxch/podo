@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { ServerNotification } from "@rootline/codex-protocol/generated/ServerNotification.ts"
-import type { ServerRequest } from "@rootline/codex-protocol/generated/ServerRequest.ts"
+import type { ServerNotification } from "@podo/codex-protocol/generated/ServerNotification.ts"
+import type { ServerRequest } from "@podo/codex-protocol/generated/ServerRequest.ts"
 import { AppServerRuntime, type CodexRuntimeEvent } from "./runtime"
 
 class FakeTransport {

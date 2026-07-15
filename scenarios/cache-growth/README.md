@@ -20,7 +20,7 @@ Graphify node-link format: `nodes[]` carry `id`, `label`, `file_type`,
 `source_file`, `source_location`, `community`; `links[]` carry `source`,
 `target`, `relation`, `confidence` (`EXTRACTED` / `INFERRED` / `AMBIGUOUS`),
 `confidence_score`, `source_location`. The Graphify adapter maps this into the
-Rootline `GraphImport` contract; `confidence` maps to `Provenance.kind`.
+Podo `GraphImport` contract; `confidence` maps to `Provenance.kind`.
 
 Incident-critical nodes present: `CheckoutCache` (the unbounded cache), its
 regression test, and the defect/rationale doc nodes.
@@ -28,8 +28,8 @@ regression test, and the defect/rationale doc nodes.
 ## telemetry.json
 
 A 22-event stream, every event conforming to the `TelemetryEvent` contract in
-`@rootline/contracts` (verified to normalize through
-`@rootline/domain` `normalizeTelemetryEvent`). Shape of the incident:
+`@podo/contracts` (verified to normalize through
+`@podo/domain` `normalizeTelemetryEvent`). Shape of the incident:
 
 1. healthy heap baseline (~180 MB, `deploy-1041`);
 2. defect deployment marker (`deploy-1042`);

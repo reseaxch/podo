@@ -5,9 +5,9 @@ import type {
   TelemetryIngestionResult,
   TelemetryKind,
   TelemetrySeverity,
-} from "@rootline/contracts"
+} from "@podo/contracts"
 
-export type { TelemetryEventInput, TelemetryIngestionResult } from "@rootline/contracts"
+export type { TelemetryEventInput, TelemetryIngestionResult } from "@podo/contracts"
 
 export interface TelemetryEvent extends TelemetryEventInput {
   id: string

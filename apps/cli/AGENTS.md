@@ -1,10 +1,10 @@
 # CLI workstream
 
-Own the scriptable Rootline client.
+Own the scriptable Podo client.
 
 - Keep stdout machine-readable for non-help commands.
 - Put product decisions in core, not command handlers.
-- Use `@rootline/client` rather than duplicating HTTP calls.
+- Use `@podo/client` rather than duplicating HTTP calls.
 - Treat exit codes and stable JSON shapes as public contracts.
 
 Validate with:

@@ -1,5 +1,5 @@
 {
-  "name": "@rootline/tui",
+  "name": "@podo/tui",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
   "dependencies": {
     "@opentui/core": "^0.4.3",
     "@opentui/react": "^0.4.3",
-    "@rootline/client": "workspace:*",
-    "@rootline/contracts": "workspace:*",
+    "@podo/client": "workspace:*",
+    "@podo/contracts": "workspace:*",
     "react": "^19.2.7"
   }
 }

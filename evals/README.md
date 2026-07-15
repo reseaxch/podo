@@ -1,6 +1,6 @@
 # Evaluations
 
-Evals answer whether Rootline made the right, evidence-backed, safe decision. This differs from correctness tests and performance benchmarks.
+Evals answer whether Podo made the right, evidence-backed, safe decision. This differs from correctness tests and performance benchmarks.
 
 The workstream owns scenario suites, deterministic scorers, reviewed baselines, and evaluation reports. Canonical incident inputs remain in `scenarios`.
 

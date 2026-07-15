@@ -41,7 +41,7 @@ async function main(): Promise<void> {
       JSON.stringify(
         {
           schemaVersion: 1,
-          suite: "rootline-reaction-matrix",
+          suite: "podo-reaction-matrix",
           status: "error",
           error: error instanceof Error ? error.message : String(error),
         },

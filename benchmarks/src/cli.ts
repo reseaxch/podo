@@ -1,4 +1,4 @@
-import { inspectCodexRuntime } from "@rootline/codex-app-server-client"
+import { inspectCodexRuntime } from "@podo/codex-app-server-client"
 import { measure } from "./index"
 
 const samples = []
