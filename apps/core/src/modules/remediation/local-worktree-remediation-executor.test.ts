@@ -1,0 +1,265 @@
+import { afterEach, describe, expect, test } from "bun:test"
+import { chmod, mkdtemp, mkdir, readdir, realpath, rm } from "node:fs/promises"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
+
+import type { IncidentRemediationExecutorInput } from "./incident-remediation"
+import {
+  LocalWorktreeRemediationExecutor,
+  type RemediationPatchProducer,
+} from "./local-worktree-remediation-executor"
+
+const temporaryRoots: string[] = []
+
+afterEach(async () => {
+  await Promise.all(temporaryRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })))
+})
+
+describe("LocalWorktreeRemediationExecutor", () => {
+  test("proves red then green in a detached worktree and returns the exact verified diff", async () => {
+    const fixture = await createRepository()
+    const trustedBaseCommit = await git(fixture.repositoryRoot, ["rev-parse", "HEAD"])
+    await Bun.write(join(fixture.repositoryRoot, "local-uncommitted.txt"), "must remain untouched\n")
+    const hookDirectory = join(fixture.parent, "hooks")
+    const hookMarker = join(fixture.parent, "hook-executed")
+    await mkdir(hookDirectory)
+    await Bun.write(join(hookDirectory, "post-checkout"), `#!/bin/sh\ntouch ${hookMarker}\n`)
+    await chmod(join(hookDirectory, "post-checkout"), 0o755)
+    await git(fixture.repositoryRoot, ["config", "core.hooksPath", hookDirectory])
+    const phases: string[] = []
+    let worktreeBranch: string | undefined
+    let worktreeHead: string | undefined
+    let stagedBeforeFix: string | undefined
+    const producer: RemediationPatchProducer = {
+      async writeRegression({ worktreePath }) {
+        phases.push("regression")
+        worktreeBranch = await git(worktreePath, ["branch", "--show-current"])
+        worktreeHead = await git(worktreePath, ["rev-parse", "HEAD"])
+        await Bun.write(join(worktreePath, "test/cache.test.ts"), [
+          'import { expect, test } from "bun:test"',
+          'import { cacheLimit } from "../src/cache"',
+          'test("cache is bounded", () => expect(cacheLimit).toBe(10))',
+          "",
+        ].join("\n"))
+      },
+      async applyFix({ worktreePath }) {
+        phases.push("fix")
+        stagedBeforeFix = await git(worktreePath, ["diff", "--cached", "--name-only"])
+        await Bun.write(join(worktreePath, "src/cache.ts"), "export const cacheLimit = 10\n")
+      },
+    }
+    const executor = new LocalWorktreeRemediationExecutor(config(fixture, producer))
+
+    const result = await executor.execute(input("incident/../../not-a-path; touch escaped"))
+
+    expect(phases).toEqual(["regression", "fix"])
+    expect(worktreeBranch).toBe("")
+    expect(worktreeHead).toBe(trustedBaseCommit)
+    expect(stagedBeforeFix).toBe("")
+    expect(result).toMatchObject({
+      regression: { prePatch: "failed", postPatch: "passed" },
+      validation: { status: "passed", checks: ["validation-1"] },
+      patch: { changedFiles: ["src/cache.ts", "test/cache.test.ts"] },
+      pullRequestPreview: {
+        baseBranch: "main",
+        headBranch: expect.stringMatching(/^podo\/remediation-[a-f0-9]{16}$/),
+      },
+    })
+    expect(result.patch.unifiedDiff).toContain("diff --git a/src/cache.ts b/src/cache.ts")
+    expect(result.patch.unifiedDiff).toContain("diff --git a/test/cache.test.ts b/test/cache.test.ts")
+    expect(result.patch.unifiedDiff).toContain("cacheLimit = 10")
+    expect(result.patch.unifiedDiff).toContain("cache is bounded")
+    expect(await readdir(fixture.scratchParent)).toEqual([])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await Bun.file(join(fixture.repositoryRoot, "src/cache.ts")).text()).toBe("export const cacheLimit = 0\n")
+    expect(await Bun.file(join(fixture.repositoryRoot, "local-uncommitted.txt")).text()).toBe("must remain untouched\n")
+    expect(await Bun.file(join(fixture.parent, "escaped")).exists()).toBe(false)
+    expect(await Bun.file(hookMarker).exists()).toBe(false)
+
+    const repeated = await executor.execute(input("incident/../../not-a-path; touch escaped"))
+    expect(repeated.patch).toEqual(result.patch)
+    expect(repeated.pullRequestPreview).toEqual(result.pullRequestPreview)
+  })
+
+  test("throws a sanitized error and cleans the owned worktree when validation fails", async () => {
+    const fixture = await createRepository()
+    const producer = successfulProducer()
+    const executor = new LocalWorktreeRemediationExecutor({
+      ...config(fixture, producer),
+      validationCommands: [[process.execPath, "-e", "process.exit(9)"]],
+    })
+
+    await expect(executor.execute(input())).rejects.toThrow("remediation_validation_failed")
+    await expect(executor.execute(input())).rejects.not.toThrow("process.exit")
+    expect(await readdir(fixture.scratchParent)).toEqual([])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+  })
+
+  test("passes argv literally and rejects repository and scratch path escapes", async () => {
+    const fixture = await createRepository()
+    const injectedPath = join(fixture.parent, "command-injected")
+    const executor = new LocalWorktreeRemediationExecutor({
+      ...config(fixture, successfulProducer()),
+      validationCommands: [[process.execPath, "-e", "process.exit(0)", `;touch ${injectedPath}`]],
+    })
+
+    await expect(executor.execute(input())).resolves.toMatchObject({ validation: { status: "passed" } })
+    expect(await Bun.file(injectedPath).exists()).toBe(false)
+
+    expect(() => new LocalWorktreeRemediationExecutor({
+      ...config(fixture, successfulProducer()),
+      repositoryRoot: join(fixture.repositoryRoot, ".."),
+    })).toThrow("invalid_remediation_executor_config")
+    expect(() => new LocalWorktreeRemediationExecutor({
+      ...config(fixture, successfulProducer()),
+      scratchParent: "../scratch",
+    })).toThrow("invalid_remediation_executor_config")
+    expect(() => new LocalWorktreeRemediationExecutor({
+      ...config(fixture, successfulProducer()),
+      trustedBaseRef: "--upload-pack=touch",
+    })).toThrow("invalid_remediation_executor_config")
+
+    await git(fixture.repositoryRoot, ["config", "filter.unsafe.smudge", "touch should-not-run"])
+    const filtered = new LocalWorktreeRemediationExecutor(config(fixture, successfulProducer()))
+    await expect(filtered.execute(input())).rejects.toThrow("repository_external_filter_forbidden")
+    expect(await Bun.file(join(fixture.parent, "should-not-run")).exists()).toBe(false)
+  })
+
+  test("caps command duration and captured output and still cleans up", async () => {
+    const timeoutFixture = await createRepository()
+    const timeoutExecutor = new LocalWorktreeRemediationExecutor({
+      ...config(timeoutFixture, successfulProducer()),
+      validationCommands: [[process.execPath, "-e", "await new Promise((resolve) => setTimeout(resolve, 1000))"]],
+      commandTimeoutMs: 100,
+    })
+    await expect(timeoutExecutor.execute(input())).rejects.toThrow("remediation_command_timeout")
+    expect(await readdir(timeoutFixture.scratchParent)).toEqual([])
+
+    const outputFixture = await createRepository()
+    const outputExecutor = new LocalWorktreeRemediationExecutor({
+      ...config(outputFixture, successfulProducer()),
+      regressionCommand: [process.execPath, "-e", 'console.log("x".repeat(2048)); process.exit(1)'],
+      maxOutputBytes: 1024,
+    })
+    await expect(outputExecutor.execute(input())).rejects.toThrow("remediation_command_output_exceeded")
+    expect(await readdir(outputFixture.scratchParent)).toEqual([])
+  })
+
+  test("rejects a fix that weakens or rewrites the failing regression", async () => {
+    const fixture = await createRepository()
+    const producer = successfulProducer()
+    const executor = new LocalWorktreeRemediationExecutor({
+      ...config(fixture, {
+        ...producer,
+        async applyFix({ worktreePath }) {
+          await Bun.write(join(worktreePath, "src/cache.ts"), "export const cacheLimit = 10\n")
+          await Bun.write(join(worktreePath, "test/cache.test.ts"), [
+            'import { expect, test } from "bun:test"',
+            'test("weakened", () => expect(true).toBe(true))',
+            "",
+          ].join("\n"))
+        },
+      }),
+    })
+
+    await expect(executor.execute(input())).rejects.toThrow("fix_mutated_regression")
+    expect(await readdir(fixture.scratchParent)).toEqual([])
+  })
+})
+
+function successfulProducer(): RemediationPatchProducer {
+  return {
+    async writeRegression({ worktreePath }) {
+      await Bun.write(join(worktreePath, "test/cache.test.ts"), [
+        'import { expect, test } from "bun:test"',
+        'import { cacheLimit } from "../src/cache"',
+        'test("cache is bounded", () => expect(cacheLimit).toBe(10))',
+        "",
+      ].join("\n"))
+    },
+    async applyFix({ worktreePath }) {
+      await Bun.write(join(worktreePath, "src/cache.ts"), "export const cacheLimit = 10\n")
+    },
+  }
+}
+
+interface RepositoryFixture {
+  parent: string
+  repositoryRoot: string
+  scratchParent: string
+}
+
+async function createRepository(): Promise<RepositoryFixture> {
+  const parent = await mkdtemp(join(tmpdir(), "podo-remediation-executor-"))
+  temporaryRoots.push(parent)
+  const repositoryRoot = join(parent, "repository")
+  const scratchParent = join(parent, "scratch")
+  await mkdir(join(repositoryRoot, "src"), { recursive: true })
+  await mkdir(join(repositoryRoot, "test"), { recursive: true })
+  await mkdir(scratchParent)
+  await Bun.write(join(repositoryRoot, "src/cache.ts"), "export const cacheLimit = 0\n")
+  await Bun.write(join(repositoryRoot, "test/.gitkeep"), "")
+  await git(repositoryRoot, ["init", "-b", "main"])
+  await git(repositoryRoot, ["config", "user.email", "podo@example.invalid"])
+  await git(repositoryRoot, ["config", "user.name", "Podo Test"])
+  await git(repositoryRoot, ["add", "--", "src/cache.ts", "test/.gitkeep"])
+  await git(repositoryRoot, ["commit", "-m", "fixture"])
+  return { parent, repositoryRoot, scratchParent }
+}
+
+function config(fixture: RepositoryFixture, producer: RemediationPatchProducer) {
+  return {
+    repositoryRoot: fixture.repositoryRoot,
+    trustedBaseRef: "main",
+    scratchParent: fixture.scratchParent,
+    regressionCommand: [process.execPath, "test", "test/cache.test.ts"],
+    validationCommands: [[process.execPath, "test", "test/cache.test.ts"]],
+    commandTimeoutMs: 10_000,
+    maxOutputBytes: 256 * 1024,
+    producer,
+  }
+}
+
+function input(id = "incident-1"): IncidentRemediationExecutorInput {
+  return {
+    incident: {
+      id,
+      affectedService: "checkout-service",
+      deploymentId: "deploy-1042",
+      evidenceIds: ["ev:1"],
+      diagnosis: {
+        status: "validated",
+        schemaVersion: "podo.diagnosis.v1",
+        summary: "Checkout cache grows without a bound",
+        affectedService: "checkout-service",
+        probableRootCause: "The cache does not evict entries",
+        confidence: { value: 9000, scale: "basis_points" },
+        evidenceIds: ["ev:1"],
+        recommendedAction: "Bound cache retention",
+        safeToAttemptFix: true,
+      },
+    },
+    target: "isolated_checkout",
+    policy: {
+      systemPrompt: "approved remediation policy",
+      allowedTools: ["search_code", "apply_patch", "run_test"],
+      forbiddenTools: ["create_pull_request"],
+    },
+  }
+}
+
+async function git(cwd: string, args: string[]): Promise<string> {
+  const process = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" })
+  const [exitCode, stdout, stderr] = await Promise.all([
+    process.exited,
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+  ])
+  if (exitCode !== 0) throw new Error(`git fixture failed: ${stderr}`)
+  return stdout.trim()
+}
+
+async function worktreePaths(repositoryRoot: string): Promise<string[]> {
+  const output = await git(repositoryRoot, ["worktree", "list", "--porcelain"])
+  return output.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => line.slice("worktree ".length))
+}
