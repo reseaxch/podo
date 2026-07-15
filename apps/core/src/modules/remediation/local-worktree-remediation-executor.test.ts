@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { chmod, mkdtemp, mkdir, readdir, realpath, rm } from "node:fs/promises"
+import { chmod, mkdtemp, mkdir, readdir, realpath, rm, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 
@@ -164,6 +164,52 @@ describe("LocalWorktreeRemediationExecutor", () => {
 
     await expect(executor.execute(input())).rejects.toThrow("fix_mutated_regression")
     expect(await readdir(fixture.scratchParent)).toEqual([])
+  })
+
+  test("disposes producer state before cleaning a worktree when the pre-patch regression unexpectedly passes", async () => {
+    const fixture = await createRepository()
+    let disposeCalls = 0
+    let worktreeExistedDuringDispose = false
+    let applyFixCalls = 0
+    const producer: RemediationPatchProducer = {
+      async writeRegression({ worktreePath }) {
+        await Bun.write(join(worktreePath, "test/cache.test.ts"), [
+          'import { expect, test } from "bun:test"',
+          'import { cacheLimit } from "../src/cache"',
+          'test("current cache value", () => expect(cacheLimit).toBe(0))',
+          "",
+        ].join("\n"))
+      },
+      async applyFix() { applyFixCalls += 1 },
+      async dispose({ worktreePath }) {
+        disposeCalls += 1
+        worktreeExistedDuringDispose = (await stat(worktreePath)).isDirectory()
+      },
+    }
+    const executor = new LocalWorktreeRemediationExecutor(config(fixture, producer))
+
+    await expect(executor.execute(input())).rejects.toThrow("regression_did_not_fail_before_patch")
+
+    expect(applyFixCalls).toBe(0)
+    expect(disposeCalls).toBe(1)
+    expect(worktreeExistedDuringDispose).toBe(true)
+    expect(await readdir(fixture.scratchParent)).toEqual([])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+  })
+
+  test("still cleans the owned worktree when producer disposal throws", async () => {
+    const fixture = await createRepository()
+    const producer: RemediationPatchProducer = {
+      ...successfulProducer(),
+      async dispose() { throw new Error("private dispose detail") },
+    }
+    const executor = new LocalWorktreeRemediationExecutor(config(fixture, producer))
+    const result = executor.execute(input())
+
+    await expect(result).rejects.toThrow("producer_dispose_failed")
+    await expect(result).rejects.not.toThrow("private dispose detail")
+    expect(await readdir(fixture.scratchParent)).toEqual([])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
   })
 })
 

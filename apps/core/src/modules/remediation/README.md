@@ -63,3 +63,8 @@ isolated worktree path plus a cloned authoritative remediation context. Its
 output is still rejected if it stages changes, escapes the supported relative
 path shape, mutates the failing regression during the fix phase, or cannot be
 represented by the verified diff contract.
+
+A producer may implement idempotent `dispose` lifecycle cleanup. The executor
+invokes it for every worktree attempt before removing the isolated checkout,
+including pre-regression and validation failures. A disposal error is sanitized
+and never prevents owned worktree cleanup.

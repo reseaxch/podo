@@ -17,6 +17,7 @@ export interface RemediationPatchProducerInput {
 export interface RemediationPatchProducer {
   writeRegression(input: RemediationPatchProducerInput): Promise<void>
   applyFix(input: RemediationPatchProducerInput): Promise<void>
+  dispose?(input: RemediationPatchProducerInput): Promise<void>
 }
 
 export interface LocalWorktreeRemediationExecutorConfig {
@@ -116,7 +117,19 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
         this.config.validationCommands.map((_, index) => `validation-${index + 1}`),
       )
     } finally {
-      await this.cleanup(worktreePath, registered)
+      let disposeFailed = false
+      try {
+        await this.config.producer.dispose?.({ worktreePath, remediation: structuredClone(input) })
+      } catch {
+        disposeFailed = true
+      }
+
+      try {
+        await this.cleanup(worktreePath, registered)
+      } catch (error) {
+        throw error
+      }
+      if (disposeFailed) throw failure("producer_dispose_failed")
     }
   }
 
@@ -307,7 +320,8 @@ function validateConfig(config: LocalWorktreeRemediationExecutorConfig): Validat
       || config.maxOutputBytes > 512 * 1024) throw new Error()
     if (!config.producer
       || typeof config.producer.writeRegression !== "function"
-      || typeof config.producer.applyFix !== "function") throw new Error()
+      || typeof config.producer.applyFix !== "function"
+      || (config.producer.dispose !== undefined && typeof config.producer.dispose !== "function")) throw new Error()
     return {
       ...config,
       repositoryRoot,
