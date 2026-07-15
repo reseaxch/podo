@@ -4,6 +4,14 @@
 
 Current methods cover settings, telemetry ingestion, incident reads, and investigation start/read/cancel/approve/deny/event subscription. `startIncidentInvestigation(incidentId, { cwd })` is the safe product entrypoint: it cannot accept caller-authored prompt, evidence, sandbox, mode, or approval fields. Raw Codex protocol details must never appear in this package's public API.
 
+The additive `PodoAgentChatClient` exposes readiness, create/read/send/cancel,
+and typed SSE subscription for the Core-owned read-only operator chat. Clients
+send only message text and an idempotency key; they cannot select a repository,
+sandbox, system prompt, approval policy, or Codex identity. Check
+`agentReadiness()` before opening the chat surface and present its stable
+degraded reason, including `version_mismatch`, instead of assuming that process
+health or a basic App Server handshake means the configured model is usable.
+
 `getIncidentCausalPath(incidentId, evidenceId)` reads the versioned,
 evidence-specific causal chain. Both identities are URL-encoded by the client;
 code graph and trusted deployment correlation remain server-side inputs. File

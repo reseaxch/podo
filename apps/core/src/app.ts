@@ -1,13 +1,17 @@
-import { inspectCodexRuntime, type CodexRuntime, type CodexRuntimeInfo } from "@podo/codex-app-server-client"
+import { inspectCodexRuntime, isCodexRuntimeCompatible, type CodexRuntime, type CodexRuntimeInfo } from "@podo/codex-app-server-client"
 import type {
+  AgentChatEvent,
+  AgentReadinessResponse,
   ApprovalDecisionRequest,
   HealthResponse,
   IncidentRemediationDecisionRequest,
   IngestTelemetryRequest,
   InvestigationEvent,
+  SendAgentChatMessageRequest,
   StartInvestigationRequest,
   SystemStatusResponse,
 } from "@podo/contracts"
+import { AgentChatService, type AgentChatConfig } from "./agent-chat"
 import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 import { IncidentCausalPathService, type IncidentGraphConfig } from "./modules/graph/incident-causal-path"
@@ -29,6 +33,8 @@ export interface CoreHandlerOptions {
   remediationExecutorFactory?: (runtimeProvider: () => Promise<CodexRuntime>) => IncidentRemediationExecutor
   pullRequestDelivery?: PullRequestDeliveryConfig
   issueDelivery?: IssueDeliveryConfig
+  agentChat?: AgentChatConfig
+  sseHeartbeatMs?: number
 }
 
 const serviceVersion = "0.0.0"
@@ -47,6 +53,9 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
     ...(options.createRuntime ? { createRuntime: options.createRuntime } : {}),
     ...(options.eventLogLimit === undefined ? {} : { eventLogLimit: options.eventLogLimit }),
   })
+  const agentChat = options.agentChat
+    ? new AgentChatService(() => investigations.acquireRuntime(), options.agentChat, options.eventLogLimit)
+    : null
   const settings = new SettingsStore()
   const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
   const incidentAudit = new IncidentAuditStore()
@@ -86,6 +95,88 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         response = { service: "podo-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: process.env.CODEX_BIN ?? "codex", transport: "stdio", version: null, error: error instanceof Error ? error.message : String(error) }, remediation: remediationStatus }
       }
       return json(response, url.pathname === "/readyz" && response.status !== "ready" ? 503 : 200)
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/agent/readiness") {
+      let response: AgentReadinessResponse
+      if (!agentChat) {
+        response = { service: "podo-core", status: "degraded", version: serviceVersion, chat: { configured: false, available: false, sandbox: "read-only", reason: "not_configured" } }
+      } else if (investigations.runtimeError) {
+        response = { service: "podo-core", status: "degraded", version: serviceVersion, chat: { configured: true, available: false, sandbox: "read-only", reason: "runtime_failed" } }
+      } else {
+        let runtimeInfo: CodexRuntimeInfo
+        try {
+          runtimeInfo = await inspectCodex()
+        } catch {
+          return json({ service: "podo-core", status: "degraded", version: serviceVersion, chat: { configured: true, available: false, sandbox: "read-only", reason: "codex_unavailable" } } satisfies AgentReadinessResponse)
+        }
+        if (!isCodexRuntimeCompatible(runtimeInfo)) {
+          return json({ service: "podo-core", status: "degraded", version: serviceVersion, chat: { configured: true, available: false, sandbox: "read-only", reason: "version_mismatch" } } satisfies AgentReadinessResponse)
+        }
+        try {
+          await investigations.acquireRuntime()
+          response = { service: "podo-core", status: "ready", version: serviceVersion, chat: { configured: true, available: true, sandbox: "read-only" } }
+        } catch {
+          response = { service: "podo-core", status: "degraded", version: serviceVersion, chat: { configured: true, available: false, sandbox: "read-only", reason: "runtime_failed" } }
+        }
+      }
+      return json(response)
+    }
+
+    if (url.pathname === "/api/agent/chats") {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      const input = await readBody(request)
+      if (!isEmptyObject(input)) return json({ error: "invalid_request", message: "No caller-authored chat configuration is accepted" }, 400)
+      if (!agentChat) return json({ error: "agent_chat_not_configured" }, 503)
+      try {
+        if (!isCodexRuntimeCompatible(await inspectCodex())) {
+          return json({ error: "codex_version_mismatch", message: "The configured Codex runtime does not match Podo's pinned protocol" }, 503)
+        }
+        return json({ chat: await agentChat.create() }, 201)
+      } catch {
+        return json({ error: "agent_unavailable", message: "The Podo agent runtime is unavailable" }, 503)
+      }
+    }
+
+    const agentChatEventsMatch = url.pathname.match(/^\/api\/agent\/chats\/([^/]+)\/events$/)
+    if (agentChatEventsMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      if (!agentChat) return json({ error: "agent_chat_not_configured" }, 503)
+      const id = decodeURIComponent(agentChatEventsMatch[1])
+      const rawAfter = request.headers.get("last-event-id") ?? url.searchParams.get("after") ?? "0"
+      const after = Number(rawAfter)
+      if (!Number.isSafeInteger(after) || after < 0) return json({ error: "invalid_event_id" }, 400)
+      const replay = agentChat.replay(id, after)
+      if (!replay) return json({ error: "not_found" }, 404)
+      const earliest = agentChat.earliestSequence(id)
+      if (earliest !== null && after < earliest - 1) return json({ error: "event_replay_expired", message: `Earliest available sequence is ${earliest}` }, 409)
+      return agentChatEventStream(agentChat, id, replay, options.sseHeartbeatMs ?? 5_000)
+    }
+
+    const agentChatMessagesMatch = url.pathname.match(/^\/api\/agent\/chats\/([^/]+)\/messages$/)
+    if (agentChatMessagesMatch?.[1]) {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      if (!agentChat) return json({ error: "agent_chat_not_configured" }, 503)
+      const input = await readBody(request)
+      if (!isSendAgentChatMessageRequest(input)) return json({ error: "invalid_request", message: "content and clientRequestId are required; no other fields are accepted" }, 400)
+      const result = await agentChat.send(decodeURIComponent(agentChatMessagesMatch[1]), input)
+      return result.ok ? json(result.response, result.response.accepted ? 202 : 200) : json({ error: result.error }, result.status)
+    }
+
+    const agentChatTurnMatch = url.pathname.match(/^\/api\/agent\/chats\/([^/]+)\/turn$/)
+    if (agentChatTurnMatch?.[1]) {
+      if (request.method !== "DELETE") return json({ error: "method_not_allowed" }, 405)
+      if (!agentChat) return json({ error: "agent_chat_not_configured" }, 503)
+      const result = await agentChat.cancel(decodeURIComponent(agentChatTurnMatch[1]))
+      return result ? json(result) : json({ error: "not_found" }, 404)
+    }
+
+    const agentChatMatch = url.pathname.match(/^\/api\/agent\/chats\/([^/]+)$/)
+    if (agentChatMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      if (!agentChat) return json({ error: "agent_chat_not_configured" }, 503)
+      const result = agentChat.get(decodeURIComponent(agentChatMatch[1]))
+      return result ? json(result) : json({ error: "not_found" }, 404)
     }
 
     if (url.pathname === "/api/settings") {
@@ -277,7 +368,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (!replay) return json({ error: "not_found" }, 404)
       const earliest = investigations.earliestSequence(id)
       if (earliest !== null && after < earliest - 1) return json({ error: "event_replay_expired", message: `Earliest available sequence is ${earliest}` }, 409)
-      return eventStream(investigations, id, replay)
+      return eventStream(investigations, id, replay, options.sseHeartbeatMs ?? 5_000)
     }
 
     const approvalMatch = url.pathname.match(/^\/api\/investigations\/([^/]+)\/approvals\/([^/]+)$/)
@@ -307,9 +398,16 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   }
 }
 
-function eventStream(service: InvestigationService, id: string, replay: InvestigationEvent[]): Response {
+function eventStream(service: InvestigationService, id: string, replay: InvestigationEvent[], heartbeatMs: number): Response {
   const encoder = new TextEncoder()
   let unsubscribe: (() => void) | null = null
+  let heartbeat: ReturnType<typeof setInterval> | null = null
+  const stop = () => {
+    unsubscribe?.()
+    unsubscribe = null
+    if (heartbeat) clearInterval(heartbeat)
+    heartbeat = null
+  }
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       for (const event of replay) controller.enqueue(encoder.encode(toSse(event)))
@@ -317,15 +415,52 @@ function eventStream(service: InvestigationService, id: string, replay: Investig
         controller.close()
         return
       }
+      heartbeat = setInterval(() => controller.enqueue(encoder.encode(": keep-alive\n\n")), heartbeatMs)
       unsubscribe = service.subscribe(id, (event) => {
         controller.enqueue(encoder.encode(toSse(event)))
         if (event.kind === "investigation.completed" || event.kind === "investigation.cancelled" || event.kind === "investigation.failed") {
-          unsubscribe?.()
+          stop()
           controller.close()
         }
       })
     },
-    cancel() { unsubscribe?.() },
+    cancel() { stop() },
+  })
+  return new Response(body, { headers: { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" } })
+}
+
+function agentChatEventStream(service: AgentChatService, id: string, replay: AgentChatEvent[], heartbeatMs: number): Response {
+  const encoder = new TextEncoder()
+  let unsubscribe: (() => void) | null = null
+  let heartbeat: ReturnType<typeof setInterval> | null = null
+  const stop = () => {
+    unsubscribe?.()
+    unsubscribe = null
+    if (heartbeat) clearInterval(heartbeat)
+    heartbeat = null
+  }
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of replay) controller.enqueue(encoder.encode(toSse(event)))
+      const last = replay.at(-1)
+      if (last && (last.kind === "message.completed" || last.kind === "turn.cancelled" || last.kind === "chat.failed")) {
+        controller.close()
+        return
+      }
+      if (service.get(id)?.chat.status !== "running") {
+        controller.close()
+        return
+      }
+      heartbeat = setInterval(() => controller.enqueue(encoder.encode(": keep-alive\n\n")), heartbeatMs)
+      unsubscribe = service.subscribe(id, (event) => {
+        controller.enqueue(encoder.encode(toSse(event)))
+        if (event.kind === "message.completed" || event.kind === "turn.cancelled" || event.kind === "chat.failed") {
+          stop()
+          controller.close()
+        }
+      })
+    },
+    cancel() { stop() },
   })
   return new Response(body, { headers: { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" } })
 }
@@ -353,6 +488,18 @@ function isStartIncidentInvestigationRequest(value: unknown): value is { cwd: st
   return Object.keys(input).length === 1
     && typeof input.cwd === "string"
     && input.cwd.startsWith("/")
+}
+
+function isSendAgentChatMessageRequest(value: unknown): value is SendAgentChatMessageRequest {
+  if (!isPlainObject(value) || Object.keys(value).length !== 2) return false
+  return typeof value.content === "string"
+    && value.content.trim().length > 0
+    && value.content.length <= 8_000
+    && value.content === value.content.trim()
+    && typeof value.clientRequestId === "string"
+    && value.clientRequestId.length > 0
+    && value.clientRequestId.length <= 128
+    && value.clientRequestId === value.clientRequestId.trim()
 }
 
 function isApprovalDecision(value: unknown): value is ApprovalDecisionRequest {
