@@ -17,6 +17,8 @@
   validation;
 - a fail-closed two-turn Codex patch producer and detached-worktree executor
   that never stages, branches, pushes, merges, or mutates the source checkout.
+- a separately approved, repository-bound GitHub issue fallback for terminal
+  failed remediations, containing only a Core-authored sanitized draft.
 
 `POST /api/incidents/:id/investigation` is the product investigation entrypoint.
 It accepts only an absolute repository `cwd`; core selects the incident evidence,
@@ -96,6 +98,15 @@ whose repository, base commit, base branch, head branch, and artifact ID all
 match. Denial, missing verification, changed artifacts, adapter errors, and
 invalid results expose no pull-request record or provider output.
 
+For terminal failed remediation, `POST
+/api/incidents/:id/remediation/issue-delivery` creates a separate pending issue
+approval. Core authors the title and body from the validated diagnosis, stable
+evidence IDs, and sanitized remediation failure code. It deliberately excludes
+the unverified diff, pull-request preview, raw Codex output, and command output.
+Approval invokes the configured issue port at most once; denial performs no
+provider mutation. The result must exactly match the operator-configured
+repository, issue URL, and stable draft ID or Core exposes no issue record.
+
 Networked GitHub delivery is a separate, disabled-by-default opt-in. A complete
 configuration composes the verified Git branch publisher, the delivery bridge,
 and the GitHub REST adapter. It can be enabled only together with production
@@ -120,6 +131,11 @@ the immutable verified artifact after the separate delivery approval, uses the
 Core delivery ID for remote reconciliation, and returns a strictly bound PR
 result. Incomplete or inconsistent configuration aborts startup with a stable
 sanitized error; disabling the feature constructs no publisher or adapter.
+
+The same opt-in config also composes the GitHub issue adapter. It reconciles by
+the Core issue-delivery ID plus the full sanitized-content hash before creating
+an issue, so ambiguous or repeated calls cannot silently create a different
+artifact.
 
 The token must have access to the configured repository and permission to push
 the derived remediation branch and create pull requests. Durable Core state,

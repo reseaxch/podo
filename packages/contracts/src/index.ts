@@ -322,6 +322,33 @@ export type IncidentRemediationAuditEvent =
     artifactId: string
     pullRequestUrl: string
   }
+  | IncidentRemediationAuditEventBase & {
+    kind: "issue_delivery.requested"
+    issueDeliveryId: string
+    draftId: string
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "issue_delivery.approval_decided"
+    issueDeliveryId: string
+    approvalId: string
+    decision: "approve" | "deny"
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "issue_delivery.started"
+    issueDeliveryId: string
+    draftId: string
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "issue_delivery.failed"
+    issueDeliveryId: string
+    code: IncidentIssueDeliveryErrorCode
+  }
+  | IncidentRemediationAuditEventBase & {
+    kind: "issue_delivery.succeeded"
+    issueDeliveryId: string
+    draftId: string
+    issueUrl: string
+  }
 
 export interface GetIncidentRemediationAuditResponse {
   events: IncidentRemediationAuditEvent[]
@@ -375,6 +402,61 @@ export interface IncidentDeliveryDecisionRequest {
 
 export interface IncidentDeliveryDecisionResponse {
   delivery: IncidentDelivery
+}
+
+export type IncidentIssueDeliveryErrorCode =
+  | "policy_denied"
+  | "draft_changed"
+  | "delivery_failed"
+  | "invalid_delivery_result"
+
+export interface IncidentIssueDraft {
+  id: string
+  title: string
+  body: string
+  evidenceIds: string[]
+  remediationFailureCode: NonNullable<IncidentRemediation["error"]>["code"]
+}
+
+export interface IncidentIssueDelivery {
+  id: string
+  incidentId: string
+  remediationId: string
+  draft: IncidentIssueDraft
+  status: "pending_approval" | "delivering" | "delivered" | "denied" | "failed"
+  approval: {
+    id: string
+    status: "pending" | "approved" | "denied"
+  }
+  createdAt: string
+  updatedAt: string
+  issue?: {
+    provider: "github"
+    repository: string
+    number: number
+    url: string
+    draftId: string
+  }
+  error?: {
+    code: IncidentIssueDeliveryErrorCode
+    message: string
+  }
+}
+
+export interface StartIncidentIssueDeliveryResponse {
+  issueDelivery: IncidentIssueDelivery
+}
+
+export interface GetIncidentIssueDeliveryResponse {
+  issueDelivery: IncidentIssueDelivery
+}
+
+export interface IncidentIssueDeliveryDecisionRequest {
+  decision: "approve" | "deny"
+}
+
+export interface IncidentIssueDeliveryDecisionResponse {
+  issueDelivery: IncidentIssueDelivery
 }
 
 export interface StartIncidentInvestigationRequest {

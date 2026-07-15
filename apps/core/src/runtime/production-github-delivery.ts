@@ -4,12 +4,18 @@ import {
   GitCliBranchPublisher,
   GitCliDeliveryBranchPublisher,
   GitHubDeliveryAdapter,
+  GitHubIssueDeliveryAdapter,
   computeDeliveryArtifactSha256,
+  computeIssueArtifactSha256,
   type GitCliBranchPublisherConfig,
   type GitHubDeliveryAdapterConfig,
   type GitHubDeliveryArtifactContent,
   type GitHubDeliveryRequest,
   type GitHubDeliveryResult,
+  type GitHubIssueDeliveryAdapterConfig,
+  type GitHubIssueDeliveryArtifactContent,
+  type GitHubIssueDeliveryRequest,
+  type GitHubIssueDeliveryResult,
 } from "@podo/plugin-github"
 
 import type {
@@ -17,6 +23,11 @@ import type {
   PullRequestDeliveryInput,
   PullRequestDeliveryPort,
 } from "../modules/remediation/incident-delivery"
+import type {
+  IssueDeliveryConfig,
+  IssueDeliveryInput,
+  IssueDeliveryPort,
+} from "../modules/remediation/incident-issue-delivery"
 
 type Environment = Readonly<Record<string, string | undefined>>
 
@@ -35,10 +46,34 @@ interface ProductionGitHubDeliveryConfig {
 
 type ConcretePublisher = Pick<GitCliBranchPublisher, "publish">
 type ConcreteAdapter = Pick<GitHubDeliveryAdapter, "deliver">
+type ConcreteIssueAdapter = Pick<GitHubIssueDeliveryAdapter, "deliver">
 
 export interface ProductionGitHubDeliveryDependencies {
   createPublisher?: (config: GitCliBranchPublisherConfig) => ConcretePublisher
   createAdapter?: (config: GitHubDeliveryAdapterConfig) => ConcreteAdapter
+  createIssueAdapter?: (config: GitHubIssueDeliveryAdapterConfig) => ConcreteIssueAdapter
+}
+
+export function createProductionGitHubIssueDelivery(
+  environment: Environment,
+  dependencies: ProductionGitHubDeliveryDependencies = {},
+): IssueDeliveryConfig | undefined {
+  const config = parseConfig(environment)
+  if (!config) return undefined
+
+  try {
+    const createAdapter = dependencies.createIssueAdapter ?? ((value) => new GitHubIssueDeliveryAdapter(value))
+    const adapter = createAdapter({
+      token: config.token,
+      repository: { owner: config.owner, name: config.repository },
+    })
+    return {
+      expectedRepository: `${config.owner}/${config.repository}`,
+      port: new ProductionGitHubIssueDeliveryPort(adapter, config.operatorIdentity),
+    }
+  } catch {
+    throw invalidConfig()
+  }
 }
 
 export class ProductionGitHubDeliveryConfigError extends Error {
@@ -108,6 +143,19 @@ class ProductionGitHubDeliveryPort implements PullRequestDeliveryPort {
   }
 }
 
+class ProductionGitHubIssueDeliveryPort implements IssueDeliveryPort {
+  constructor(
+    private readonly adapter: ConcreteIssueAdapter,
+    private readonly operatorIdentity: string,
+  ) {}
+
+  async deliver(input: IssueDeliveryInput): Promise<unknown> {
+    const request = toGitHubIssueRequest(input, this.operatorIdentity)
+    const result = await this.adapter.deliver(request)
+    return toCoreIssueResult(result)
+  }
+}
+
 function toGitHubRequest(input: PullRequestDeliveryInput, operatorIdentity: string): GitHubDeliveryRequest {
   const artifact = input.artifact
   const content: GitHubDeliveryArtifactContent = {
@@ -155,6 +203,41 @@ function toCoreResult(result: GitHubDeliveryResult): unknown {
     baseBranch: result.pullRequest.baseRef,
     headBranch: result.pullRequest.headRef,
     artifactId: result.artifact.id,
+  }
+}
+
+function toGitHubIssueRequest(input: IssueDeliveryInput, operatorIdentity: string): GitHubIssueDeliveryRequest {
+  const content: GitHubIssueDeliveryArtifactContent = {
+    incidentId: input.incidentId,
+    remediationId: input.remediationId,
+    title: input.draft.title,
+    body: input.draft.body,
+    evidenceIds: [...input.draft.evidenceIds],
+    remediationFailureCode: input.draft.remediationFailureCode,
+  }
+  return {
+    authorization: {
+      decision: "approved",
+      approvalId: input.authorization.approvalId,
+      approvedBy: operatorIdentity,
+      approvedAt: input.authorization.approvedAt,
+    },
+    artifact: {
+      id: input.draft.id,
+      idempotencyKey: input.issueDeliveryId,
+      contentSha256: computeIssueArtifactSha256(content),
+      content,
+    },
+  }
+}
+
+function toCoreIssueResult(result: GitHubIssueDeliveryResult): unknown {
+  return {
+    provider: "github",
+    repository: `${result.repository.owner}/${result.repository.name}`,
+    number: result.issue.number,
+    url: result.issue.url,
+    draftId: result.artifact.id,
   }
 }
 

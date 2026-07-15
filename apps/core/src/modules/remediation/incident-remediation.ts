@@ -331,6 +331,36 @@ export class IncidentRemediationService {
           artifactId: event.artifactId,
           pullRequestUrl: event.pullRequestUrl,
         })
+        return
+      case "issue_delivery.requested":
+      case "issue_delivery.started":
+        record.audit.push({
+          ...base,
+          kind: event.kind,
+          issueDeliveryId: event.issueDeliveryId,
+          draftId: event.draftId,
+        })
+        return
+      case "issue_delivery.approval_decided":
+        record.audit.push({
+          ...base,
+          kind: event.kind,
+          issueDeliveryId: event.issueDeliveryId,
+          approvalId: event.approvalId,
+          decision: event.decision,
+        })
+        return
+      case "issue_delivery.failed":
+        record.audit.push({ ...base, kind: event.kind, issueDeliveryId: event.issueDeliveryId, code: event.code })
+        return
+      case "issue_delivery.succeeded":
+        record.audit.push({
+          ...base,
+          kind: event.kind,
+          issueDeliveryId: event.issueDeliveryId,
+          draftId: event.draftId,
+          issueUrl: event.issueUrl,
+        })
     }
   }
 }

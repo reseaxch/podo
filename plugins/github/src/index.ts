@@ -2,6 +2,23 @@ import { createHash } from "node:crypto"
 import type { PluginManifest } from "@podo/plugin-sdk"
 import type { GitCliBranchPublisher, PublishedVerifiedBranch } from "./git-branch-publisher"
 
+export {
+  GitHubIssueDeliveryAdapter,
+  GitHubIssueDeliveryError,
+  computeIssueArtifactSha256,
+} from "./issue-delivery"
+export type {
+  GitHubIssueDeliveryAdapterConfig,
+  GitHubIssueDeliveryArtifact,
+  GitHubIssueDeliveryArtifactContent,
+  GitHubIssueDeliveryAuthorization,
+  GitHubIssueDeliveryErrorCode,
+  GitHubIssueDeliveryRequest,
+  GitHubIssueDeliveryResult,
+  GitHubIssueFetch,
+  GitHubIssueRemediationFailureCode,
+} from "./issue-delivery"
+
 export { GitCliBranchPublisher, GitCliBranchPublisherError } from "./git-branch-publisher"
 export type {
   GitCliBranchPublisherConfig,

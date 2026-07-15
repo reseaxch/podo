@@ -42,6 +42,13 @@ Usage:
                                             Approve its pending delivery
   podo incidents deny-delivery <incidentId> <approvalId>
                                             Deny its pending delivery
+  podo incidents issue <incidentId>         Request a sanitized failed-remediation issue
+  podo incidents issue-delivery <incidentId>
+                                            Show its issue delivery state
+  podo incidents approve-issue <incidentId> <approvalId>
+                                            Approve its pending issue delivery
+  podo incidents deny-issue <incidentId> <approvalId>
+                                            Deny its pending issue delivery
 
 Settings:
   autonomyMode       observe | recommend | act_with_approval
@@ -261,6 +268,38 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
         2,
       ),
     )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "issue") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents issue <incidentId>")
+      return 1
+    }
+    output(JSON.stringify(await client.startIncidentIssueDelivery(firstArgument), null, 2))
+    return 0
+  }
+  if (command === "incidents" && subcommand === "issue-delivery") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents issue-delivery <incidentId>")
+      return 1
+    }
+    output(JSON.stringify(await client.getIncidentIssueDelivery(firstArgument), null, 2))
+    return 0
+  }
+  if (command === "incidents" && subcommand === "approve-issue") {
+    if (args.length !== 4 || !isNonBlank(firstArgument) || !isNonBlank(secondArgument)) {
+      error("Invalid arguments. Usage: podo incidents approve-issue <incidentId> <approvalId>")
+      return 1
+    }
+    output(JSON.stringify(await client.approveIncidentIssueDelivery(firstArgument, secondArgument), null, 2))
+    return 0
+  }
+  if (command === "incidents" && subcommand === "deny-issue") {
+    if (args.length !== 4 || !isNonBlank(firstArgument) || !isNonBlank(secondArgument)) {
+      error("Invalid arguments. Usage: podo incidents deny-issue <incidentId> <approvalId>")
+      return 1
+    }
+    output(JSON.stringify(await client.denyIncidentIssueDelivery(firstArgument, secondArgument), null, 2))
     return 0
   }
   if (command === "help" || command === "--help" || command === "-h") {

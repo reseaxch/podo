@@ -49,11 +49,15 @@ canonical graph + telemetry replay
   → reproducible pull-request preview
   → separate delivery approval
   → verified derived Git branch and exact GitHub pull request
+  ↘ on failed verification: separate approval → sanitized GitHub issue
 ```
 
 The deterministic POC keeps state in memory and uses a fake pull-request
 delivery port so `bun run poc` remains offline and reproducible. The same sealed
 artifact now has an opt-in real GitHub delivery composition for operator runs.
+Terminal failed remediations can instead enter a separately approved,
+repository-bound issue fallback that excludes unverified patch and runtime
+output.
 The MVP still needs durable operations and reconciliation, authenticated actor
 identity, complete audit persistence, judge setup, eval baselines, benchmarks,
 and final submission artifacts. Failed validation must never reach either path.

@@ -13,7 +13,7 @@ import {
 
 const passiveActions = ["read_evidence", "query_graph"] as const satisfies readonly ReactionAction[]
 const recommendationActions = ["draft_diagnosis", "draft_issue", "preview_patch"] as const satisfies readonly ReactionAction[]
-const executionActions = ["start_codex", "write_patch", "run_regression_tests", "create_pull_request"] as const satisfies readonly ReactionAction[]
+const executionActions = ["start_codex", "write_patch", "run_regression_tests", "create_pull_request", "create_issue"] as const satisfies readonly ReactionAction[]
 
 function decide(mode: AutonomyLevel, action: ReactionAction, overrides: Partial<Parameters<typeof evaluateReaction>[0]> = {}) {
   return evaluateReaction({
@@ -39,7 +39,7 @@ describe("reaction policy", () => {
   })
 
   test("requires approval and an isolated checkout for every executable action", () => {
-    for (const action of executionActions) {
+    for (const action of executionActions.filter((action) => action !== "create_issue")) {
       expect(decide("act_with_approval", action, { target: "isolated_checkout" })).toMatchObject({
         allowed: false,
         reason: "approval_required",
@@ -49,6 +49,21 @@ describe("reaction policy", () => {
         reason: "unsafe_target",
       })
     }
+
+    expect(decide("act_with_approval", "create_issue", {
+      regression: "failed",
+      target: "none",
+    })).toMatchObject({ allowed: false, reason: "approval_required" })
+    expect(decide("act_with_approval", "create_issue", {
+      approval: "approved",
+      regression: "failed",
+      target: "isolated_checkout",
+    })).toMatchObject({ allowed: false, reason: "unsafe_target" })
+    expect(decide("act_with_approval", "create_issue", {
+      approval: "approved",
+      regression: "failed",
+      target: "none",
+    })).toMatchObject({ allowed: true, reason: "allowed" })
 
     expect(decide("act_with_approval", "write_patch", {
       approval: "approved",
@@ -97,6 +112,11 @@ describe("reaction policy", () => {
       regression: "passed",
       target: "isolated_checkout",
     })).toMatchObject({ allowed: true, reason: "allowed" })
+    expect(decide("act_with_approval", "create_issue", {
+      approval: "approved",
+      regression: "passed",
+      target: "none",
+    })).toMatchObject({ allowed: false, reason: "issue_not_required" })
   })
 })
 

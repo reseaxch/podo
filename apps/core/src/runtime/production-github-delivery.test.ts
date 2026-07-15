@@ -4,11 +4,16 @@ import type {
   GitHubDeliveryAdapterConfig,
   GitHubDeliveryRequest,
   GitHubDeliveryResult,
+  GitHubIssueDeliveryAdapterConfig,
+  GitHubIssueDeliveryRequest,
+  GitHubIssueDeliveryResult,
 } from "@podo/plugin-github"
 
 import type { PullRequestDeliveryInput } from "../modules/remediation/incident-delivery"
+import type { IssueDeliveryInput } from "../modules/remediation/incident-issue-delivery"
 import {
   ProductionGitHubDeliveryConfigError,
+  createProductionGitHubIssueDelivery,
   createProductionGitHubPullRequestDelivery,
 } from "./production-github-delivery"
 
@@ -176,6 +181,57 @@ describe("production GitHub delivery composition", () => {
     })).rejects.toMatchObject({ code: "publisher_binding_mismatch" })
     expect(lowLevelPublishes).toBe(0)
   })
+
+  test("maps only the Core-authored issue authorization and immutable draft into the bound adapter", async () => {
+    let adapterConfig: GitHubIssueDeliveryAdapterConfig | undefined
+    let deliveryRequest: GitHubIssueDeliveryRequest | undefined
+    const config = createProductionGitHubIssueDelivery(enabledEnvironment, {
+      createIssueAdapter(value) {
+        adapterConfig = value
+        return {
+          async deliver(request) {
+            deliveryRequest = request
+            return githubIssueResult()
+          },
+        }
+      },
+    })
+
+    expect(config?.expectedRepository).toBe("reseaxch/podo")
+    expect(adapterConfig).toEqual({
+      token,
+      repository: { owner: "reseaxch", name: "podo" },
+    })
+    await expect(config!.port.deliver(coreIssueInput())).resolves.toEqual({
+      provider: "github",
+      repository: "reseaxch/podo",
+      number: 43,
+      url: "https://github.com/reseaxch/podo/issues/43",
+      draftId: "issue_draft_abc",
+    })
+    expect(deliveryRequest).toEqual({
+      authorization: {
+        decision: "approved",
+        approvalId: "approval-issue-1",
+        approvedBy: "local-lead",
+        approvedAt: "2026-07-15T11:00:00.000Z",
+      },
+      artifact: {
+        id: "issue_draft_abc",
+        idempotencyKey: "issue-delivery-1",
+        contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        content: {
+          incidentId: "incident-1",
+          remediationId: "remediation-1",
+          title: "[Podo] checkout remediation requires manual follow-up",
+          body: "Sanitized diagnosis and evidence only.",
+          evidenceIds: ["ev:1", "ev:2"],
+          remediationFailureCode: "verification_failed",
+        },
+      },
+    })
+    expect(JSON.stringify(deliveryRequest)).not.toContain(token)
+  })
 })
 
 function coreInput(): PullRequestDeliveryInput {
@@ -240,6 +296,50 @@ function githubResult(): GitHubDeliveryResult {
       approvalId: "approval-1",
       approvedBy: "local-lead",
       approvedAt: "2026-07-15T10:00:00.000Z",
+    },
+  }
+}
+
+function coreIssueInput(): IssueDeliveryInput {
+  return {
+    issueDeliveryId: "issue-delivery-1",
+    incidentId: "incident-1",
+    remediationId: "remediation-1",
+    authorization: {
+      kind: "core.issue_delivery.v1",
+      approvalId: "approval-issue-1",
+      approvedAt: "2026-07-15T11:00:00.000Z",
+    },
+    draft: {
+      id: "issue_draft_abc",
+      title: "[Podo] checkout remediation requires manual follow-up",
+      body: "Sanitized diagnosis and evidence only.",
+      evidenceIds: ["ev:1", "ev:2"],
+      remediationFailureCode: "verification_failed",
+    },
+  }
+}
+
+function githubIssueResult(): GitHubIssueDeliveryResult {
+  return {
+    status: "created",
+    repository: { owner: "reseaxch", name: "podo" },
+    issue: {
+      number: 43,
+      url: "https://github.com/reseaxch/podo/issues/43",
+      state: "open",
+    },
+    artifact: {
+      id: "issue_draft_abc",
+      idempotencyKey: "issue-delivery-1",
+      contentSha256: "f".repeat(64),
+      evidenceIds: ["ev:1", "ev:2"],
+      remediationFailureCode: "verification_failed",
+    },
+    authorization: {
+      approvalId: "approval-issue-1",
+      approvedBy: "local-lead",
+      approvedAt: "2026-07-15T11:00:00.000Z",
     },
   }
 }

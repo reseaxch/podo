@@ -18,6 +18,10 @@ bun run dev:cli -- incidents deliver <incidentId>
 bun run dev:cli -- incidents delivery <incidentId>
 bun run dev:cli -- incidents approve-delivery <incidentId> <approvalId>
 bun run dev:cli -- incidents deny-delivery <incidentId> <approvalId>
+bun run dev:cli -- incidents issue <incidentId>
+bun run dev:cli -- incidents issue-delivery <incidentId>
+bun run dev:cli -- incidents approve-issue <incidentId> <approvalId>
+bun run dev:cli -- incidents deny-issue <incidentId> <approvalId>
 bun run --cwd apps/cli typecheck
 bun run --cwd apps/cli build
 ```
@@ -39,3 +43,7 @@ that approval, `delivery` reads the authoritative delivery state, and the two
 delivery decision commands forward only the incident id and opaque approval id
 to `@podo/client`. Repository identity, provider state, patch contents, and
 approval authority are never inferred or supplied by the CLI.
+
+Failed-remediation issue delivery is another separate Core lifecycle. `issue`
+requests the sanitized draft and approval, `issue-delivery` reads it, and the
+issue decision commands forward only the incident and opaque approval IDs.

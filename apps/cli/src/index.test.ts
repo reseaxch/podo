@@ -33,6 +33,10 @@ function client(
     getIncidentDelivery: async () => { throw new Error("unused") },
     approveIncidentDelivery: async () => { throw new Error("unused") },
     denyIncidentDelivery: async () => { throw new Error("unused") },
+    startIncidentIssueDelivery: async () => { throw new Error("unused") },
+    getIncidentIssueDelivery: async () => { throw new Error("unused") },
+    approveIncidentIssueDelivery: async () => { throw new Error("unused") },
+    denyIncidentIssueDelivery: async () => { throw new Error("unused") },
     start: async () => { throw new Error("unused") },
     get: async () => { throw new Error("unused") },
     cancel: async () => { throw new Error("unused") },
@@ -59,6 +63,8 @@ describe("Podo CLI config", () => {
     expect(stdout[0]).toContain("podo incidents delivery <incidentId>")
     expect(stdout[0]).toContain("podo incidents approve-delivery <incidentId> <approvalId>")
     expect(stdout[0]).toContain("podo incidents deny-delivery <incidentId> <approvalId>")
+    expect(stdout[0]).toContain("podo incidents issue <incidentId>")
+    expect(stdout[0]).toContain("podo incidents approve-issue <incidentId> <approvalId>")
   })
 
   test("prints settings as JSON", async () => {
@@ -192,6 +198,27 @@ const delivery = {
 }
 
 describe("Podo CLI incidents", () => {
+  test("routes the separate issue request and approval lifecycle", async () => {
+    const calls: string[] = []
+    const fake = client({
+      startIncidentIssueDelivery: async (id) => { calls.push(`start:${id}`); return { issueDelivery: {} as never } },
+      getIncidentIssueDelivery: async (id) => { calls.push(`get:${id}`); return { issueDelivery: {} as never } },
+      approveIncidentIssueDelivery: async (id, approvalId) => { calls.push(`approve:${id}:${approvalId}`); return { issueDelivery: {} as never } },
+      denyIncidentIssueDelivery: async (id, approvalId) => { calls.push(`deny:${id}:${approvalId}`); return { issueDelivery: {} as never } },
+    })
+
+    expect(await runCli(["incidents", "issue", "incident/1"], { client: fake, stdout() {} })).toBe(0)
+    expect(await runCli(["incidents", "issue-delivery", "incident/1"], { client: fake, stdout() {} })).toBe(0)
+    expect(await runCli(["incidents", "approve-issue", "incident/1", "approval/1"], { client: fake, stdout() {} })).toBe(0)
+    expect(await runCli(["incidents", "deny-issue", "incident/1", "approval/2"], { client: fake, stdout() {} })).toBe(0)
+    expect(calls).toEqual([
+      "start:incident/1",
+      "get:incident/1",
+      "approve:incident/1:approval/1",
+      "deny:incident/1:approval/2",
+    ])
+  })
+
   test("shows one incident through the typed client", async () => {
     const calls: string[] = []
     const stdout: string[] = []

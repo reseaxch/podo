@@ -10,6 +10,7 @@ export const REACTION_ACTIONS = [
   "write_patch",
   "run_regression_tests",
   "create_pull_request",
+  "create_issue",
 ] as const
 
 export type ReactionAction = (typeof REACTION_ACTIONS)[number]
@@ -26,6 +27,7 @@ export type ReactionReason =
   | "unsafe_target"
   | "regression_failed"
   | "regression_not_passed"
+  | "issue_not_required"
 
 export interface ReactionRequest {
   mode: AutonomyLevel
@@ -58,6 +60,7 @@ const executionActions = new Set<ReactionAction>([
   "write_patch",
   "run_regression_tests",
   "create_pull_request",
+  "create_issue",
 ])
 
 function deny(reason: Exclude<ReactionReason, "allowed">, requiresApproval = false): ReactionDecision {
@@ -98,9 +101,13 @@ export function evaluateReaction(request: ReactionRequest): ReactionDecision {
   }
   if (request.approval === "denied") return deny("approval_denied", true)
   if (request.approval !== "approved") return deny("approval_required", true)
-  if (request.target !== "isolated_checkout") return deny("unsafe_target", true)
+  const expectedTarget = request.action === "create_issue" ? "none" : "isolated_checkout"
+  if (request.target !== expectedTarget) return deny("unsafe_target", true)
   if (request.action === "create_pull_request" && request.regression !== "passed") {
     return deny("regression_not_passed", true)
+  }
+  if (request.action === "create_issue" && request.regression !== "failed") {
+    return deny("issue_not_required", true)
   }
 
   return { allowed: true, reason: "allowed", requiresApproval: true }

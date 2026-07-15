@@ -74,3 +74,15 @@ POC runtime slice.
 
 Tests use injected REST fakes and local bare Git repositories. They perform no
 real network or GitHub writes.
+
+## Failed-remediation issue boundary
+
+`GitHubIssueDeliveryAdapter` accepts only an explicit approved Core
+authorization and a stable artifact whose SHA-256 covers the incident,
+remediation, sanitized title/body, sorted evidence IDs, and remediation failure
+code. Repository identity comes only from adapter configuration. The adapter
+searches open and closed issues for its exact HTML reconciliation marker before
+creating one, rejects marker/content conflicts, and coalesces concurrent calls.
+It never accepts or publishes a diff, pull-request preview, raw runtime output,
+credentials, or caller-selected repository. Returned URLs are reconstructed for
+the configured repository rather than trusted from provider response data.
