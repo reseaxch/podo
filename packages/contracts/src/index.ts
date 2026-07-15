@@ -533,6 +533,74 @@ export type InvestigationEvent = {
   timestamp: string
 } & InvestigationEventData
 
+export interface AgentReadinessResponse {
+  service: "podo-core"
+  status: "ready" | "degraded"
+  version: string
+  chat: {
+    configured: boolean
+    available: boolean
+    sandbox: "read-only"
+    reason?: "not_configured" | "codex_unavailable" | "version_mismatch" | "runtime_failed"
+  }
+}
+
+export type AgentChatStatus = "ready" | "running" | "failed"
+
+export interface AgentChatMessage {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  createdAt: string
+  clientRequestId?: string
+}
+
+export type AgentChatErrorCode =
+  | "runtime_unavailable"
+  | "turn_timeout"
+  | "turn_failed"
+  | "policy_denied"
+  | "empty_response"
+
+export interface AgentChat {
+  id: string
+  status: AgentChatStatus
+  createdAt: string
+  updatedAt: string
+  lastSequence: number
+  messages: AgentChatMessage[]
+  error?: { code: AgentChatErrorCode; message: string }
+}
+
+export interface CreateAgentChatResponse { chat: AgentChat }
+export interface GetAgentChatResponse { chat: AgentChat }
+
+export interface SendAgentChatMessageRequest {
+  content: string
+  clientRequestId: string
+}
+
+export interface SendAgentChatMessageResponse {
+  chat: AgentChat
+  accepted: boolean
+}
+
+export interface CancelAgentChatTurnResponse { chat: AgentChat }
+
+type AgentChatEventData =
+  | { kind: "chat.started"; payload: { status: "ready" } }
+  | { kind: "message.accepted"; payload: { message: AgentChatMessage } }
+  | { kind: "output.delta"; payload: { text: string } }
+  | { kind: "message.completed"; payload: { message: AgentChatMessage } }
+  | { kind: "turn.cancelled"; payload: { status: "ready" } }
+  | { kind: "chat.failed"; payload: { status: "failed"; error: NonNullable<AgentChat["error"]> } }
+
+export type AgentChatEvent = {
+  chatId: string
+  sequence: number
+  timestamp: string
+} & AgentChatEventData
+
 export const PODO_CODE_GRAPH_SCHEMA_VERSION = "podo.code-graph.v1" as const
 
 export type CodeGraphNodeKind =

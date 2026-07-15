@@ -155,9 +155,14 @@ Infrastructure anomaly
 - multi-cloud инфраструктура;
 - универсальное anomaly detection;
 - полноценные интеграции Slack, Jira, PagerDuty и Grafana;
-- отдельный generic chat with code/docs;
+- универсальный автономный generic chat with произвольным code/docs;
 - обучение собственной модели;
 - анализ произвольной enterprise-кодовой базы без настройки.
+
+Допустим узкий read-only operator chat внутри Podo: UI/TUI задают вопросы о
+настроенном репозитории и operational context через Core-owned Codex App Server
+thread. Клиент не выбирает cwd, sandbox, system prompt или approval policy; это
+не отдельный автономный coding assistant и не обход remediation-гейтов.
 
 ## 8. Функциональные требования
 
