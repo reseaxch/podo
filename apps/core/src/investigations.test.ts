@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { CodexRuntime, CodexRuntimeEvent, StartCodexThreadInput } from "@podo/codex-app-server-client"
 import type { InvestigationEvent } from "@podo/contracts"
 import { createCoreHandler } from "./app"
+import { InvestigationService } from "./investigations"
 
 class FakeRuntime implements CodexRuntime {
   listeners = new Set<(event: CodexRuntimeEvent) => void>()
@@ -30,7 +31,65 @@ async function start(handler: ReturnType<typeof createCoreHandler>) {
   return (await response.json() as { investigation: { id: string } }).investigation.id
 }
 
+async function startService(service: InvestigationService) {
+  const response = await service.start({ prompt: "investigate", cwd: "/repo", sandbox: "read-only" })
+  return response.investigation.id
+}
+
 describe("investigation orchestration", () => {
+  test("captures complete ordered output independently of the bounded public event log", async () => {
+    const runtime = new FakeRuntime()
+    const service = new InvestigationService({ runtime, eventLogLimit: 2 })
+    const id = await startService(service)
+
+    runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "root " })
+    runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "root " })
+    runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "cause" })
+
+    expect(service.getCompletedOutput(id)).toBeNull()
+    expect(service.replay(id, 0)?.map(({ kind }) => kind)).toEqual(["output.delta", "output.delta"])
+
+    runtime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "internal-turn-1", status: "completed" })
+
+    expect(service.getCompletedOutput(id)).toBe("root root cause")
+    expect(service.replay(id, 0)?.map(({ kind }) => kind)).toEqual(["output.delta", "investigation.completed"])
+  })
+
+  test("suppresses captured output for failed and cancelled investigations", async () => {
+    const failedRuntime = new FakeRuntime()
+    const failedService = new InvestigationService({ runtime: failedRuntime })
+    const failedId = await startService(failedService)
+    failedRuntime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "untrusted partial" })
+    failedRuntime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "internal-turn-1", status: "failed", error: "invalid output" })
+    expect(failedService.getCompletedOutput(failedId)).toBeNull()
+
+    const cancelledRuntime = new FakeRuntime()
+    const cancelledService = new InvestigationService({ runtime: cancelledRuntime })
+    const cancelledId = await startService(cancelledService)
+    cancelledRuntime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "cancelled partial" })
+    await cancelledService.cancel(cancelledId)
+    expect(cancelledService.getCompletedOutput(cancelledId)).toBeNull()
+  })
+
+  test("ignores mismatched-turn, duplicate terminal, and late output events", async () => {
+    const runtime = new FakeRuntime()
+    const service = new InvestigationService({ runtime })
+    const id = await startService(service)
+
+    runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "stale-turn", text: "stale" })
+    runtime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "stale-turn", status: "completed" })
+    expect(service.getCompletedOutput(id)).toBeNull()
+    runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "trusted" })
+    runtime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "internal-turn-1", status: "completed" })
+    const sequenceAtCompletion = service.get(id)?.investigation.lastSequence
+
+    runtime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "internal-turn-1", status: "completed" })
+    runtime.emit({ kind: "output.delta", threadId: "internal-thread-1", turnId: "internal-turn-1", text: "late" })
+
+    expect(service.getCompletedOutput(id)).toBe("trusted")
+    expect(service.get(id)?.investigation.lastSequence).toBe(sequenceAtCompletion)
+  })
+
   test("requires explicit cwd and sandbox policy", async () => {
     const handler = createCoreHandler({ runtime: new FakeRuntime() })
     const response = await handler(new Request("http://podo.test/api/investigations", { method: "POST", body: JSON.stringify({ prompt: "x" }) }))

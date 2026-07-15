@@ -15,6 +15,12 @@ incident into the generic Codex-backed `InvestigationService`. It:
 - keeps one stable incident-to-investigation association, including concurrent
   retries.
 
+`InvestigationService` separately retains the ordered Codex `output.delta`
+text for internal consumers. The capture is independent of the bounded public
+event log and is exposed only after the matching turn reaches `completed`.
+Failed, cancelled, stale-turn, and post-terminal output cannot be consumed as a
+diagnosis.
+
 The public command accepts only an absolute repository `cwd`. Prompt, evidence,
 mode, sandbox, approval, and developer instructions are deliberately not client
 inputs. This slice does not claim a structured root cause yet and does not start

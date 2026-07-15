@@ -22,6 +22,7 @@ interface InternalInvestigation {
   threadId?: string
   turnId?: string
   events: InvestigationEvent[]
+  outputDeltas: string[]
   approval?: InternalApproval
   listeners: Set<(event: InvestigationEvent) => void>
   approvalPolicy: "interactive" | "deny_all"
@@ -75,6 +76,7 @@ export class InvestigationService {
       },
       prompt: input.prompt,
       events: [],
+      outputDeltas: [],
       listeners: new Set(),
       approvalPolicy: options.approvalPolicy ?? "interactive",
     }
@@ -108,6 +110,13 @@ export class InvestigationService {
     return investigation ? { investigation: snapshot(investigation.public) } : null
   }
 
+  getCompletedOutput(id: string): string | null {
+    const investigation = this.investigations.get(id)
+    return investigation?.public.status === "completed"
+      ? investigation.outputDeltas.join("")
+      : null
+  }
+
   async cancel(id: string): Promise<CancelInvestigationResponse | null> {
     const investigation = this.investigations.get(id)
     if (!investigation) return null
@@ -124,6 +133,7 @@ export class InvestigationService {
       }
       if (!isTerminal(investigation.public.status)) {
         investigation.public.status = "cancelled"
+        investigation.outputDeltas.length = 0
         delete investigation.approval
         investigation.public.pendingApproval = null
         this.append(investigation, { kind: "investigation.cancelled", payload: { status: "cancelled" } })
@@ -215,6 +225,8 @@ export class InvestigationService {
     }
     switch (event.kind) {
       case "output.delta":
+        if (event.turnId !== investigation.turnId) return
+        investigation.outputDeltas.push(event.text)
         this.append(investigation, { kind: "output.delta", payload: { text: event.text } })
         break
       case "approval.requested": {
@@ -242,6 +254,7 @@ export class InvestigationService {
         break
       }
       case "turn.completed":
+        if (event.turnId !== investigation.turnId) return
         if (investigation.approval?.public.status === "pending") {
           const requestId = investigation.approval.runtimeRequestId
           void this.getRuntime().then((runtime) => runtime.resolveApproval(requestId, "deny")).catch(() => undefined)
@@ -300,6 +313,7 @@ export class InvestigationService {
   private fail(investigation: InternalInvestigation, message: string): void {
     if (isTerminal(investigation.public.status)) return
     investigation.public.status = "failed"
+    investigation.outputDeltas.length = 0
     investigation.public.error = message
     investigation.public.pendingApproval = null
     delete investigation.approval
