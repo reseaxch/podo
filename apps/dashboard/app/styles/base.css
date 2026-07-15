@@ -180,12 +180,14 @@ button {
   color: inherit;
 }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+:where(button, a, [role="button"], [role="tab"]):focus-visible {
+  outline: none;
+  box-shadow: inset 0 -2px color-mix(in srgb, var(--focus) 75%, transparent);
+}
+
+:where(input, textarea, select):focus-visible {
+  outline: none;
+  border-color: var(--focus);
 }
 
 .icon {

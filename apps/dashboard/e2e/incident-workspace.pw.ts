@@ -29,7 +29,9 @@ test("incident workspace supports its primary investigation flow", async ({
   } else {
     await page.keyboard.press("Escape")
   }
-  await page.getByRole("tab", { name: "Graph" }).click()
+  const graphTab = page.getByRole("tab", { name: "Graph" })
+  await graphTab.click()
+  await expect(graphTab).toHaveCSS("outline-style", "none")
   await expect(
     page.getByRole("heading", { name: "Why this is the root cause" }),
   ).toBeVisible()
