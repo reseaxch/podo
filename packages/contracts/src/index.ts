@@ -191,6 +191,74 @@ export interface GetIncidentCausalPathResponse {
   causalPath: IncidentCausalPath
 }
 
+export type IncidentRemediationStatus =
+  | "pending_approval"
+  | "running"
+  | "completed"
+  | "denied"
+  | "failed"
+
+export interface IncidentRemediationApproval {
+  id: string
+  status: "pending" | "approved" | "denied"
+}
+
+export interface IncidentRemediationArtifact {
+  patch: {
+    summary: string
+    changedFiles: string[]
+    unifiedDiff: string
+    sha256: string
+  }
+  regression: {
+    test: string
+    prePatch: "failed"
+    postPatch: "passed"
+  }
+  validation: {
+    status: "passed"
+    checks: string[]
+  }
+  pullRequestPreview: {
+    id: string
+    title: string
+    body: string
+    baseBranch: string
+    headBranch: string
+  }
+}
+
+export interface IncidentRemediation {
+  id: string
+  incidentId: string
+  status: IncidentRemediationStatus
+  target: "isolated_checkout"
+  approval: IncidentRemediationApproval
+  createdAt: string
+  updatedAt: string
+  artifact?: IncidentRemediationArtifact
+  error?: {
+    code: "execution_failed" | "invalid_executor_result" | "verification_failed" | "policy_denied"
+    message: string
+  }
+}
+
+export interface StartIncidentRemediationResponse {
+  remediation: IncidentRemediation
+}
+
+export interface GetIncidentRemediationResponse {
+  remediation: IncidentRemediation
+}
+
+export interface IncidentRemediationDecisionRequest {
+  decision: "approve" | "deny"
+}
+
+export interface IncidentRemediationDecisionResponse {
+  remediation: IncidentRemediation
+}
+
 export interface StartIncidentInvestigationRequest {
   cwd: string
 }

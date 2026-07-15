@@ -14,6 +14,20 @@ error code/message and intentionally has no raw output or `safeToAttemptFix`.
 Absence means no terminal diagnosis has been projected yet. Diagnosis safety is
 informational and never represents remediation approval.
 
+## Incident remediation
+
+The incident remediation contract is core-owned and fail-closed. Starting a
+remediation accepts no caller-authored diagnosis, evidence, policy, target, or
+executor result. It creates an opaque human approval in `pending_approval`; only
+the separate approve command may move the run into execution. Denial is terminal.
+
+A completed remediation contains a reproducible, sanitized artifact: the
+repository-relative changed-file list, validated unified diff and its SHA-256,
+the required pre-patch failure/post-patch pass, full validation checks, and a PR
+preview. Pending, denied, running, and failed remediations never contain an
+artifact or PR preview. Raw Codex IDs, output, commands, and protocol messages
+are not transport fields.
+
 Contracts should describe Podo concepts, not transport-library internals or raw Codex JSON-RPC. Keep them serializable and explicit about version-sensitive behavior.
 
 ## Normalized code graph

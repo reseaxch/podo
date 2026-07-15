@@ -10,6 +10,15 @@ code graph and trusted deployment correlation remain server-side inputs. File
 and function steps include normalized labels, external IDs, and optional source
 locations for code-level rendering without provider payloads.
 
+Incident remediation uses four typed methods:
+`startIncidentRemediation`, `getIncidentRemediation`,
+`approveIncidentRemediation`, and `denyIncidentRemediation`. Start always sends
+an empty object, and decisions send only the opaque approval id plus the selected
+decision. The client cannot supply diagnosis, evidence, autonomy policy, target,
+patch, test claims, or PR metadata. The factory return type composes the additive
+`PodoRemediationClient` capability with `PodoIncidentClient`, preserving existing
+incident-client test doubles and consumers.
+
 ```sh
 bun test packages/client
 bun run --cwd packages/client typecheck

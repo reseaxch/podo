@@ -7,10 +7,13 @@ import type {
   GetSettingsResponse,
   HealthResponse,
   IngestTelemetryResponse,
+  GetIncidentRemediationResponse,
+  IncidentRemediationDecisionResponse,
   InvestigationEvent,
   ListIncidentsResponse,
   StartIncidentInvestigationRequest,
   StartIncidentInvestigationResponse,
+  StartIncidentRemediationResponse,
   StartInvestigationRequest,
   StartInvestigationResponse,
   SystemStatusResponse,
@@ -53,6 +56,13 @@ export interface PodoIncidentClient extends PodoClient {
   getIncidentCausalPath(id: string, evidenceId: string): Promise<GetIncidentCausalPathResponse>
 }
 
+export interface PodoRemediationClient {
+  startIncidentRemediation(id: string): Promise<StartIncidentRemediationResponse>
+  getIncidentRemediation(id: string): Promise<GetIncidentRemediationResponse>
+  approveIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
+  denyIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = await response.text()
@@ -61,7 +71,7 @@ async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
 
-export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentClient {
+export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentClient & PodoRemediationClient {
   const baseUrl = (options.baseUrl ?? "http://127.0.0.1:4100").replace(/\/$/, "")
   const request = options.fetch ?? globalThis.fetch
   const investigationUrl = (id: string) => `${baseUrl}/api/investigations/${encodeURIComponent(id)}`
@@ -80,6 +90,10 @@ export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentC
     getIncident: async (id) => readJson<GetIncidentResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}`)),
     getIncidentCausalPath: async (id, evidenceId) => readJson<GetIncidentCausalPathResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/causal-path?evidenceId=${encodeURIComponent(evidenceId)}`)),
     startIncidentInvestigation: (id, input) => command<StartIncidentInvestigationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/investigation`, "POST", input),
+    startIncidentRemediation: (id) => command<StartIncidentRemediationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`, "POST", {}),
+    getIncidentRemediation: async (id) => readJson<GetIncidentRemediationResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`)),
+    approveIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "approve" }),
+    denyIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "deny" }),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
     get: async (id) => readJson<GetInvestigationResponse>(await request(investigationUrl(id))),
     cancel: (id) => command<CancelInvestigationResponse>(investigationUrl(id), "DELETE"),

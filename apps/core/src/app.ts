@@ -2,6 +2,7 @@ import { inspectCodexRuntime, type CodexRuntime, type CodexRuntimeInfo } from "@
 import type {
   ApprovalDecisionRequest,
   HealthResponse,
+  IncidentRemediationDecisionRequest,
   IngestTelemetryRequest,
   InvestigationEvent,
   StartInvestigationRequest,
@@ -11,6 +12,7 @@ import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
 import { IncidentCausalPathService, type IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
+import { IncidentRemediationService, type IncidentRemediationExecutor } from "./modules/remediation/incident-remediation"
 import { SettingsStore } from "./settings"
 
 export interface CoreHandlerOptions {
@@ -20,6 +22,7 @@ export interface CoreHandlerOptions {
   eventLogLimit?: number
   incidentMonitor?: IncidentMonitor
   incidentGraph?: IncidentGraphConfig
+  remediationExecutor?: IncidentRemediationExecutor
 }
 
 const serviceVersion = "0.0.0"
@@ -39,6 +42,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
   const incidentInvestigations = new IncidentInvestigationCoordinator(incidentMonitor, investigations, settings)
   const incidentCausalPaths = new IncidentCausalPathService(incidentMonitor, options.incidentGraph)
+  const incidentRemediations = new IncidentRemediationService(incidentMonitor, incidentInvestigations, settings, options.remediationExecutor)
 
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -118,6 +122,41 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       const result = incidentCausalPaths.resolve(decodeURIComponent(incidentCausalPathMatch[1]), evidenceIds[0]!)
       return result.ok
         ? json(result.response)
+        : json({ error: result.error, message: result.message }, result.status)
+    }
+
+    const incidentRemediationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation$/)
+    if (incidentRemediationMatch?.[1]) {
+      const incidentId = decodeURIComponent(incidentRemediationMatch[1])
+      if (request.method === "GET") {
+        const result = incidentRemediations.get(incidentId)
+        return result.ok
+          ? json({ remediation: result.remediation })
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      if (request.method === "POST") {
+        const input = await readBody(request)
+        if (!isEmptyObject(input)) return json({ error: "invalid_request", message: "No caller-authored remediation input is accepted" }, 400)
+        const result = incidentRemediations.start(incidentId)
+        return result.ok
+          ? json({ remediation: result.remediation }, result.created ? 201 : 200)
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      return json({ error: "method_not_allowed" }, 405)
+    }
+
+    const incidentRemediationApprovalMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/approvals\/([^/]+)$/)
+    if (incidentRemediationApprovalMatch?.[1] && incidentRemediationApprovalMatch[2]) {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      const input = await readBody(request)
+      if (!isIncidentRemediationDecision(input)) return json({ error: "invalid_request" }, 400)
+      const result = await incidentRemediations.decide(
+        decodeURIComponent(incidentRemediationApprovalMatch[1]),
+        decodeURIComponent(incidentRemediationApprovalMatch[2]),
+        input.decision,
+      )
+      return result.ok
+        ? json({ remediation: result.remediation })
         : json({ error: result.error, message: result.message }, result.status)
     }
 
@@ -231,6 +270,20 @@ function isApprovalDecision(value: unknown): value is ApprovalDecisionRequest {
   if (input.answers === undefined) return true
   if (!input.answers || typeof input.answers !== "object" || Array.isArray(input.answers)) return false
   return Object.values(input.answers).every((answer) => Array.isArray(answer) && answer.every((entry) => typeof entry === "string"))
+}
+
+function isIncidentRemediationDecision(value: unknown): value is IncidentRemediationDecisionRequest {
+  return isPlainObject(value)
+    && Object.keys(value).length === 1
+    && (value.decision === "approve" || value.decision === "deny")
+}
+
+function isEmptyObject(value: unknown): value is Record<string, never> {
+  return isPlainObject(value) && Object.keys(value).length === 0
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
 function isTelemetryBatch(value: unknown): value is IngestTelemetryRequest {

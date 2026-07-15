@@ -85,6 +85,48 @@ describe("createPodoClient", () => {
     ])
   })
 
+  test("uses the core-owned incident remediation lifecycle without caller-authored state", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = []
+    const client = createPodoClient({
+      baseUrl: "http://podo.test/",
+      fetch: async (input, init) => {
+        requests.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+        })
+        return Response.json({ remediation: { id: "remediation-1" } })
+      },
+    })
+
+    await client.startIncidentRemediation("incident/1")
+    await client.getIncidentRemediation("incident/1")
+    await client.approveIncidentRemediation("incident/1", "approval/1")
+    await client.denyIncidentRemediation("incident/1", "approval/2")
+
+    expect(requests).toEqual([
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation",
+        method: "POST",
+        body: {},
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation",
+        method: "GET",
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation/approvals/approval%2F1",
+        method: "POST",
+        body: { decision: "approve" },
+      },
+      {
+        url: "http://podo.test/api/incidents/incident%2F1/remediation/approvals/approval%2F2",
+        method: "POST",
+        body: { decision: "deny" },
+      },
+    ])
+  })
+
   test("reads and updates the public settings contract", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = []
     const client = createPodoClient({
