@@ -41,18 +41,12 @@ describe("dashboard palette", () => {
       critical,
       onCritical,
     ])
-      expect(values).toHaveLength(3)
+      expect(values).toHaveLength(1)
 
-    for (const index of [0, 1, 2]) {
-      expect(
-        contrast(primary[index]!, onPrimary[index]!),
-      ).toBeGreaterThanOrEqual(4.5)
-      expect(
-        contrast(primaryHover[index]!, onPrimary[index]!),
-      ).toBeGreaterThanOrEqual(4.5)
-      expect(
-        contrast(critical[index]!, onCritical[index]!),
-      ).toBeGreaterThanOrEqual(4.5)
-    }
+    expect(contrast(primary[0]!, onPrimary[0]!)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(primaryHover[0]!, onPrimary[0]!)).toBeGreaterThanOrEqual(
+      4.5,
+    )
+    expect(contrast(critical[0]!, onCritical[0]!)).toBeGreaterThanOrEqual(4.5)
   })
 })

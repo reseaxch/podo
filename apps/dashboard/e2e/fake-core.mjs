@@ -13,6 +13,37 @@ const evidence = {
 let incident
 let remediation = null
 let delivery = null
+const unsafeIssues = new Map()
+
+function unsafeIncident(id) {
+  return {
+    id,
+    status: "detected",
+    detector: "cache_growth",
+    affectedService: "checkout-service",
+    deploymentId: "deploy-1042",
+    createdAt: "2026-07-14T09:55:00.000Z",
+    updatedAt: "2026-07-14T10:19:00.000Z",
+    evidence: [evidence],
+    investigation: {
+      id: `investigation_${id}`,
+      status: "completed",
+      startedAt: now,
+      updatedAt: now,
+    },
+    diagnosis: {
+      status: "validated",
+      schemaVersion: "podo.diagnosis.v1",
+      summary: "The incident needs operator follow-up.",
+      affectedService: "checkout-service",
+      probableRootCause: "No safe automated remediation is available.",
+      confidence: { value: 9100, scale: "basis_points" },
+      evidenceIds: [evidence.id],
+      recommendedAction: "Create an evidence-backed tracking issue.",
+      safeToAttemptFix: false,
+    },
+  }
+}
 
 function reset() {
   incident = {
@@ -49,6 +80,11 @@ createServer(async (request, response) => {
   }
   if (url.pathname === "/api/incidents" && request.method === "GET")
     return send(response, { incidents: [incident] })
+  const unsafeIncidentMatch = url.pathname.match(
+    /^\/api\/incidents\/(incident_unsafe_[^/]+)$/,
+  )
+  if (unsafeIncidentMatch?.[1] && request.method === "GET")
+    return send(response, { incident: unsafeIncident(unsafeIncidentMatch[1]) })
   if (
     url.pathname === "/api/incidents/incident_live" &&
     request.method === "GET"
@@ -155,6 +191,38 @@ createServer(async (request, response) => {
       updatedAt: now,
     }
     return send(response, { delivery }, 201)
+  }
+  const unsafeIssueMatch = url.pathname.match(
+    /^\/api\/incidents\/(incident_unsafe_[^/]+)\/issue$/,
+  )
+  if (unsafeIssueMatch?.[1]) {
+    const incidentId = unsafeIssueMatch[1]
+    const existing = unsafeIssues.get(incidentId)
+    if (request.method === "GET")
+      return existing
+        ? send(response, { issueDelivery: existing })
+        : send(response, { error: "not_found" }, 404)
+    const issueDelivery = {
+      id: `issue_delivery_${incidentId}`,
+      incidentId,
+      reason: "remediation_not_safe",
+      status: "created",
+      createdAt: now,
+      updatedAt: now,
+      issue: {
+        provider: "github",
+        repository: "reseaxch/podo",
+        number: 91,
+        url: "https://github.com/reseaxch/podo/issues/91",
+        state: "open",
+        providerStatus: "created",
+        draftId: "issue_draft_live",
+        idempotencyKey: `issue_delivery_${incidentId}`,
+        contentSha256: "abc123",
+      },
+    }
+    unsafeIssues.set(incidentId, issueDelivery)
+    return send(response, { issueDelivery }, 201)
   }
   if (
     url.pathname ===

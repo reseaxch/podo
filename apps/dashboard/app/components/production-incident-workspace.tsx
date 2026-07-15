@@ -4,6 +4,7 @@ import type {
   DetectedIncident,
   IncidentDelivery,
   IncidentEvidence,
+  IncidentIssueDelivery,
   IncidentRemediation,
   TelemetryKind,
 } from "@podo/contracts"
@@ -287,21 +288,7 @@ type WorkflowState = {
   incident: DetectedIncident
   remediation: IncidentRemediation | null
   delivery: IncidentDelivery | null
-}
-
-function issueHref(
-  incident: DetectedIncident,
-  remediation: IncidentRemediation,
-) {
-  const title = `Manual remediation required for ${incident.id}`
-  const body = [
-    `Incident: ${incident.id}`,
-    `Service: ${incident.affectedService}`,
-    `Failure: ${remediation.error?.message ?? "Remediation validation failed"}`,
-    "",
-    "Review the evidence and failed remediation before preparing another patch.",
-  ].join("\n")
-  return `https://github.com/reseaxch/podo/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
+  issueDelivery: IncidentIssueDelivery | null
 }
 
 function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
@@ -312,7 +299,8 @@ function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
     state.incident.investigation?.status === "starting" ||
     state.incident.investigation?.status === "running" ||
     state.remediation?.status === "running" ||
-    state.delivery?.status === "delivering"
+    state.delivery?.status === "delivering" ||
+    state.issueDelivery?.status === "creating"
 
   const refresh = useCallback(async () => {
     const response = await fetch(
@@ -370,6 +358,7 @@ function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
     )
   const remediation = state.remediation
   const delivery = state.delivery
+  const issueDelivery = state.issueDelivery
 
   return (
     <div className="production-workflow-column">
@@ -441,7 +430,20 @@ function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
           </section>
         ) : null}
 
-        {delivery?.status === "delivered" && delivery.pullRequest ? (
+        {issueDelivery?.status === "created" && issueDelivery.issue ? (
+          <a
+            className="primary-button"
+            href={issueDelivery.issue.url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open issue #{issueDelivery.issue.number}
+          </a>
+        ) : issueDelivery?.status === "failed" ? (
+          <p className="production-workflow-error" role="alert">
+            {issueDelivery.error?.message ?? "GitHub issue delivery failed."}
+          </p>
+        ) : delivery?.status === "delivered" && delivery.pullRequest ? (
           <a
             className="primary-button"
             href={delivery.pullRequest.url}
@@ -459,14 +461,14 @@ function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
             <p className="production-workflow-error" role="alert">
               {remediation.error?.message ?? "Remediation verification failed."}
             </p>
-            <a
+            <button
               className="primary-button"
-              href={issueHref(state.incident, remediation)}
-              rel="noreferrer"
-              target="_blank"
+              disabled={busy}
+              onClick={() => void command({ action: "start-issue" })}
+              type="button"
             >
-              Open prefilled GitHub issue
-            </a>
+              Create GitHub issue
+            </button>
           </div>
         ) : !state.incident.investigation ? (
           <button
@@ -485,6 +487,15 @@ function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
           <p className="production-workflow-status">
             Investigation failed closed. Review the audit trail before retrying.
           </p>
+        ) : trustedDiagnosis && !diagnosis.safeToAttemptFix && !remediation ? (
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => void command({ action: "start-issue" })}
+            type="button"
+          >
+            Create GitHub issue
+          </button>
         ) : trustedDiagnosis && diagnosis.safeToAttemptFix && !remediation ? (
           <button
             className="primary-button"
@@ -526,9 +537,19 @@ function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
             </button>
           </div>
         ) : remediation?.status === "denied" ? (
-          <p className="production-workflow-status">
-            Remediation was denied. No code was changed.
-          </p>
+          <div>
+            <p className="production-workflow-status">
+              Remediation was denied. No code was changed.
+            </p>
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() => void command({ action: "start-issue" })}
+              type="button"
+            >
+              Create GitHub issue
+            </button>
+          </div>
         ) : remediation?.status === "completed" && !delivery ? (
           <button
             className="primary-button"
@@ -583,10 +604,12 @@ export function ProductionIncidentWorkspace({
   incident,
   remediation = null,
   delivery = null,
+  issueDelivery = null,
 }: {
   incident: DetectedIncident
   remediation?: IncidentRemediation | null
   delivery?: IncidentDelivery | null
+  issueDelivery?: IncidentIssueDelivery | null
 }) {
   return (
     <main className="production-shell" data-ready="true">
@@ -642,7 +665,9 @@ export function ProductionIncidentWorkspace({
             </div>
           </section>
 
-          <ProductionWorkflow initial={{ incident, remediation, delivery }} />
+          <ProductionWorkflow
+            initial={{ incident, remediation, delivery, issueDelivery }}
+          />
         </div>
       </section>
     </main>

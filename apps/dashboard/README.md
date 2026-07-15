@@ -15,12 +15,15 @@ incident-linked investigation lifecycle and validated diagnosis returned by
 Core, then exposes only the explicit investigation, remediation, and delivery
 commands available through `@podo/client`. Remediation execution and pull
 request delivery remain separate approval boundaries. Failed or structurally
-incomplete responses never expose unsafe guidance, and failed verification
-offers a prefilled issue handoff instead of pull-request delivery.
+incomplete responses never expose unsafe guidance. Unsafe, denied, or failed
+remediation uses the Core-owned GitHub issue fallback directly; it does not add
+another approval step and never builds issue content in the browser.
 
 Set `PODO_DASHBOARD_MODE=demo` only for isolated visual development and UI
 tests. `?mode=live` can be used by the E2E fake-Core suite to exercise the
 production boundary while the rest of the browser suite remains deterministic.
+Set `PODO_DASHBOARD_E2E_PORT` and `PODO_DASHBOARD_E2E_CORE_PORT` when the
+default test ports are already occupied.
 
 ```sh
 bun run dev:dashboard

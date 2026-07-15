@@ -1,4 +1,4 @@
-import type { PodoClient } from "@podo/client"
+import type { createPodoClient } from "@podo/client"
 import type { DetectedIncident } from "@podo/contracts"
 import { describe, expect, it, vi } from "vitest"
 
@@ -48,7 +48,7 @@ describe("getIncidentOverview", () => {
       listIncidents,
       getIncidentRemediation: missing,
       getIncidentDelivery: missing,
-    } as unknown as PodoClient
+    } as unknown as ReturnType<typeof createPodoClient>
 
     const overview = await getIncidentOverview({ client })
 

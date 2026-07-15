@@ -45,3 +45,20 @@ test("live Core flow stays approval-gated through pull request delivery", async 
     page.getByRole("link", { name: "Open PR #1842" }),
   ).toHaveAttribute("href", "https://github.com/reseaxch/podo/pull/1842")
 })
+
+test("unsafe remediation creates a Core-owned issue without an extra approval", async ({
+  page,
+}, testInfo) => {
+  const incidentId = `incident_unsafe_${testInfo.project.name}`
+  await page.goto(`/?mode=live&incident=${encodeURIComponent(incidentId)}`)
+
+  await expect(
+    page.getByRole("button", { name: "Create GitHub issue" }),
+  ).toBeVisible()
+  await expect(page.getByRole("button", { name: /approve/i })).toHaveCount(0)
+  await page.getByRole("button", { name: "Create GitHub issue" }).click()
+
+  await expect(
+    page.getByRole("link", { name: "Open issue #91" }),
+  ).toHaveAttribute("href", "https://github.com/reseaxch/podo/issues/91")
+})

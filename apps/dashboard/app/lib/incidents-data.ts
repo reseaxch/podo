@@ -1,4 +1,4 @@
-import type { PodoClient } from "@podo/client"
+import type { createPodoClient } from "@podo/client"
 import type { IncidentDelivery, IncidentRemediation } from "@podo/contracts"
 
 import { incidentOverviewMock } from "../mocks/incidents"
@@ -8,6 +8,8 @@ import type {
   IncidentOverviewViewModel,
   IncidentSummary,
 } from "./incident-overview-types"
+
+type DashboardClient = ReturnType<typeof createPodoClient>
 
 async function optional<T>(operation: () => Promise<T>): Promise<T | null> {
   try {
@@ -36,7 +38,7 @@ function workflowStatus(
 }
 
 export async function getIncidentOverview(
-  options: { client?: PodoClient } = {},
+  options: { client?: DashboardClient } = {},
 ): Promise<IncidentOverviewViewModel> {
   if (isDemoDashboard()) return structuredClone(incidentOverviewMock)
 

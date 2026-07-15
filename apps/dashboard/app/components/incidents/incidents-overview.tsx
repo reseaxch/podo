@@ -121,10 +121,7 @@ export function IncidentsOverview({
             <Link className="secondary-button overview-toggle" href="/overview">
               <Icon name="squares-four" size={15} /> Overview
             </Link>
-            <Link
-              className="secondary-button refresh-button"
-              href="/incidents"
-            >
+            <Link className="secondary-button refresh-button" href="/incidents">
               <Icon name="activity" size={16} /> Refresh
             </Link>
           </div>
