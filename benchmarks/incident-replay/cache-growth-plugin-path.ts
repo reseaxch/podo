@@ -16,9 +16,9 @@
 // measured region, then measures only the public decode / replay call — so
 // fixture load/parse cost never enters plugin phase timing.
 
-import { readFileSync } from "node:fs"
+import { readFileSync, realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { dirname, join } from "node:path"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import type { IngestTelemetryResponse, TelemetryEventInput } from "@podo/contracts"
 import { decodeGraphifyNetworkxV1 } from "@podo/plugin-graphify"
 import {
@@ -30,14 +30,50 @@ import {
 import { measure } from "../src/index"
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..")
-const FIXTURES = join(REPO_ROOT, "scenarios", "cache-growth", "fixtures")
-const GRAPH_FIXTURE = join(FIXTURES, "graph.json")
+const SCENARIO_DIR = join(REPO_ROOT, "scenarios", "cache-growth")
+const FIXTURES = join(SCENARIO_DIR, "fixtures")
+const GRAPH_BOOTSTRAP = join(SCENARIO_DIR, "graph-bootstrap.json")
 const TELEMETRY_FIXTURE = join(FIXTURES, "telemetry.json")
 
 // Fixed, deterministic replay configuration.
-const GRAPH_ID = "cache-growth"
 const BATCH_SIZE = 7
 const ACCELERATION = 1_000_000
+
+interface GraphBootstrapInput {
+  graphId: string
+  fixturePath: string
+}
+
+function loadGraphBootstrapInput(): GraphBootstrapInput {
+  const value = JSON.parse(readFileSync(GRAPH_BOOTSTRAP, "utf8")) as unknown
+  if (!isRecord(value)
+    || value.schemaVersion !== "podo.graph-bootstrap.v1"
+    || value.decoder !== "networkx-v1"
+    || !isIdentity(value.graphId)
+    || !safeRelativePath(value.fixture)) {
+    throw new BenchmarkConfigurationError("canonical graph bootstrap is invalid")
+  }
+  const scenarioRoot = realpathSync(SCENARIO_DIR)
+  const fixturePath = realpathSync(resolve(scenarioRoot, value.fixture))
+  const fromScenario = relative(scenarioRoot, fixturePath)
+  if (fromScenario === "" || fromScenario === ".." || fromScenario.startsWith(`..${sep}`) || isAbsolute(fromScenario)) {
+    throw new BenchmarkConfigurationError("canonical graph fixture escapes its scenario")
+  }
+  return { graphId: value.graphId, fixturePath }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function isIdentity(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value === value.trim() && !value.includes("\0")
+}
+
+function safeRelativePath(value: unknown): value is string {
+  if (!isIdentity(value) || isAbsolute(value) || value.includes("\\") || /[%?#]/.test(value)) return false
+  return value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
+}
 
 // Named, bounded positive-integer range for iteration counts.
 export const MIN_ITERATIONS = 1
@@ -92,6 +128,8 @@ export class BenchmarkResultError extends Error {
   }
 }
 
+const graphBootstrap = loadGraphBootstrapInput()
+
 /**
  * Validates the iteration count against the bounded positive-integer range.
  * Rejects zero, negative, fractional, non-finite, and over-limit values before
@@ -110,7 +148,7 @@ export function validateIterations(iterations: number): void {
 
 /** Decodes an already-parsed Graphify graph and returns observable counters. */
 export function decodeCounters(rawGraph: unknown): DecodeCounters {
-  const result = decodeGraphifyNetworkxV1(rawGraph, { graphId: GRAPH_ID })
+  const result = decodeGraphifyNetworkxV1(rawGraph, { graphId: graphBootstrap.graphId })
   if (!result.ok) {
     throw new Error(`graphify decode rejected: ${result.rejection.issues[0]?.message ?? "unknown"}`)
   }
@@ -150,6 +188,16 @@ export interface CacheGrowthPluginPathReport {
   replay: {
     durationMs: number[]
     durationMsSummary: { min: number; max: number; mean: number }
+  }
+}
+
+export function loadCacheGrowthPluginInputs(): {
+  rawGraph: unknown
+  rawTelemetry: TelemetryEventInput[]
+} {
+  return {
+    rawGraph: JSON.parse(readFileSync(graphBootstrap.fixturePath, "utf8")) as unknown,
+    rawTelemetry: JSON.parse(readFileSync(TELEMETRY_FIXTURE, "utf8")) as TelemetryEventInput[],
   }
 }
 
@@ -219,8 +267,7 @@ export async function runCacheGrowthPluginPathBenchmark(
   validateIterations(iterations)
 
   // Read + parse fixtures ONCE, outside the measured iterations.
-  const rawGraph = JSON.parse(readFileSync(GRAPH_FIXTURE, "utf8")) as unknown
-  const rawTelemetry = JSON.parse(readFileSync(TELEMETRY_FIXTURE, "utf8")) as TelemetryEventInput[]
+  const { rawGraph, rawTelemetry } = loadCacheGrowthPluginInputs()
 
   const decodeDurations: number[] = []
   const replayDurations: number[] = []

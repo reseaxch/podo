@@ -42,6 +42,25 @@ provenance returns 409 without a partial path.
 Successful paths include normalized file/function labels, external identities,
 and optional source locations rather than opaque graph IDs alone.
 
+Production graph bootstrap is disabled by default. Enable it with an explicit
+absolute path to a trusted bootstrap manifest:
+
+```sh
+PODO_INCIDENT_GRAPH_ENABLED=true
+PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH=/absolute/path/to/scenarios/cache-growth/graph-bootstrap.json
+```
+
+Core reads the closed, versioned manifest before opening its HTTP listener,
+loads its relative raw Graphify fixture through the strict `networkx-v1`
+decoder, resolves every changed-file selector to exactly one normalized file
+node, and injects the resulting snapshot and trusted correlations into the
+handler. Commit and file provenance is never derived from telemetry. Missing,
+relative, unreadable, oversized, malformed, unsupported, ambiguous, or
+traversal-shaped configuration aborts startup with the stable sanitized error
+`invalid_production_incident_graph_config`. An enabled built Core therefore
+requires `PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH`; it never relies on a
+source-tree-relative runtime default.
+
 Production remediation is disabled by default. When explicitly configured, the
 Core startup composes the detached-worktree executor with the same supervised
 Codex runtime used by investigations; it does not start a second app-server

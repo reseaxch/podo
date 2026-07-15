@@ -7,9 +7,9 @@
 // mutates any fixture on disk.
 
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readFileSync, realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { dirname, join } from "node:path"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import {
   buildAfterFixTelemetryEvents,
   buildTelemetryEvents,
@@ -30,11 +30,45 @@ import { IncidentMonitor } from "../../apps/core/src/modules/incidents/incident-
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..")
 const SCENARIO_DIR = join(REPO_ROOT, "scenarios", "cache-growth")
+const GRAPH_BOOTSTRAP = join(SCENARIO_DIR, "graph-bootstrap.json")
 const GENERATOR = join(SCENARIO_DIR, "generate-telemetry.ts")
 const FIXTURES = join(SCENARIO_DIR, "fixtures")
 const TELEMETRY_FIXTURE = join(FIXTURES, "telemetry.json")
 const TELEMETRY_AFTER_FIX_FIXTURE = join(FIXTURES, "telemetry-after-fix.json")
-const GRAPH_FIXTURE = join(FIXTURES, "graph.json")
+
+interface GraphBootstrapInput {
+  graphId: string
+  fixturePath: string
+}
+
+function loadGraphBootstrapInput(): GraphBootstrapInput {
+  const value = JSON.parse(readFileSync(GRAPH_BOOTSTRAP, "utf8")) as unknown
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("canonical graph bootstrap must be an object")
+  }
+  const manifest = value as Record<string, unknown>
+  if (manifest.schemaVersion !== "podo.graph-bootstrap.v1"
+    || manifest.decoder !== "networkx-v1"
+    || typeof manifest.graphId !== "string"
+    || manifest.graphId.length === 0
+    || manifest.graphId !== manifest.graphId.trim()
+    || typeof manifest.fixture !== "string"
+    || isAbsolute(manifest.fixture)
+    || manifest.fixture.includes("\\")
+    || /[%?#]/.test(manifest.fixture)
+    || manifest.fixture.split("/").some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+    throw new Error("canonical graph bootstrap is invalid")
+  }
+  const scenarioRoot = realpathSync(SCENARIO_DIR)
+  const fixturePath = realpathSync(resolve(scenarioRoot, manifest.fixture))
+  const fromScenario = relative(scenarioRoot, fixturePath)
+  if (fromScenario === "" || fromScenario === ".." || fromScenario.startsWith(`..${sep}`) || isAbsolute(fromScenario)) {
+    throw new Error("canonical graph fixture escapes its scenario")
+  }
+  return { graphId: manifest.graphId, fixturePath }
+}
+
+const graphBootstrap = loadGraphBootstrapInput()
 
 /**
  * Asserts that regenerating `events` in memory reproduces the committed fixture's
@@ -101,9 +135,9 @@ describe("cache-growth fixture integrity", () => {
 
   test("Graphify decoder normalizes the committed graph fixture", () => {
     // Read the committed canonical graph.json read-only; never mutate it.
-    const raw = JSON.parse(readFileSync(GRAPH_FIXTURE, "utf8")) as unknown
+    const raw = JSON.parse(readFileSync(graphBootstrap.fixturePath, "utf8")) as unknown
 
-    const result = decodeGraphifyNetworkxV1(raw, { graphId: "cache-growth" })
+    const result = decodeGraphifyNetworkxV1(raw, { graphId: graphBootstrap.graphId })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return

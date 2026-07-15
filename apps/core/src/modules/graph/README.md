@@ -50,8 +50,10 @@ Current limits are deliberate: the graph is an in-memory full replacement, not
 persistence or an incremental upsert engine; `CHANGED` must identify one file and
 that file must contain one candidate function for the selected evidence path.
 Operational overlay construction is not wired into the incident monitor yet.
-The raw NetworkX-shaped Graphify fixture also requires a separate versioned
-raw-to-`NormalizedCodeGraphSnapshot` decoder before it can be loaded here.
+The opt-in production composition reads a versioned bootstrap manifest before
+Core binds its listener and uses the Graphify adapter's strict `networkx-v1`
+decoder to produce the injected `NormalizedCodeGraphSnapshot`. Raw Graphify
+payloads remain outside this domain module.
 
 ```sh
 bun test apps/core/src/modules/graph

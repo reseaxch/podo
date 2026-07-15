@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "podo.graph-bootstrap.v1",
+  "graphId": "cache-growth",
+  "decoder": "networkx-v1",
+  "fixture": "fixtures/graph.json",
+  "trustedCorrelations": [
+    {
+      "deploymentId": "deploy-1042",
+      "containerId": "checkout-service-7b9c",
+      "commitSha": "d34db33fd34db33fd34db33fd34db33fd34db33f",
+      "changedFile": {
+        "label": "cache.ts",
+        "path": "demo/services/checkout-service/src/cache.ts"
+      }
+    }
+  ]
+}

@@ -1,8 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
-import { dirname, join } from "node:path"
-import type { TelemetryEventInput } from "@podo/contracts"
 import {
   assertStableCounters,
   BenchmarkConfigurationError,
@@ -10,6 +6,7 @@ import {
   type CounterSamples,
   decodeCounters,
   type DecodeCounters,
+  loadCacheGrowthPluginInputs,
   MAX_ITERATIONS,
   replayCounters,
   type ReplayCounters,
@@ -27,12 +24,7 @@ const REPLAY: ReplayCounters = {
   scheduledDurationMs: 0,
 }
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..")
-const FIXTURES = join(REPO_ROOT, "scenarios", "cache-growth", "fixtures")
-const rawGraph = JSON.parse(readFileSync(join(FIXTURES, "graph.json"), "utf8")) as unknown
-const rawTelemetry = JSON.parse(
-  readFileSync(join(FIXTURES, "telemetry.json"), "utf8"),
-) as TelemetryEventInput[]
+const { rawGraph, rawTelemetry } = loadCacheGrowthPluginInputs()
 
 describe("cache-growth plugin-path benchmark", () => {
   test("decodes the canonical graph into stable counters", () => {
