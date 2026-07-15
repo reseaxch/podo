@@ -27,7 +27,7 @@ interface InternalInvestigation {
   listeners: Set<(event: InvestigationEvent) => void>
   approvalPolicy: "interactive" | "deny_all"
   onEvent?: (event: InvestigationEvent) => void
-  onApprovalDenied?: (approvalKind: InvestigationApproval["kind"]) => void
+  onApprovalDenied?: (investigationId: string, approvalKind: InvestigationApproval["kind"]) => void
 }
 
 export interface InvestigationServiceOptions {
@@ -67,7 +67,7 @@ export class InvestigationService {
       approvalPolicy?: "interactive" | "deny_all"
       developerInstructions?: string
       onEvent?: (event: InvestigationEvent) => void
-      onApprovalDenied?: (approvalKind: InvestigationApproval["kind"]) => void
+      onApprovalDenied?: (investigationId: string, approvalKind: InvestigationApproval["kind"]) => void
     } = {},
   ): Promise<StartInvestigationResponse> {
     const now = new Date().toISOString()
@@ -241,7 +241,7 @@ export class InvestigationService {
         break
       case "approval.requested": {
         if (investigation.approvalPolicy === "deny_all") {
-          investigation.onApprovalDenied?.(event.approvalKind)
+          investigation.onApprovalDenied?.(investigation.public.id, event.approvalKind)
           this.denyRuntimeApproval(investigation, event.requestId)
           this.fail(investigation, `Investigator requested forbidden ${event.approvalKind} approval`)
           return

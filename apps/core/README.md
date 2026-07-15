@@ -54,7 +54,8 @@ remediation, and delivery: request, approval or denial, execution start,
 diagnosis outcome, and sanitized verification or delivery success/failure.
 `GET /api/incidents/:id/audit` returns the incident-wide investigation and
 diagnosis lifecycle with evidence attribution. It omits raw prompts, model
-output, commands, diffs, and provider errors.
+output, commands, diffs, and provider errors. The in-memory POC retains the
+latest 256 immutable events per incident with monotonic sequence numbers.
 `GET /api/incidents/:id/remediation/audit`
 returns the ordered typed events. It records stable Core identifiers, decisions,
 sanitized failure codes, and the stable full-artifact ID; it never records raw

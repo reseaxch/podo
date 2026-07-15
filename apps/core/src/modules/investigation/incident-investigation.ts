@@ -159,6 +159,7 @@ export class IncidentInvestigationCoordinator {
       formatUntrustedEvidence(evidence),
     ].join("\n")
 
+    this.evidenceByIncident.set(incidentId, evidence)
     const started = await this.investigations.start({
       cwd: input.cwd,
       sandbox: "read-only",
@@ -167,9 +168,8 @@ export class IncidentInvestigationCoordinator {
       approvalPolicy: "deny_all",
       developerInstructions,
       onEvent: (event) => this.auditInvestigationEvent(incidentId, event),
-      onApprovalDenied: (approvalKind) => {
-        const investigationId = this.investigationByIncident.get(incidentId)
-        if (investigationId) this.audit.append(incidentId, {
+      onApprovalDenied: (investigationId, approvalKind) => {
+        this.audit.append(incidentId, {
           kind: "investigation.approval_denied",
           investigationId,
           approvalKind,
@@ -177,7 +177,6 @@ export class IncidentInvestigationCoordinator {
       },
     })
     this.investigationByIncident.set(incidentId, started.investigation.id)
-    this.evidenceByIncident.set(incidentId, evidence)
 
     return {
       ok: true,
@@ -254,6 +253,7 @@ export class IncidentInvestigationCoordinator {
 
   private auditInvestigationEvent(incidentId: string, event: import("@podo/contracts").InvestigationEvent): void {
     if (event.kind === "investigation.started") {
+      this.investigationByIncident.set(incidentId, event.investigationId)
       this.audit.append(incidentId, { kind: "investigation.started", investigationId: event.investigationId })
       return
     }
@@ -261,6 +261,8 @@ export class IncidentInvestigationCoordinator {
     if (event.kind === "investigation.completed" || event.kind === "investigation.failed" || event.kind === "investigation.cancelled") {
       this.terminalAuditByIncident.add(incidentId)
       this.audit.append(incidentId, { kind: event.kind, investigationId: event.investigationId })
+      const incident = this.incidents.getIncident(incidentId)
+      if (incident) this.getDiagnosis(incident)
     }
   }
 
