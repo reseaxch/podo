@@ -322,11 +322,13 @@ function EvidenceRow({
     <article className={`evidence-row ${expanded ? "is-expanded" : ""}`}>
       <button
         aria-expanded={expanded}
-        aria-label={`${expanded ? "Collapse" : "Expand"} ${item.finding}`}
         className="evidence-row-button"
         onClick={onToggle}
         type="button"
       >
+        <span className="sr-only">
+          {expanded ? "Collapse" : "Expand"} {item.finding}.
+        </span>
         <span className="timeline-marker" />
         <span className="evidence-time">
           <strong>{item.time}</strong>

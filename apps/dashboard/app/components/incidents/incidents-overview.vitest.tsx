@@ -34,7 +34,7 @@ describe("IncidentsOverview", () => {
     ).toBeInTheDocument()
 
     await user.click(
-      screen.getByRole("button", {
+      screen.getByRole("combobox", {
         name: "Filter by service: All services",
       }),
     )
@@ -66,7 +66,9 @@ describe("IncidentsOverview", () => {
         name: /Open INC-038: Identity token verification failures/,
       }),
     ).toBeInTheDocument()
-    expect(screen.getAllByLabelText(/^Open INC-/)).toHaveLength(1)
+    expect(screen.getAllByRole("button", { name: /^Open INC-/ })).toHaveLength(
+      1,
+    )
   })
 
   it("paginates the filtered incident collection", async () => {

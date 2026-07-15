@@ -1,100 +1,220 @@
 "use client"
 
-import type { KeyboardEvent } from "react"
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react"
+import { createPortal } from "react-dom"
 
-import { useMenu } from "../../hooks/use-menu"
 import type { IconName } from "../../lib/incident-types"
 import { Icon } from "./pictogram"
+import styles from "./select-menu.module.css"
 
-type SelectMenuProps = {
+export type SelectMenuOption<Value extends string> = {
+  value: Value
   label: string
-  leadingIcon: IconName
-  options: string[]
-  value: string
-  onValueChange: (value: string) => void
+  description?: string
 }
 
-export function SelectMenu({
+export function SelectMenu<Value extends string>({
+  ariaLabel,
+  className,
+  disabled = false,
   label,
   leadingIcon,
+  onValueChange,
   options,
   value,
-  onValueChange,
-}: SelectMenuProps) {
-  const { closeMenu, menuRef, openMenu, toggleMenu } = useMenu<"options">()
-  const listboxId = `${label.toLowerCase().replaceAll(" ", "-")}-options`
+}: {
+  ariaLabel?: string | undefined
+  className?: string | undefined
+  disabled?: boolean
+  label?: string | undefined
+  leadingIcon?: IconName | undefined
+  onValueChange: (value: Value) => void
+  options: ReadonlyArray<SelectMenuOption<Value> | Value>
+  value: Value
+}) {
+  const popupLabel = ariaLabel ?? label ?? "Select an option"
+  const normalizedOptions = options.map((option) =>
+    typeof option === "string" ? { value: option, label: option } : option,
+  )
+  const listboxId = useId()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const selectedIndex = Math.max(
+    0,
+    normalizedOptions.findIndex((option) => option.value === value),
+  )
+  const [highlightedIndex, setHighlightedIndex] = useState(selectedIndex)
+  const [position, setPosition] = useState({ left: 0, top: 0, width: 0 })
+  const selected = normalizedOptions[selectedIndex]
+  const accessibleLabel =
+    ariaLabel ??
+    (label ? `${label}: ${selected?.label ?? value}` : "Select an option")
 
-  function handleListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-    const items = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>(
-        "button[role='option']",
-      ),
-    )
-    if (!items.length) return
-    event.preventDefault()
-    const currentIndex = items.indexOf(
-      document.activeElement as HTMLButtonElement,
-    )
-    if (event.key === "Home") items[0]?.focus()
-    else if (event.key === "End") items.at(-1)?.focus()
-    else if (event.key === "ArrowDown")
-      items[(currentIndex + 1 + items.length) % items.length]?.focus()
-    else items[(currentIndex - 1 + items.length) % items.length]?.focus()
+  const close = useCallback(({ restoreFocus = true } = {}) => {
+    setOpen(false)
+    if (restoreFocus)
+      window.requestAnimationFrame(() => triggerRef.current?.focus())
+  }, [])
+
+  function select(index: number) {
+    const option = normalizedOptions[index]
+    if (!option) return
+    onValueChange(option.value)
+    close()
   }
 
+  function openPopup(direction: 1 | -1 = 1) {
+    if (disabled) return
+    setHighlightedIndex(
+      direction === 1
+        ? selectedIndex
+        : Math.max(0, normalizedOptions.length - 1),
+    )
+    setOpen(true)
+  }
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const estimatedHeight = Math.min(280, normalizedOptions.length * 52 + 12)
+    const placeAbove = window.innerHeight - rect.bottom < estimatedHeight + 12
+    setPosition({
+      left: Math.min(rect.left, window.innerWidth - rect.width - 8),
+      top: placeAbove
+        ? Math.max(8, rect.top - estimatedHeight - 5)
+        : rect.bottom + 5,
+      width: rect.width,
+    })
+  }, [normalizedOptions.length, open])
+
+  useEffect(() => {
+    if (!open) return
+    popupRef.current?.focus()
+    const handlePointer = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (
+        triggerRef.current?.contains(target) ||
+        popupRef.current?.contains(target)
+      )
+        return
+      close({ restoreFocus: false })
+    }
+    const handleViewportChange = () => close({ restoreFocus: false })
+    document.addEventListener("pointerdown", handlePointer)
+    window.addEventListener("resize", handleViewportChange)
+    window.addEventListener("scroll", handleViewportChange, true)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer)
+      window.removeEventListener("resize", handleViewportChange)
+      window.removeEventListener("scroll", handleViewportChange, true)
+    }
+  }, [close, open])
+
   return (
-    <div
-      className="select-menu"
-      ref={openMenu === "options" ? menuRef : undefined}
-    >
+    <div className={`${styles.root} ${className ?? ""}`}>
       <button
-        aria-controls={openMenu === "options" ? listboxId : undefined}
-        aria-expanded={openMenu === "options"}
+        aria-controls={open ? listboxId : undefined}
+        aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label={`${label}: ${value}`}
-        className="select-menu-trigger"
-        onClick={(event) => toggleMenu("options", event.currentTarget)}
+        aria-label={accessibleLabel}
+        className={styles.trigger}
+        disabled={disabled}
+        onClick={() => (open ? close() : openPopup())}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault()
+            openPopup(event.key === "ArrowDown" ? 1 : -1)
+          }
+        }}
+        ref={triggerRef}
+        role="combobox"
         type="button"
       >
-        <Icon name={leadingIcon} size={15} />
-        <span>{value}</span>
-        <Icon name="caret-down" size={13} />
+        {leadingIcon ? (
+          <span className={styles.leadingIcon}>
+            <Icon name={leadingIcon} size={14} />
+          </span>
+        ) : null}
+        <span className={styles.value}>
+          <strong>{selected?.label ?? value}</strong>
+          {selected?.description ? <small>{selected.description}</small> : null}
+        </span>
+        <span className={styles.caret}>
+          <Icon name={open ? "caret-up" : "caret-down"} size={14} />
+        </span>
       </button>
-      {openMenu === "options" ? (
-        <div
-          aria-label={label}
-          className="select-menu-content"
-          id={listboxId}
-          onKeyDown={handleListKeyDown}
-          role="listbox"
-        >
-          <span className="select-menu-label">{label}</span>
-          {options.map((option) => (
-            <button
-              aria-selected={value === option}
-              key={option}
-              onClick={() => {
-                onValueChange(option)
-                closeMenu(true)
+
+      {open
+        ? createPortal(
+            <div
+              aria-activedescendant={`${listboxId}-${highlightedIndex}`}
+              aria-label={popupLabel}
+              className={styles.popup}
+              id={listboxId}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault()
+                  close()
+                } else if (event.key === "ArrowDown") {
+                  event.preventDefault()
+                  setHighlightedIndex((current) =>
+                    Math.min(normalizedOptions.length - 1, current + 1),
+                  )
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault()
+                  setHighlightedIndex((current) => Math.max(0, current - 1))
+                } else if (event.key === "Home") {
+                  event.preventDefault()
+                  setHighlightedIndex(0)
+                } else if (event.key === "End") {
+                  event.preventDefault()
+                  setHighlightedIndex(Math.max(0, normalizedOptions.length - 1))
+                } else if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  select(highlightedIndex)
+                } else if (event.key === "Tab") {
+                  close({ restoreFocus: false })
+                }
               }}
-              role="option"
-              type="button"
+              ref={popupRef}
+              role="listbox"
+              style={position}
+              tabIndex={-1}
             >
-              <Icon
-                name={option === "All services" ? "stack" : "cube"}
-                size={15}
-              />
-              <span>{option}</span>
-              {value === option ? (
-                <Icon name="check-circle" size={15} />
-              ) : (
-                <i />
-              )}
-            </button>
-          ))}
-        </div>
-      ) : null}
+              {normalizedOptions.map((option, index) => (
+                <button
+                  aria-selected={option.value === value}
+                  className={index === highlightedIndex ? styles.active : ""}
+                  id={`${listboxId}-${index}`}
+                  key={option.value}
+                  onClick={() => select(index)}
+                  onPointerMove={() => setHighlightedIndex(index)}
+                  role="option"
+                  type="button"
+                >
+                  <span>
+                    <strong>{option.label}</strong>
+                    {option.description ? (
+                      <small>{option.description}</small>
+                    ) : null}
+                  </span>
+                  {option.value === value ? (
+                    <Icon name="check-circle" size={15} />
+                  ) : null}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

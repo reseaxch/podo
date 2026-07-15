@@ -9,15 +9,18 @@
   --surface-glass: rgb(255 255 255 / 96%);
   --text: #171a1d;
   --muted: #68717a;
-  --text-subtle: #8c969f;
+  --text-subtle: #6b757e;
   --border: #d9dfe3;
   --border-soft: #e7ebee;
   --primary: #0b7285;
   --primary-hover: #075e6d;
+  --primary-solid: #0b7285;
+  --primary-solid-hover: #075e6d;
   --primary-soft: #ddeff1;
   --focus: #4aa8b5;
-  --critical: #d64545;
-  --warning: #b7791f;
+  --critical: #c73737;
+  --critical-solid: #c73737;
+  --warning: #946015;
   --verified: #2f7d55;
   --information: #4263a8;
   --success-surface: #f4fbf7;
@@ -179,8 +182,17 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible {
+  box-shadow: inset 0 -2px color-mix(in srgb, var(--focus) 75%, transparent);
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  border-color: var(--focus);
 }
 
 .icon {

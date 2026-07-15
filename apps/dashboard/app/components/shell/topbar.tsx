@@ -9,6 +9,7 @@ import { Icon } from "../ui/pictogram"
 
 type TopbarProps = {
   owner: { name: string; avatar: string }
+  section?: string
   current?: string
   query: string
   searchLabel: string
@@ -20,6 +21,7 @@ type TopbarProps = {
 
 export function Topbar({
   owner,
+  section = "Incidents",
   current,
   query,
   searchLabel,
@@ -104,7 +106,7 @@ export function Topbar({
         ) : null}
       </div>
       <div className="breadcrumbs">
-        <span>Incidents</span>
+        <span>{section}</span>
         {current ? (
           <>
             <b>/</b>

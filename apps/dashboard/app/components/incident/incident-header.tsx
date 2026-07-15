@@ -4,20 +4,23 @@ import Image from "next/image"
 import { useState } from "react"
 
 import { useMenu } from "../../hooks/use-menu"
-import type { IncidentWorkspaceViewModel } from "../../lib/incident-types"
+import type {
+  IncidentController,
+  IncidentWorkspaceViewModel,
+} from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
 
-type IncidentStatus = "Investigating" | "Mitigating" | "Monitoring" | "Resolved"
-
 export function IncidentHeader({
+  controller,
   incident,
   onNotify,
 }: {
+  controller: IncidentController
   incident: IncidentWorkspaceViewModel
   onNotify: (message: string) => void
 }) {
-  const [incidentStatus, setIncidentStatus] =
-    useState<IncidentStatus>("Investigating")
+  const [incidentStatus, setIncidentStatus] = useState(incident.status)
+  const [statusPending, setStatusPending] = useState(false)
   const [updatesMuted, setUpdatesMuted] = useState(false)
   const { closeMenu, menuRef, openMenu, toggleMenu } = useMenu<
     "status" | "actions"
@@ -76,10 +79,31 @@ export function IncidentHeader({
                       incidentStatus === status ? "true" : undefined
                     }
                     key={status}
-                    onClick={() => {
-                      setIncidentStatus(status)
-                      closeMenu()
-                      onNotify(`Status changed to ${status}`)
+                    disabled={statusPending}
+                    onClick={async () => {
+                      if (status === incidentStatus) {
+                        closeMenu()
+                        return
+                      }
+                      setStatusPending(true)
+                      try {
+                        const next = await controller.updateStatus({
+                          incidentId: incident.id,
+                          expectedStatus: incidentStatus,
+                          status,
+                        })
+                        setIncidentStatus(next.status)
+                        closeMenu()
+                        onNotify(`Status changed to ${next.status}`)
+                      } catch (error) {
+                        onNotify(
+                          error instanceof Error
+                            ? error.message
+                            : "Incident status was not changed",
+                        )
+                      } finally {
+                        setStatusPending(false)
+                      }
                     }}
                     role="menuitem"
                     type="button"
