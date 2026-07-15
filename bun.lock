@@ -71,6 +71,9 @@
       "version": "0.0.0",
       "dependencies": {
         "@podo/codex-app-server-client": "workspace:*",
+        "@podo/contracts": "workspace:*",
+        "@podo/plugin-graphify": "workspace:*",
+        "@podo/plugin-otel-replay": "workspace:*",
       },
     },
     "evals": {
