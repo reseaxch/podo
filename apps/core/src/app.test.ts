@@ -1,9 +1,35 @@
 import { describe, expect, test } from "bun:test"
+import type { CodexRuntime } from "@podo/codex-app-server-client"
 import { PODO_CODE_GRAPH_SCHEMA_VERSION, type NormalizedCodeGraphSnapshot } from "@podo/contracts"
 import { createCoreHandler } from "./app"
 import type { IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 
 describe("Podo core handler", () => {
+  test("shares the supervised investigation runtime with remediation", async () => {
+    let runtimeProvider: (() => Promise<CodexRuntime>) | undefined
+    const handler = createCoreHandler({
+      runtime: sharedRuntime,
+      inspectCodex: async () => ({ binary: "codex", version: "test", rawVersion: "test" }),
+      remediationExecutorFactory(provider) {
+        runtimeProvider = provider
+        return { async execute() { throw new Error("not used") } }
+      },
+    })
+
+    expect(runtimeProvider).toBeDefined()
+    expect(await runtimeProvider!()).toBe(sharedRuntime)
+    const status = await handler(new Request("http://podo.test/api/system"))
+    expect(await status.json()).toMatchObject({ remediation: { configured: true } })
+  })
+
+  test("rejects ambiguous remediation composition", () => {
+    const executor = { async execute() { throw new Error("not used") } }
+    expect(() => createCoreHandler({
+      remediationExecutor: executor,
+      remediationExecutorFactory: () => executor,
+    })).toThrow("remediation_executor_configuration_is_ambiguous")
+  })
+
   test("reports process health without requiring Codex", async () => {
     const handler = createCoreHandler({
       inspectCodex: async () => {
@@ -33,6 +59,7 @@ describe("Podo core handler", () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       status: "ready",
+      remediation: { configured: false },
       codex: {
         available: true,
         transport: "stdio",
@@ -190,6 +217,17 @@ describe("Podo core handler", () => {
     }
   })
 })
+
+const sharedRuntime: CodexRuntime = {
+  async startThread() { return { threadId: "thread" } },
+  async resumeThread() { return { threadId: "thread" } },
+  async startTurn() { return { turnId: "turn" } },
+  async steerTurn() { return { turnId: "turn" } },
+  async interruptTurn() {},
+  async resolveApproval() {},
+  onEvent() { return () => undefined },
+  async close() {},
+}
 
 async function ingestCausalPathIncident(handler: ReturnType<typeof createCoreHandler>) {
   const base = Date.parse("2026-07-14T09:00:00.000Z")

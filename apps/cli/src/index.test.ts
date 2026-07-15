@@ -26,6 +26,7 @@ function client(
     startIncidentInvestigation: async () => { throw new Error("unused") },
     startIncidentRemediation: async () => { throw new Error("unused") },
     getIncidentRemediation: async () => { throw new Error("unused") },
+    getIncidentRemediationAudit: async () => { throw new Error("unused") },
     approveIncidentRemediation: async () => { throw new Error("unused") },
     denyIncidentRemediation: async () => { throw new Error("unused") },
     start: async () => { throw new Error("unused") },

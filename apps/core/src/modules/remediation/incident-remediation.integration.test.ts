@@ -3,6 +3,19 @@ import type { CodexRuntime, CodexRuntimeEvent } from "@podo/codex-app-server-cli
 
 import { createPodoClient } from "../../../../../packages/client/src/index"
 import { createCoreHandler } from "../../app"
+import { createProductionRemediationExecutorFactory } from "../../runtime/production-remediation"
+
+const productionRemediationEnvironment = {
+  PODO_REMEDIATION_ENABLED: "true",
+  PODO_REMEDIATION_REPOSITORY_ROOT: "/repo",
+  PODO_REMEDIATION_BASE_REF: "refs/heads/main",
+  PODO_REMEDIATION_SCRATCH_PARENT: "/scratch",
+  PODO_REMEDIATION_REGRESSION_COMMAND: '["bun","test","demo/services/checkout-service"]',
+  PODO_REMEDIATION_VALIDATION_COMMANDS: '[["bun","run","typecheck"],["bun","test"]]',
+  PODO_REMEDIATION_COMMAND_TIMEOUT_MS: "120000",
+  PODO_REMEDIATION_TURN_TIMEOUT_MS: "90000",
+  PODO_REMEDIATION_MAX_OUTPUT_BYTES: "524288",
+} as const
 
 class DiagnosisRuntime implements CodexRuntime {
   private readonly listeners = new Set<(event: CodexRuntimeEvent) => void>()
@@ -110,7 +123,138 @@ async function createValidatedFixture(
   return { runtime, handler, client, incident: ingested.incident }
 }
 
+async function createProductionCompositionFixture(executorResult: unknown) {
+  const runtime = new DiagnosisRuntime()
+  const metrics = {
+    runtimeAcquisitions: 0,
+    producerCreations: 0,
+    executorCreations: 0,
+    executorInputs: [] as unknown[],
+    producerRuntimes: [] as CodexRuntime[],
+  }
+  const productionFactory = createProductionRemediationExecutorFactory(productionRemediationEnvironment, {
+    createProducer(config) {
+      metrics.producerCreations += 1
+      metrics.producerRuntimes.push(config.runtime)
+      return { async writeRegression() {}, async applyFix() {} }
+    },
+    createExecutor() {
+      metrics.executorCreations += 1
+      return {
+        async execute(input) {
+          metrics.executorInputs.push(input)
+          return executorResult
+        },
+      }
+    },
+  })
+  if (!productionFactory) throw new Error("expected production remediation factory")
+
+  const handler = createCoreHandler({
+    runtime,
+    remediationExecutorFactory(runtimeProvider) {
+      return productionFactory(async () => {
+        metrics.runtimeAcquisitions += 1
+        return runtimeProvider()
+      })
+    },
+  })
+  const client = createPodoClient({
+    baseUrl: "http://podo.test",
+    fetch: (input, init) => handler(new Request(input, init)),
+  })
+  const ingested = await client.ingestTelemetry(telemetry())
+  if (!ingested.incident) throw new Error("expected incident")
+  await client.updateSettings({ autonomyMode: "act_with_approval" })
+  const investigation = await client.startIncidentInvestigation(ingested.incident.id, { cwd: "/repo" })
+  completeDiagnosis(runtime, investigation.incident.evidence.map(({ id }) => id))
+  return { runtime, client, incident: ingested.incident, metrics }
+}
+
 describe("incident remediation API", () => {
+  test("keeps the production composition seam approval-gated, idempotent, and artifact-safe", async () => {
+    const deniedFixture = await createProductionCompositionFixture(verifiedExecutorResult())
+    const deniedPending = await deniedFixture.client.startIncidentRemediation(deniedFixture.incident.id)
+
+    expect(deniedFixture.metrics).toMatchObject({
+      runtimeAcquisitions: 0,
+      producerCreations: 0,
+      executorCreations: 0,
+      executorInputs: [],
+    })
+    expect((await deniedFixture.client.getIncidentRemediationAudit(deniedFixture.incident.id)).events).toMatchObject([
+      { sequence: 1, kind: "remediation.requested" },
+    ])
+    const denied = await deniedFixture.client.denyIncidentRemediation(
+      deniedFixture.incident.id,
+      deniedPending.remediation.approval.id,
+    )
+    const repeatedDenial = await deniedFixture.client.denyIncidentRemediation(
+      deniedFixture.incident.id,
+      deniedPending.remediation.approval.id,
+    )
+    expect(repeatedDenial).toEqual(denied)
+    expect(deniedFixture.metrics).toMatchObject({
+      runtimeAcquisitions: 0,
+      producerCreations: 0,
+      executorCreations: 0,
+      executorInputs: [],
+    })
+    expect((await deniedFixture.client.getIncidentRemediationAudit(deniedFixture.incident.id)).events).toMatchObject([
+      { sequence: 1, kind: "remediation.requested" },
+      { sequence: 2, kind: "remediation.approval_decided", decision: "deny" },
+    ])
+
+    const failedFixture = await createProductionCompositionFixture({
+      ...verifiedExecutorResult(),
+      validation: { status: "failed", checks: ["workspace-check"] },
+      pullRequestPreview: {
+        ...verifiedExecutorResult().pullRequestPreview,
+        body: "should-never-publish",
+      },
+    })
+    const failedPending = await failedFixture.client.startIncidentRemediation(failedFixture.incident.id)
+    expect(failedFixture.metrics.runtimeAcquisitions).toBe(0)
+    expect(failedFixture.metrics.executorInputs).toHaveLength(0)
+
+    const [firstApproval, repeatedApproval] = await Promise.all([
+      failedFixture.client.approveIncidentRemediation(
+        failedFixture.incident.id,
+        failedPending.remediation.approval.id,
+      ),
+      failedFixture.client.approveIncidentRemediation(
+        failedFixture.incident.id,
+        failedPending.remediation.approval.id,
+      ),
+    ])
+
+    expect(repeatedApproval).toEqual(firstApproval)
+    expect(failedFixture.metrics).toMatchObject({
+      runtimeAcquisitions: 1,
+      producerCreations: 1,
+      executorCreations: 1,
+    })
+    expect(failedFixture.metrics.executorInputs).toHaveLength(1)
+    expect(failedFixture.metrics.producerRuntimes).toEqual([failedFixture.runtime])
+    expect(firstApproval.remediation).toMatchObject({
+      status: "failed",
+      approval: { status: "approved" },
+      error: { code: "verification_failed" },
+    })
+    expect(firstApproval.remediation.artifact).toBeUndefined()
+    expect(JSON.stringify(firstApproval)).not.toContain("should-never-publish")
+    expect(JSON.stringify(firstApproval)).not.toContain("unifiedDiff")
+    const failedAudit = await failedFixture.client.getIncidentRemediationAudit(failedFixture.incident.id)
+    expect(failedAudit.events).toMatchObject([
+      { sequence: 1, kind: "remediation.requested" },
+      { sequence: 2, kind: "remediation.approval_decided", decision: "approve" },
+      { sequence: 3, kind: "remediation.execution_started" },
+      { sequence: 4, kind: "remediation.verification_failed", code: "verification_failed" },
+    ])
+    expect(JSON.stringify(failedAudit)).not.toContain("should-never-publish")
+    expect(JSON.stringify(failedAudit)).not.toContain("unifiedDiff")
+  })
+
   test("waits for explicit approval and exposes only a verified sanitized artifact", async () => {
     const runtime = new DiagnosisRuntime()
     const executorCalls: unknown[] = []
@@ -179,6 +323,16 @@ describe("incident remediation API", () => {
     })
     const serialized = JSON.stringify(completed)
     expect(serialized).not.toContain("private-thread")
+    expect((await client.getIncidentRemediationAudit(ingested.incident.id)).events).toMatchObject([
+      { sequence: 1, kind: "remediation.requested" },
+      { sequence: 2, kind: "remediation.approval_decided", decision: "approve" },
+      { sequence: 3, kind: "remediation.execution_started" },
+      {
+        sequence: 4,
+        kind: "remediation.verification_succeeded",
+        artifactSha256: completed.remediation.artifact!.patch.sha256,
+      },
+    ])
   })
 
   test("denial is terminal, idempotent, and never invokes the executor", async () => {

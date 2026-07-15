@@ -13,8 +13,9 @@ through an approval-gated workflow.
 > Codex App Server and then executes the complete deterministic vertical slice
 > through the real graph, replay, core, typed client, Codex remediation producer,
 > isolated git worktree, red-to-green regression gate, and reproducible
-> pull-request preview. Production runtime composition and GitHub delivery are
-> the next MVP milestones.
+> pull-request preview. Local/POC runtime composition is now available as an
+> explicit fail-closed Core configuration; durable audit operations and GitHub
+> delivery remain MVP milestones before broader production use.
 
 ## MVP outcome
 
@@ -167,8 +168,10 @@ a stable PR preview while leaving the source checkout and default branch intact.
 
 The deterministic runtime double keeps this proof reproducible and offline; it
 does not replace the live App Server. `bun run codex:smoke` is the live protocol
-compatibility signal, while production composition of that runtime into the
-remediation executor remains an MVP integration step.
+compatibility signal. Local/POC Core operators can opt into the same verified
+executor through the fail-closed `PODO_REMEDIATION_*` configuration documented in
+[`apps/core/README.md`](apps/core/README.md); remediation and investigations
+share one supervised App Server runtime.
 
 Initial product gates from the MVP plan include:
 

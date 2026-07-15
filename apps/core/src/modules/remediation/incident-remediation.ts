@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import type {
   IncidentRemediation,
+  IncidentRemediationAuditEvent,
   IncidentRemediationArtifact,
   ValidatedIncidentDiagnosis,
 } from "@podo/contracts"
@@ -67,8 +68,15 @@ export type DecideIncidentRemediationResult =
 interface RemediationRecord {
   remediation: IncidentRemediation
   diagnosis: ValidatedIncidentDiagnosis
+  audit: IncidentRemediationAuditEvent[]
   execution?: Promise<void>
 }
+
+type RemediationAuditInput = IncidentRemediationAuditEvent extends infer Event
+  ? Event extends IncidentRemediationAuditEvent
+    ? Omit<Event, "sequence" | "occurredAt" | "incidentId" | "remediationId">
+    : never
+  : never
 
 const target = "isolated_checkout" as const
 
@@ -120,6 +128,7 @@ export class IncidentRemediationService {
     const now = new Date().toISOString()
     const record: RemediationRecord = {
       diagnosis: copy(diagnosis),
+      audit: [],
       remediation: {
         id: `remediation_${randomUUID()}`,
         incidentId,
@@ -130,6 +139,7 @@ export class IncidentRemediationService {
         updatedAt: now,
       },
     }
+    this.recordAudit(record, { kind: "remediation.requested" })
     this.byIncident.set(incidentId, record)
     return { ok: true, created: true, remediation: copy(record.remediation) }
   }
@@ -139,6 +149,11 @@ export class IncidentRemediationService {
     return record
       ? { ok: true, remediation: copy(record.remediation) }
       : { ok: false, status: 404, error: "not_found", message: "Incident remediation was not found" }
+  }
+
+  audit(incidentId: string): { ok: true; events: IncidentRemediationAuditEvent[] } | { ok: false } {
+    const record = this.byIncident.get(incidentId)
+    return record ? { ok: true, events: copy(record.audit) } : { ok: false }
   }
 
   async decide(
@@ -165,17 +180,20 @@ export class IncidentRemediationService {
     if (decision === "deny") {
       record.remediation.approval.status = "denied"
       record.remediation.status = "denied"
+      this.recordAudit(record, { kind: "remediation.approval_decided", approvalId, decision })
       return { ok: true, remediation: copy(record.remediation) }
     }
 
     record.remediation.approval.status = "approved"
     record.remediation.status = "running"
+    this.recordAudit(record, { kind: "remediation.approval_decided", approvalId, decision })
     record.execution = this.execute(record)
     await record.execution
     return { ok: true, remediation: copy(record.remediation) }
   }
 
   private async execute(record: RemediationRecord): Promise<void> {
+    this.recordAudit(record, { kind: "remediation.execution_started" })
     const mode = this.settings.get().autonomyMode
     const executionDecision = evaluateReaction({
       mode,
@@ -234,6 +252,10 @@ export class IncidentRemediationService {
     record.remediation.artifact = toPublicArtifact(parsed.value)
     record.remediation.status = "completed"
     record.remediation.updatedAt = new Date().toISOString()
+    this.recordAudit(record, {
+      kind: "remediation.verification_succeeded",
+      artifactSha256: record.remediation.artifact.patch.sha256,
+    })
   }
 
   private fail(record: RemediationRecord, code: NonNullable<IncidentRemediation["error"]>["code"], message: string): void {
@@ -241,6 +263,33 @@ export class IncidentRemediationService {
     record.remediation.updatedAt = new Date().toISOString()
     delete record.remediation.artifact
     record.remediation.error = { code, message }
+    this.recordAudit(record, { kind: "remediation.verification_failed", code })
+  }
+
+  private recordAudit(
+    record: RemediationRecord,
+    event: RemediationAuditInput,
+  ): void {
+    const base = {
+      sequence: record.audit.length + 1,
+      occurredAt: new Date().toISOString(),
+      incidentId: record.remediation.incidentId,
+      remediationId: record.remediation.id,
+    }
+    switch (event.kind) {
+      case "remediation.requested":
+      case "remediation.execution_started":
+        record.audit.push({ ...base, kind: event.kind })
+        return
+      case "remediation.approval_decided":
+        record.audit.push({ ...base, kind: event.kind, approvalId: event.approvalId, decision: event.decision })
+        return
+      case "remediation.verification_failed":
+        record.audit.push({ ...base, kind: event.kind, code: event.code })
+        return
+      case "remediation.verification_succeeded":
+        record.audit.push({ ...base, kind: event.kind, artifactSha256: event.artifactSha256 })
+    }
   }
 }
 

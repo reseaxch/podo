@@ -21,6 +21,7 @@ describe("connected TUI adapter", () => {
         status: "ready",
         version: "0.0.0",
         codex: { available: true, binary: "codex", transport: "stdio", version: "0.142.0" },
+        remediation: { configured: false },
       },
       settings,
       [{

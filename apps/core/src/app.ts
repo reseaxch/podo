@@ -23,6 +23,7 @@ export interface CoreHandlerOptions {
   incidentMonitor?: IncidentMonitor
   incidentGraph?: IncidentGraphConfig
   remediationExecutor?: IncidentRemediationExecutor
+  remediationExecutorFactory?: (runtimeProvider: () => Promise<CodexRuntime>) => IncidentRemediationExecutor
 }
 
 const serviceVersion = "0.0.0"
@@ -32,6 +33,9 @@ function json(body: unknown, status = 200): Response {
 }
 
 export function createCoreHandler(options: CoreHandlerOptions = {}): (request: Request) => Promise<Response> {
+  if (options.remediationExecutor && options.remediationExecutorFactory) {
+    throw new Error("remediation_executor_configuration_is_ambiguous")
+  }
   const inspectCodex = options.inspectCodex ?? (() => inspectCodexRuntime())
   const investigations = new InvestigationService({
     ...(options.runtime ? { runtime: options.runtime } : {}),
@@ -42,7 +46,10 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
   const incidentInvestigations = new IncidentInvestigationCoordinator(incidentMonitor, investigations, settings)
   const incidentCausalPaths = new IncidentCausalPathService(incidentMonitor, options.incidentGraph)
-  const incidentRemediations = new IncidentRemediationService(incidentMonitor, incidentInvestigations, settings, options.remediationExecutor)
+  const remediationExecutor = options.remediationExecutor
+    ?? options.remediationExecutorFactory?.(() => investigations.acquireRuntime())
+  const incidentRemediations = new IncidentRemediationService(incidentMonitor, incidentInvestigations, settings, remediationExecutor)
+  const remediationStatus = { configured: remediationExecutor !== undefined }
 
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -58,10 +65,10 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         const runtime = await inspectCodex()
         const runtimeError = investigations.runtimeError
         response = runtimeError
-          ? { service: "podo-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: runtime.binary, transport: "stdio", version: runtime.version, error: runtimeError } }
-          : { service: "podo-core", status: "ready", version: serviceVersion, codex: { available: true, binary: runtime.binary, transport: "stdio", version: runtime.version } }
+          ? { service: "podo-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: runtime.binary, transport: "stdio", version: runtime.version, error: runtimeError }, remediation: remediationStatus }
+          : { service: "podo-core", status: "ready", version: serviceVersion, codex: { available: true, binary: runtime.binary, transport: "stdio", version: runtime.version }, remediation: remediationStatus }
       } catch (error) {
-        response = { service: "podo-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: process.env.CODEX_BIN ?? "codex", transport: "stdio", version: null, error: error instanceof Error ? error.message : String(error) } }
+        response = { service: "podo-core", status: "degraded", version: serviceVersion, codex: { available: false, binary: process.env.CODEX_BIN ?? "codex", transport: "stdio", version: null, error: error instanceof Error ? error.message : String(error) }, remediation: remediationStatus }
       }
       return json(response, url.pathname === "/readyz" && response.status !== "ready" ? 503 : 200)
     }
@@ -123,6 +130,13 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       return result.ok
         ? json(result.response)
         : json({ error: result.error, message: result.message }, result.status)
+    }
+
+    const incidentRemediationAuditMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/audit$/)
+    if (incidentRemediationAuditMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      const result = incidentRemediations.audit(decodeURIComponent(incidentRemediationAuditMatch[1]))
+      return result.ok ? json({ events: result.events }) : json({ error: "not_found" }, 404)
     }
 
     const incidentRemediationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation$/)
