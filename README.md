@@ -160,6 +160,19 @@ The canonical POC is one command:
 bun run poc
 ```
 
+The judge-facing demo experience is also one command:
+
+```sh
+bun run demo
+```
+
+It first requires the complete canonical POC gate to pass, then starts the
+explicit local judge fixture at `/demo` for a deterministic presentation of the
+proven incident-to-PR flow. GitHub writes are disabled; the final visible
+artifact is the verified, reproducible PR preview. See
+[`demo/README.md`](demo/README.md) for prerequisites, expected state, ports, and
+reset behavior.
+
 The command first performs a real handshake with the pinned Codex App Server.
 It then proves the canonical fixture reaches a detected evidence-backed
 incident, resolves `deploy-1042 → trusted commit → cache.ts → CheckoutCache`,

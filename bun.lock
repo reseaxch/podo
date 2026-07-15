@@ -77,6 +77,16 @@
         "@podo/plugin-otel-replay": "workspace:*",
       },
     },
+    "demo": {
+      "name": "@podo/demo",
+      "version": "0.0.0",
+      "dependencies": {
+        "@podo/client": "workspace:*",
+        "@podo/codex-app-server-client": "workspace:*",
+        "@podo/contracts": "workspace:*",
+        "@podo/plugin-otel-replay": "workspace:*",
+      },
+    },
     "evals": {
       "name": "@podo/evals",
       "version": "0.0.0",
@@ -359,6 +369,8 @@
     "@podo/core": ["@podo/core@workspace:apps/core"],
 
     "@podo/dashboard": ["@podo/dashboard@workspace:apps/dashboard"],
+
+    "@podo/demo": ["@podo/demo@workspace:demo"],
 
     "@podo/domain": ["@podo/domain@workspace:packages/domain"],
 

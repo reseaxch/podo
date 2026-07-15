@@ -1,0 +1,16 @@
+{
+  "name": "@podo/demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@podo/client": "workspace:*",
+    "@podo/codex-app-server-client": "workspace:*",
+    "@podo/contracts": "workspace:*",
+    "@podo/plugin-otel-replay": "workspace:*"
+  },
+  "scripts": {
+    "start": "bun run.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
