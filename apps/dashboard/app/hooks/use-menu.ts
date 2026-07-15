@@ -22,7 +22,9 @@ export function useMenu<T extends string>() {
     if (!openMenu) return
     window.requestAnimationFrame(() =>
       menuRef.current
-        ?.querySelector<HTMLElement>("button[role='menuitem']")
+        ?.querySelector<HTMLElement>(
+          "button[role='menuitem'], button[role='option']",
+        )
         ?.focus(),
     )
     const handlePointerDown = (event: PointerEvent) => {
