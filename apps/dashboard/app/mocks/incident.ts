@@ -6,6 +6,7 @@ export const incidentMock: IncidentWorkspaceViewModel = {
   severity: "P1",
   service: "checkout-service",
   elapsed: "18 min",
+  status: "Investigating",
   owner: { name: "Maya Chen", avatar: "/maya-chen.jpg" },
   remediation: {
     id: "rem_inc_042",

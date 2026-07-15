@@ -159,7 +159,7 @@
   touch-action: none;
 }
 .causal-canvas:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--focus);
+  box-shadow: inset 0 -2px var(--focus);
 }
 .causal-canvas.is-panning {
   cursor: grabbing;
@@ -248,8 +248,8 @@
 .graph-node[aria-pressed="true"],
 .ruled-out-node[aria-pressed="true"],
 .context-node[aria-pressed="true"] {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
+  border-color: var(--focus);
+  box-shadow: 0 7px 20px rgb(29 39 34 / 11%);
 }
 .graph-node > span:last-child {
   display: grid;
@@ -287,8 +287,8 @@
 }
 .graph-node.root-cause {
   border-color: var(--primary);
-  color: white;
-  background: var(--primary);
+  color: var(--on-primary-solid);
+  background: var(--primary-solid);
   box-shadow: 0 8px 22px rgb(11 114 133 / 22%);
 }
 .graph-node.root-cause .graph-node-icon {

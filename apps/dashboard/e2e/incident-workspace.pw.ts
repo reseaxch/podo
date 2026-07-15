@@ -21,7 +21,7 @@ test("incident workspace supports its primary investigation flow", async ({
   if (await search.isVisible()) {
     await search.fill("Datadog")
     await expect(
-      page.getByRole("button", { name: "Expand Heap usage increasing" }),
+      page.getByRole("button", { name: /^Expand Heap usage increasing\b/ }),
     ).toBeVisible()
     await expect(
       page.getByRole("button", { name: /Deploy v2.8.1 to production/ }),
@@ -69,4 +69,54 @@ test("persisted dark theme hydrates without a mismatch", async ({ page }) => {
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
   expect(hydrationErrors).toEqual([])
+})
+
+test("incident overview filters the inbox and opens the primary incident", async ({
+  page,
+}) => {
+  await page.goto("/incidents")
+  await expect(
+    page.getByRole("heading", { name: "Incidents", exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", {
+      name: /Open INC-042: Checkout memory growth after deploy/,
+    }),
+  ).toBeVisible()
+
+  await page.getByRole("tab", { name: /^Resolved/ }).click()
+  await expect(
+    page.getByRole("button", {
+      name: /Open INC-039: Elevated checkout 500 rate/,
+    }),
+  ).toBeVisible()
+
+  await page.getByRole("tab", { name: /^All/ }).click()
+  await page.getByRole("button", { name: "Next page" }).click()
+  await expect(
+    page.getByRole("button", {
+      name: /Open INC-035: Order export jobs timing out/,
+    }),
+  ).toBeVisible()
+
+  await page.getByRole("tab", { name: /^Active/ }).click()
+  await page
+    .getByRole("button", {
+      name: /Open INC-042: Checkout memory growth after deploy/,
+    })
+    .click()
+  await expect(
+    page.getByRole("heading", { name: "Checkout memory growth after deploy" }),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/incident=INC-042/)
+})
+
+test("approved demo remediation exposes the actual pull request URL", async ({
+  page,
+}) => {
+  await page.goto("/?mode=demo&incident=INC-042&tab=changes#workspace")
+  await page.getByRole("button", { name: "Approve & create PR" }).click()
+  await expect(
+    page.getByRole("link", { name: "Open PR #1842" }),
+  ).toHaveAttribute("href", "https://github.com/podo/podo/pull/1842")
 })

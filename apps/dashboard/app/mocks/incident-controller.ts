@@ -1,13 +1,16 @@
 import type {
-  RemediationController,
+  IncidentController,
+  IncidentStatus,
   RemediationViewModel,
 } from "../lib/incident-types"
 
 export function createMockIncidentController(
   incidentId: string,
   initial: RemediationViewModel,
-): RemediationController {
+  initialStatus: IncidentStatus,
+): IncidentController {
   let current = structuredClone(initial)
+  let currentStatus = initialStatus
 
   function assertScope(requestIncidentId: string, remediationId: string) {
     if (requestIncidentId !== incidentId)
@@ -17,6 +20,18 @@ export function createMockIncidentController(
   }
 
   return {
+    async updateStatus({
+      incidentId: requestIncidentId,
+      expectedStatus,
+      status,
+    }) {
+      if (requestIncidentId !== incidentId)
+        throw new Error("Incident controller scope does not match")
+      if (expectedStatus !== currentStatus)
+        throw new Error("Incident status changed in another session")
+      currentStatus = status
+      return { status: currentStatus }
+    },
     async requestChanges({ incidentId, remediationId, feedback }) {
       assertScope(incidentId, remediationId)
       if (!feedback.trim()) throw new Error("Feedback is required")

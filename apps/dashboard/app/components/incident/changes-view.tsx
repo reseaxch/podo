@@ -564,18 +564,15 @@ export function ChangesView({
         </span>
         <div>
           {reviewState === "approved" ? (
-            <button
+            <a
               className="primary-button"
-              onClick={() =>
-                onNotify(
-                  `Opening PR #${currentRemediation.pullRequest?.number ?? "—"}`,
-                )
-              }
-              type="button"
+              href={currentRemediation.pullRequest?.url}
+              rel="noreferrer"
+              target="_blank"
             >
               <Icon name="arrow-square-out" size={16} /> Open PR #
               {currentRemediation.pullRequest?.number ?? "—"}
-            </button>
+            </a>
           ) : reviewState === "changes-requested" ? (
             <button
               className="secondary-button"

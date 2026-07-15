@@ -106,7 +106,7 @@
 }
 .confidence progress::-webkit-progress-value {
   border-radius: 999px;
-  background: var(--primary);
+  background: var(--primary-solid);
 }
 .confidence progress::-moz-progress-bar {
   border-radius: 999px;
@@ -159,6 +159,7 @@
   font-size: 10px;
 }
 .text-link {
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -349,13 +350,13 @@
   padding: 0 16px;
   border: 0;
   border-radius: 6px;
-  color: white;
-  background: var(--primary);
+  color: var(--on-primary-solid);
+  background: var(--primary-solid);
   cursor: pointer;
   font-weight: 750;
 }
 .primary-button:hover {
-  background: var(--primary-hover);
+  background: var(--primary-solid-hover);
 }
 .primary-button,
 .secondary-button,

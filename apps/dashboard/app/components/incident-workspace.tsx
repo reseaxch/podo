@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useToast } from "../hooks/use-toast"
 import type {
+  IncidentController,
   IncidentTab,
   IncidentWorkspaceViewModel,
-  RemediationController,
 } from "../lib/incident-types"
+import type { GraphNodeId } from "../mocks/incident"
 import { ChangesView } from "./incident/changes-view"
 import { DiagnosisLauncher, DiagnosisPanel } from "./incident/diagnosis-panel"
 import { EvidenceView } from "./incident/evidence-view"
@@ -20,11 +21,15 @@ import { Icon } from "./ui/pictogram"
 export function IncidentWorkspace({
   controller,
   incident,
+  initialGraphNodeId,
+  initialTab = "evidence",
 }: {
-  controller: RemediationController
+  controller: IncidentController
   incident: IncidentWorkspaceViewModel
+  initialGraphNodeId?: GraphNodeId | undefined
+  initialTab?: IncidentTab
 }) {
-  const [activeTab, setActiveTab] = useState<IncidentTab>("evidence")
+  const [activeTab, setActiveTab] = useState<IncidentTab>(initialTab)
   const [expandedId, setExpandedId] = useState<string | null>("trace")
   const [diagnosisOpen, setDiagnosisOpen] = useState(true)
   const [compactDiagnosis, setCompactDiagnosis] = useState(false)
@@ -72,17 +77,29 @@ export function IncidentWorkspace({
 
   return (
     <main className="app-shell" ref={shellRef}>
-      <IconRail onNotify={showToast} onTabChange={setActiveTab} />
+      <IconRail />
       <Topbar
-        incident={incident}
+        current={incident.id}
         onNotify={showToast}
-        onOpenEvidence={openEvidence}
-        onQueryChange={setQuery}
-        onTabChange={setActiveTab}
+        onNotificationOpen={(id, message) => {
+          openEvidence(id)
+          showToast(message)
+        }}
+        onQueryChange={(value) => {
+          setQuery(value)
+          if (value) setActiveTab("evidence")
+        }}
+        owner={incident.owner}
         query={query}
+        searchLabel="Search evidence"
+        searchPlaceholder="Search evidence..."
       />
       <section className="workspace" id="workspace">
-        <IncidentHeader incident={incident} onNotify={showToast} />
+        <IncidentHeader
+          controller={controller}
+          incident={incident}
+          onNotify={showToast}
+        />
         <div
           className={`workspace-body ${diagnosisOpen ? "" : "diagnosis-collapsed"}`}
         >
@@ -125,7 +142,10 @@ export function IncidentWorkspace({
               />
             ) : null}
             {activeTab === "graph" ? (
-              <GraphView onOpenEvidence={openEvidence} />
+              <GraphView
+                initialSelectedNode={initialGraphNodeId}
+                onOpenEvidence={openEvidence}
+              />
             ) : null}
             {activeTab === "changes" ? (
               <ChangesView
