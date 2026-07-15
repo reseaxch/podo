@@ -23,5 +23,6 @@ export interface Incident {
 }
 
 export * from "./evidence"
+export * from "./diagnosis"
 export * from "./policy"
 export * from "./prompts"
