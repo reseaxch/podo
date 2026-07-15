@@ -4,8 +4,8 @@ Packages hold stable boundaries reused by applications and plugins.
 
 | Package | Responsibility |
 | --- | --- |
-| `contracts` | Public Rootline transport and event shapes |
-| `client` | Typed client for the Rootline core API |
+| `contracts` | Public Podo transport and event shapes |
+| `client` | Typed client for the Podo core API |
 | `domain` | Framework-independent domain and safety rules |
 | `plugin-sdk` | Plugin manifests, capabilities, and lifecycle contracts |
 | `codex-protocol` | Generated types and schemas for the pinned Codex version |

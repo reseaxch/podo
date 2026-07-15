@@ -1,6 +1,6 @@
 # Demo
 
-This directory owns the judge-facing, one-command demonstration of Rootline's canonical flow:
+This directory owns the judge-facing, one-command demonstration of Podo's canonical flow:
 
 ```text
 incident replay → evidence-backed diagnosis → approved tested fix → PR preview

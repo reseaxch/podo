@@ -1,10 +1,13 @@
 {
-  "name": "@rootline/benchmarks",
+  "name": "@podo/benchmarks",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@rootline/codex-app-server-client": "workspace:*"
+    "@podo/codex-app-server-client": "workspace:*",
+    "@podo/contracts": "workspace:*",
+    "@podo/plugin-graphify": "workspace:*",
+    "@podo/plugin-otel-replay": "workspace:*"
   },
   "scripts": {
     "bench": "bun src/cli.ts",

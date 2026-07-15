@@ -1,13 +1,13 @@
 {
-  "name": "@rootline/cli",
+  "name": "@podo/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "bin": {
-    "rootline": "./src/index.ts"
+    "podo": "./src/index.ts"
   },
   "dependencies": {
-    "@rootline/client": "workspace:*"
+    "@podo/client": "workspace:*"
   },
   "scripts": {
     "dev": "bun src/index.ts",

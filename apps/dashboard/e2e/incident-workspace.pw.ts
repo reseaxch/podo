@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test"
 test("incident workspace supports its primary investigation flow", async ({
   page,
 }) => {
-  await page.goto("/")
+  await page.goto("/demo")
   await expect(page.locator(".app-shell")).toHaveAttribute("data-ready", "true")
   await expect(
     page.getByRole("heading", { name: "Checkout memory growth after deploy" }),
@@ -65,7 +65,7 @@ test("persisted dark theme hydrates without a mismatch", async ({ page }) => {
     window.localStorage.setItem("podo-theme", "dark")
   })
 
-  await page.goto("/")
+  await page.goto("/demo")
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
   expect(hydrationErrors).toEqual([])

@@ -1,4 +1,4 @@
-# Rootline workstreams
+# Podo workstreams
 
 The team works by module ownership rather than by a shared task queue. Each workstream owns a coherent boundary and delivers through pull requests.
 
@@ -33,7 +33,7 @@ This workstream must not move Codex protocol handling into UI clients.
 
 - scriptable commands and stable machine-readable output;
 - OpenTUI interaction model, keyboard behavior, and terminal rendering;
-- typed access to Rootline core.
+- typed access to Podo core.
 
 This workstream consumes core contracts. It does not own incident or approval decisions.
 

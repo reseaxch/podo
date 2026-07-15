@@ -1,8 +1,23 @@
-# Rootline typed client
+# Podo typed client
 
-`@rootline/client` is the shared client-side boundary for core. It owns URL handling, request/response decoding, command methods, and ordered SSE consumption.
+`@podo/client` is the shared client-side boundary for core. It owns URL handling, request/response decoding, command methods, and ordered SSE consumption.
 
-Current investigation methods cover start, read, cancel, approve, deny, and event subscription. Raw Codex protocol details must never appear in this package's public API.
+Current methods cover settings, telemetry ingestion, incident reads, and investigation start/read/cancel/approve/deny/event subscription. `startIncidentInvestigation(incidentId, { cwd })` is the safe product entrypoint: it cannot accept caller-authored prompt, evidence, sandbox, mode, or approval fields. Raw Codex protocol details must never appear in this package's public API.
+
+`getIncidentCausalPath(incidentId, evidenceId)` reads the versioned,
+evidence-specific causal chain. Both identities are URL-encoded by the client;
+code graph and trusted deployment correlation remain server-side inputs. File
+and function steps include normalized labels, external IDs, and optional source
+locations for code-level rendering without provider payloads.
+
+Incident remediation uses four typed methods:
+`startIncidentRemediation`, `getIncidentRemediation`,
+`approveIncidentRemediation`, and `denyIncidentRemediation`. Start always sends
+an empty object, and decisions send only the opaque approval id plus the selected
+decision. The client cannot supply diagnosis, evidence, autonomy policy, target,
+patch, test claims, or PR metadata. The factory return type composes the additive
+`PodoRemediationClient` capability with `PodoIncidentClient`, preserving existing
+incident-client test doubles and consumers.
 
 ```sh
 bun test packages/client

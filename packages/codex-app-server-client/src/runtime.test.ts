@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { ServerNotification } from "@rootline/codex-protocol/generated/ServerNotification.ts"
-import type { ServerRequest } from "@rootline/codex-protocol/generated/ServerRequest.ts"
+import type { ServerNotification } from "@podo/codex-protocol/generated/ServerNotification.ts"
+import type { ServerRequest } from "@podo/codex-protocol/generated/ServerRequest.ts"
 import { AppServerRuntime, type CodexRuntimeEvent } from "./runtime"
 
 class FakeTransport {
@@ -30,11 +30,36 @@ describe("AppServerRuntime", () => {
     const runtime = new AppServerRuntime(transport)
     const events: CodexRuntimeEvent[] = []
     runtime.onEvent((event) => events.push(event))
-    await expect(runtime.startThread({ cwd: "/repo", sandbox: "workspace-write" })).resolves.toEqual({ threadId: "thread-1" })
+    await expect(runtime.startThread({
+      cwd: "/repo",
+      sandbox: "workspace-write",
+      developerInstructions: "core-owned policy",
+    })).resolves.toEqual({ threadId: "thread-1" })
     await expect(runtime.startTurn("thread-1", "investigate")).resolves.toEqual({ turnId: "turn-1" })
-    expect(transport.requests[0]).toMatchObject({ method: "thread/start", params: { cwd: "/repo", sandbox: "workspace-write", approvalPolicy: "on-request", approvalsReviewer: "user" } })
+    expect(transport.requests[0]).toMatchObject({ method: "thread/start", params: { cwd: "/repo", sandbox: "workspace-write", approvalPolicy: "on-request", approvalsReviewer: "user", developerInstructions: "core-owned policy" } })
     transport.notifications?.({ method: "turn/completed", params: { threadId: "thread-1", turn: { id: "turn-1", status: "completed", items: [], itemsView: "full", error: null, startedAt: 1, completedAt: 2, durationMs: 1000 } } } as ServerNotification)
     expect(events).toEqual([{ kind: "turn.completed", threadId: "thread-1", turnId: "turn-1", status: "completed" }])
+  })
+
+  test("preserves core-owned developer instructions when resuming a thread", async () => {
+    const transport = new FakeTransport()
+    const runtime = new AppServerRuntime(transport)
+
+    await runtime.resumeThread("thread-1", {
+      cwd: "/repo",
+      sandbox: "read-only",
+      developerInstructions: "resumed core policy",
+    })
+
+    expect(transport.requests[0]).toMatchObject({
+      method: "thread/resume",
+      params: {
+        threadId: "thread-1",
+        cwd: "/repo",
+        sandbox: "read-only",
+        developerInstructions: "resumed core policy",
+      },
+    })
   })
 
   test("holds approval until an explicit decision and fails unsupported requests closed", async () => {

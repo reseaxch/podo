@@ -1,6 +1,6 @@
-# Rootline plugin SDK
+# Podo plugin SDK
 
-`@rootline/plugin-sdk` defines the manifest, capability, lifecycle, and result contracts used by replaceable external adapters.
+`@podo/plugin-sdk` defines the manifest, capability, lifecycle, and result contracts used by replaceable external adapters.
 
 Plugins may provide Graphify import, telemetry replay, and GitHub delivery capabilities. Codex is a required runtime and does not belong behind this SDK.
 

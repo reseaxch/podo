@@ -1,11 +1,11 @@
-import type { RequestId } from "@rootline/codex-protocol/generated/RequestId.ts"
-import type { ServerNotification } from "@rootline/codex-protocol/generated/ServerNotification.ts"
-import type { ServerRequest } from "@rootline/codex-protocol/generated/ServerRequest.ts"
-import type { ThreadResumeParams } from "@rootline/codex-protocol/generated/v2/ThreadResumeParams.ts"
-import type { ThreadStartParams } from "@rootline/codex-protocol/generated/v2/ThreadStartParams.ts"
-import type { TurnStartParams } from "@rootline/codex-protocol/generated/v2/TurnStartParams.ts"
-import type { TurnSteerParams } from "@rootline/codex-protocol/generated/v2/TurnSteerParams.ts"
-import type { ToolRequestUserInputResponse } from "@rootline/codex-protocol/generated/v2/ToolRequestUserInputResponse.ts"
+import type { RequestId } from "@podo/codex-protocol/generated/RequestId.ts"
+import type { ServerNotification } from "@podo/codex-protocol/generated/ServerNotification.ts"
+import type { ServerRequest } from "@podo/codex-protocol/generated/ServerRequest.ts"
+import type { ThreadResumeParams } from "@podo/codex-protocol/generated/v2/ThreadResumeParams.ts"
+import type { ThreadStartParams } from "@podo/codex-protocol/generated/v2/ThreadStartParams.ts"
+import type { TurnStartParams } from "@podo/codex-protocol/generated/v2/TurnStartParams.ts"
+import type { TurnSteerParams } from "@podo/codex-protocol/generated/v2/TurnSteerParams.ts"
+import type { ToolRequestUserInputResponse } from "@podo/codex-protocol/generated/v2/ToolRequestUserInputResponse.ts"
 import { AppServerConnection, type AppServerConnectionOptions, type RequestOptions } from "./transport"
 
 export type CodexApprovalKind = "command" | "file_change" | "permissions" | "user_input"
@@ -21,6 +21,7 @@ export type CodexRuntimeEvent =
 export interface StartCodexThreadInput {
   cwd: string
   sandbox: "read-only" | "workspace-write"
+  developerInstructions?: string
 }
 
 export interface CodexThreadHandle { threadId: string }
@@ -70,6 +71,7 @@ export class AppServerRuntime implements CodexRuntime {
       approvalPolicy: "on-request",
       approvalsReviewer: "user",
       ephemeral: false,
+      ...(input.developerInstructions === undefined ? {} : { developerInstructions: input.developerInstructions }),
     }
     const response = await this.transport.request("thread/start", params, options) as { thread: { id: string } }
     return { threadId: response.thread.id }
@@ -82,6 +84,7 @@ export class AppServerRuntime implements CodexRuntime {
       sandbox: input.sandbox,
       approvalPolicy: "on-request",
       approvalsReviewer: "user",
+      ...(input.developerInstructions === undefined ? {} : { developerInstructions: input.developerInstructions }),
     }
     const response = await this.transport.request("thread/resume", params, options) as { thread: { id: string } }
     return { threadId: response.thread.id }

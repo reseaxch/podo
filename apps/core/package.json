@@ -1,11 +1,13 @@
 {
-  "name": "@rootline/core",
+  "name": "@podo/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@rootline/codex-app-server-client": "workspace:*",
-    "@rootline/contracts": "workspace:*"
+    "@podo/codex-app-server-client": "workspace:*",
+    "@podo/contracts": "workspace:*",
+    "@podo/domain": "workspace:*",
+    "@podo/plugin-github": "workspace:*"
   },
   "scripts": {
     "dev": "bun --watch src/index.ts",

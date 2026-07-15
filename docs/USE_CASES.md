@@ -1,4 +1,4 @@
-# Rootline — Use Cases
+# Podo — Use Cases
 
 > Юзкейсы выведены из [MVP_PLAN.md](MVP_PLAN.md). Покрывают основной сквозной сценарий
 > `incident → evidence → root cause → tested fix → pull request`, а также поддерживающие
@@ -18,7 +18,7 @@
 - **Backend-разработчик** — автор исправляемого кода.
 - **DevOps / SRE** — отвечает за deployment и инфраструктуру.
 - **Tech lead** — принимает решение по remediation и ревьюит PR.
-- **Rootline (система)** — Incident Engine, Investigator (GPT-5.6), Codex worker.
+- **Podo (система)** — Incident Engine, Investigator (GPT-5.6), Codex worker.
 - **Внешние системы** — Graphify, GitHub, источник OpenTelemetry-событий.
 
 ---
@@ -53,7 +53,7 @@
 **Основной поток:**
 1. Adapter читает `graphify-out/graph.json`.
 2. Проверяет поддерживаемую версию / fingerprint схемы.
-3. Нормализует nodes и edges (Repository, Service, File, Function, Endpoint) в модель Rootline.
+3. Нормализует nodes и edges (Repository, Service, File, Function, Endpoint) в модель Podo.
 4. Сохраняет external ID, source path, line, relation type, provenance и маркировку `EXTRACTED`/`INFERRED`/`AMBIGUOUS`.
 5. Идемпотентно апсертит данные в PostgreSQL.
 

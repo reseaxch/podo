@@ -2,14 +2,32 @@ import type {
   ApprovalDecisionResponse,
   CancelInvestigationResponse,
   GetInvestigationResponse,
+  GetIncidentCausalPathResponse,
+  GetIncidentResponse,
+  GetIncidentAuditResponse,
+  GetIncidentDeliveryResponse,
+  GetIncidentRemediationAuditResponse,
+  GetSettingsResponse,
   HealthResponse,
+  IngestTelemetryResponse,
+  GetIncidentRemediationResponse,
+  IncidentRemediationDecisionResponse,
+  IncidentDeliveryDecisionResponse,
   InvestigationEvent,
+  ListIncidentsResponse,
+  StartIncidentInvestigationRequest,
+  StartIncidentInvestigationResponse,
+  StartIncidentRemediationResponse,
+  StartIncidentDeliveryResponse,
   StartInvestigationRequest,
   StartInvestigationResponse,
   SystemStatusResponse,
-} from "@rootline/contracts"
+  TelemetryEventInput,
+  UpdateSettingsRequest,
+  UpdateSettingsResponse,
+} from "@podo/contracts"
 
-export interface RootlineClientOptions {
+export interface PodoClientOptions {
   baseUrl?: string
   fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 }
@@ -19,9 +37,14 @@ export interface SubscribeEventsOptions {
   signal?: AbortSignal
 }
 
-export interface RootlineClient {
+export interface PodoClient {
   health(): Promise<HealthResponse>
   systemStatus(): Promise<SystemStatusResponse>
+  getSettings(): Promise<GetSettingsResponse>
+  updateSettings(input: UpdateSettingsRequest): Promise<UpdateSettingsResponse>
+  ingestTelemetry(events: TelemetryEventInput[]): Promise<IngestTelemetryResponse>
+  listIncidents(): Promise<ListIncidentsResponse>
+  getIncident(id: string): Promise<GetIncidentResponse>
   start(input: StartInvestigationRequest): Promise<StartInvestigationResponse>
   get(id: string): Promise<GetInvestigationResponse>
   cancel(id: string): Promise<CancelInvestigationResponse>
@@ -33,15 +56,36 @@ export interface RootlineClient {
   subscribeEvents(id: string, options?: SubscribeEventsOptions): AsyncIterable<InvestigationEvent>
 }
 
+export interface PodoIncidentClient extends PodoClient {
+  startIncidentInvestigation(id: string, input: StartIncidentInvestigationRequest): Promise<StartIncidentInvestigationResponse>
+  getIncidentCausalPath(id: string, evidenceId: string): Promise<GetIncidentCausalPathResponse>
+}
+
+export interface PodoIncidentAuditClient {
+  getIncidentAudit(id: string): Promise<GetIncidentAuditResponse>
+}
+
+export interface PodoRemediationClient {
+  startIncidentRemediation(id: string): Promise<StartIncidentRemediationResponse>
+  getIncidentRemediation(id: string): Promise<GetIncidentRemediationResponse>
+  getIncidentRemediationAudit(id: string): Promise<GetIncidentRemediationAuditResponse>
+  approveIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
+  denyIncidentRemediation(id: string, approvalId: string): Promise<IncidentRemediationDecisionResponse>
+  startIncidentDelivery(id: string): Promise<StartIncidentDeliveryResponse>
+  getIncidentDelivery(id: string): Promise<GetIncidentDeliveryResponse>
+  approveIncidentDelivery(id: string, approvalId: string): Promise<IncidentDeliveryDecisionResponse>
+  denyIncidentDelivery(id: string, approvalId: string): Promise<IncidentDeliveryDecisionResponse>
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = await response.text()
-    throw new Error(`Rootline request failed (${response.status}): ${detail}`)
+    throw new Error(`Podo request failed (${response.status}): ${detail}`)
   }
   return (await response.json()) as T
 }
 
-export function createRootlineClient(options: RootlineClientOptions = {}): RootlineClient {
+export function createPodoClient(options: PodoClientOptions = {}): PodoIncidentClient & PodoIncidentAuditClient & PodoRemediationClient {
   const baseUrl = (options.baseUrl ?? "http://127.0.0.1:4100").replace(/\/$/, "")
   const request = options.fetch ?? globalThis.fetch
   const investigationUrl = (id: string) => `${baseUrl}/api/investigations/${encodeURIComponent(id)}`
@@ -53,6 +97,23 @@ export function createRootlineClient(options: RootlineClientOptions = {}): Rootl
   return {
     health: async () => readJson<HealthResponse>(await request(`${baseUrl}/healthz`)),
     systemStatus: async () => readJson<SystemStatusResponse>(await request(`${baseUrl}/api/system`)),
+    getSettings: async () => readJson<GetSettingsResponse>(await request(`${baseUrl}/api/settings`)),
+    updateSettings: (input) => command<UpdateSettingsResponse>(`${baseUrl}/api/settings`, "PATCH", input),
+    ingestTelemetry: (events) => command<IngestTelemetryResponse>(`${baseUrl}/api/telemetry/events`, "POST", { events }),
+    listIncidents: async () => readJson<ListIncidentsResponse>(await request(`${baseUrl}/api/incidents`)),
+    getIncident: async (id) => readJson<GetIncidentResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}`)),
+    getIncidentAudit: async (id) => readJson<GetIncidentAuditResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/audit`)),
+    getIncidentCausalPath: async (id, evidenceId) => readJson<GetIncidentCausalPathResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/causal-path?evidenceId=${encodeURIComponent(evidenceId)}`)),
+    startIncidentInvestigation: (id, input) => command<StartIncidentInvestigationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/investigation`, "POST", input),
+    startIncidentRemediation: (id) => command<StartIncidentRemediationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`, "POST", {}),
+    getIncidentRemediation: async (id) => readJson<GetIncidentRemediationResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`)),
+    getIncidentRemediationAudit: async (id) => readJson<GetIncidentRemediationAuditResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/audit`)),
+    approveIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "approve" }),
+    denyIncidentRemediation: (id, approvalId) => command<IncidentRemediationDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "deny" }),
+    startIncidentDelivery: (id) => command<StartIncidentDeliveryResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery`, "POST", {}),
+    getIncidentDelivery: async (id) => readJson<GetIncidentDeliveryResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery`)),
+    approveIncidentDelivery: (id, approvalId) => command<IncidentDeliveryDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "approve" }),
+    denyIncidentDelivery: (id, approvalId) => command<IncidentDeliveryDecisionResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation/delivery/approvals/${encodeURIComponent(approvalId)}`, "POST", { decision: "deny" }),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
     get: async (id) => readJson<GetInvestigationResponse>(await request(investigationUrl(id))),
     cancel: (id) => command<CancelInvestigationResponse>(investigationUrl(id), "DELETE"),
@@ -68,7 +129,7 @@ export function createRootlineClient(options: RootlineClientOptions = {}): Rootl
 }
 
 async function* streamEvents(
-  request: NonNullable<RootlineClientOptions["fetch"]>,
+  request: NonNullable<PodoClientOptions["fetch"]>,
   url: string,
   options: SubscribeEventsOptions,
 ): AsyncGenerator<InvestigationEvent> {
@@ -78,7 +139,7 @@ async function* streamEvents(
   })
   if (!response.ok || !response.body) {
     const detail = await response.text()
-    throw new Error(`Rootline event stream failed (${response.status}): ${detail}`)
+    throw new Error(`Podo event stream failed (${response.status}): ${detail}`)
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()

@@ -10,7 +10,7 @@ export default function nextConfig(phase: string): NextConfig {
     // Running `next build` while `next dev` is open must not invalidate HMR.
     distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
     outputFileTracingRoot: workspaceRoot,
-    transpilePackages: ["@rootline/contracts", "@rootline/client"],
+    transpilePackages: ["@podo/contracts", "@podo/client"],
     turbopack: {
       root: workspaceRoot,
     },

@@ -22,6 +22,10 @@ test-results/
 *.log
 *.tmp
 
+# Graphify working output; canonical fixtures live under scenarios/*/fixtures
+graphify-out/
+.graphify_*
+
 # Generated run artifacts; keep directory placeholders
 benchmarks/results/*
 !benchmarks/results/.gitkeep

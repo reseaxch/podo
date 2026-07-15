@@ -1,5 +1,5 @@
 {
-  "name": "@rootline/contracts",
+  "name": "@podo/contracts",
   "version": "0.0.0",
   "private": true,
   "type": "module",

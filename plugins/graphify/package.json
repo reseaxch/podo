@@ -1,11 +1,12 @@
 {
-  "name": "@rootline/plugin-graphify",
+  "name": "@podo/plugin-graphify",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@rootline/plugin-sdk": "workspace:*"
+    "@podo/contracts": "workspace:*",
+    "@podo/plugin-sdk": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

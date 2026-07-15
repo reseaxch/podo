@@ -21,3 +21,8 @@ export interface Incident {
   evidence: readonly EvidenceReference[]
   createdAt: string
 }
+
+export * from "./evidence"
+export * from "./diagnosis"
+export * from "./policy"
+export * from "./prompts"

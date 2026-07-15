@@ -1,6 +1,6 @@
 # Codex protocol artifacts
 
-`@rootline/codex-protocol` contains TypeScript types and JSON Schemas generated from the pinned Codex App Server binary, plus compatibility metadata.
+`@podo/codex-protocol` contains TypeScript types and JSON Schemas generated from the pinned Codex App Server binary, plus compatibility metadata.
 
 Generated files under `src/generated` and `schema` are source artifacts for the rest of the workspace. Do not edit them by hand.
 

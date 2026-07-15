@@ -1,0 +1,281 @@
+[
+  {
+    "timestamp": "2026-07-14T09:00:00.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1041",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 188743680,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:00:15.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1041",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 188743680,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:00:30.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1041",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 188743680,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:00:45.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1041",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 188743680,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:01:00.000Z",
+    "kind": "log",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "deployment deploy-1042 rolled out",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c"
+  },
+  {
+    "timestamp": "2026-07-14T09:01:15.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 232783872,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:01:30.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 276824064,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:01:45.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 320864256,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:02:00.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 364904448,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:02:15.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 408944640,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:02:30.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 452984832,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:02:45.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 497025024,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:03:00.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 541065216,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:03:15.000Z",
+    "kind": "trace",
+    "service": "checkout-service",
+    "severity": "error",
+    "message": "POST /checkout returned 500",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "traceId": "trace-0001"
+  },
+  {
+    "timestamp": "2026-07-14T09:03:15.000Z",
+    "kind": "log",
+    "service": "checkout-service",
+    "severity": "error",
+    "message": "allocation failure handling /checkout: JavaScript heap out of memory",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "traceId": "trace-0001"
+  },
+  {
+    "timestamp": "2026-07-14T09:03:15.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 585105408,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:03:30.000Z",
+    "kind": "trace",
+    "service": "checkout-service",
+    "severity": "error",
+    "message": "POST /checkout returned 500",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "traceId": "trace-0002"
+  },
+  {
+    "timestamp": "2026-07-14T09:03:30.000Z",
+    "kind": "log",
+    "service": "checkout-service",
+    "severity": "error",
+    "message": "allocation failure handling /checkout: JavaScript heap out of memory",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "traceId": "trace-0002"
+  },
+  {
+    "timestamp": "2026-07-14T09:03:30.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 629145600,
+      "unit": "By"
+    }
+  },
+  {
+    "timestamp": "2026-07-14T09:03:45.000Z",
+    "kind": "trace",
+    "service": "checkout-service",
+    "severity": "error",
+    "message": "POST /checkout returned 500",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "traceId": "trace-0003"
+  },
+  {
+    "timestamp": "2026-07-14T09:03:45.000Z",
+    "kind": "log",
+    "service": "checkout-service",
+    "severity": "error",
+    "message": "allocation failure handling /checkout: JavaScript heap out of memory",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "traceId": "trace-0003"
+  },
+  {
+    "timestamp": "2026-07-14T09:03:45.000Z",
+    "kind": "metric",
+    "service": "checkout-service",
+    "severity": "info",
+    "message": "process heap sample",
+    "deploymentId": "deploy-1042",
+    "containerId": "checkout-service-7b9c",
+    "metric": {
+      "name": "process.heap.used",
+      "value": 673185792,
+      "unit": "By"
+    }
+  }
+]
