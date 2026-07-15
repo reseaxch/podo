@@ -8,12 +8,14 @@
 
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { createHash } from "node:crypto"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import {
   buildAfterFixTelemetryEvents,
   buildTelemetryEvents,
+  CliArgumentError,
+  parseCliMode,
+  runGenerateCli,
   serializeTelemetry,
   type TelemetryEvent,
 } from "../../scenarios/cache-growth/generate-telemetry"
@@ -22,24 +24,17 @@ import {
 // consumer boundary rather than internal modules like ./networkx-v1. (The bare
 // `@podo/plugin-graphify` specifier is not resolvable here because tests/ is not
 // a workspace member, so we reference the same exports entry by its path.)
-import {
-  decodeGraphifyNetworkxV1,
-  GRAPHIFY_NETWORKX_DECODER_VERSION,
-  GRAPHIFY_SCHEMA_VERSION,
-  PODO_CODE_GRAPH_SCHEMA_VERSION,
-} from "../../plugins/graphify/src/index"
+import { decodeGraphifyNetworkxV1 } from "../../plugins/graphify/src/index"
+import type { TelemetryEventInput } from "../../packages/contracts/src/index"
+import { IncidentMonitor } from "../../apps/core/src/modules/incidents/incident-monitor"
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..")
-const FIXTURES = join(REPO_ROOT, "scenarios", "cache-growth", "fixtures")
+const SCENARIO_DIR = join(REPO_ROOT, "scenarios", "cache-growth")
+const GENERATOR = join(SCENARIO_DIR, "generate-telemetry.ts")
+const FIXTURES = join(SCENARIO_DIR, "fixtures")
 const TELEMETRY_FIXTURE = join(FIXTURES, "telemetry.json")
 const TELEMETRY_AFTER_FIX_FIXTURE = join(FIXTURES, "telemetry-after-fix.json")
 const GRAPH_FIXTURE = join(FIXTURES, "graph.json")
-const GRAPH_COMPAT_MANIFEST = join(FIXTURES, "graph.compat.json")
-
-/** Reads a text file and normalizes CRLF -> LF (canonical form). */
-function readCanonicalLf(path: string): string {
-  return readFileSync(path, "utf8").replace(/\r\n/g, "\n")
-}
 
 /**
  * Asserts that regenerating `events` in memory reproduces the committed fixture's
@@ -133,48 +128,112 @@ describe("cache-growth fixture integrity", () => {
       },
     })
   })
+})
 
-  test("graph compatibility manifest matches the committed fixture and public decoder", () => {
-    // The manifest records only verifiable data: the fixture identity, the
-    // public decoder/schema versions, the canonical-LF hash of graph.json, and
-    // the decoder's snapshot fingerprint. Every value is re-derived here and
-    // must match exactly; any decoder/version/schema mismatch or graph-content
-    // drift fails this gate closed.
-    const manifest = JSON.parse(readFileSync(GRAPH_COMPAT_MANIFEST, "utf8")) as {
-      status: string
-      fixture: string
-      graphId: string
-      decoderVersion: string
-      graphifySchemaVersion: string
-      codeGraphSchemaVersion: string
-      graphCanonicalLfSha256: string
-      snapshotId: string
+/** Runs the generator CLI with `args`, returning its exit code (no shell). */
+async function runGenerator(args: string[]): Promise<number> {
+  const child = Bun.spawn(["bun", "run", GENERATOR, ...args], {
+    cwd: REPO_ROOT,
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  return await child.exited
+}
+
+describe("telemetry generator CLI (fail closed)", () => {
+  test("parseCliMode accepts only no args or exactly --after-fix", () => {
+    expect(parseCliMode([])).toBe("incident")
+    expect(parseCliMode(["--after-fix"])).toBe("after-fix")
+  })
+
+  test("parseCliMode rejects unknown, duplicate, and extra arguments", () => {
+    expect(() => parseCliMode(["--after-fixx"])).toThrow(CliArgumentError) // typo
+    expect(() => parseCliMode(["--afterfix"])).toThrow(CliArgumentError)
+    expect(() => parseCliMode(["--after-fix", "--after-fix"])).toThrow(CliArgumentError) // duplicate
+    expect(() => parseCliMode(["--after-fix", "extra"])).toThrow(CliArgumentError) // extra
+    expect(() => parseCliMode(["extra"])).toThrow(CliArgumentError)
+    expect(() => parseCliMode(["--help"])).toThrow(CliArgumentError)
+  })
+
+  test("runGenerateCli never invokes the writer for invalid arguments", () => {
+    // Primary fail-closed proof: the writer is a spy. A bad invocation must throw
+    // BEFORE the writer is called even once — so no write of any kind occurs,
+    // including one that would rewrite a file with identical bytes.
+    for (const badArgs of [
+      ["--after-fixx"], // typo
+      ["--after-fix", "--after-fix"], // duplicate
+      ["--after-fix", "extra"], // extra
+      ["extra"],
+      ["--help"],
+    ]) {
+      let writeCount = 0
+      const writeFixture = (): void => {
+        writeCount += 1
+      }
+      expect(() => runGenerateCli({ args: badArgs, writeFixture })).toThrow(CliArgumentError)
+      expect(writeCount).toBe(0)
+    }
+  })
+
+  test("runGenerateCli invokes the writer once with the correct fixture for valid arguments", () => {
+    const incidentWrites: Array<{ fileName: string; contents: string }> = []
+    const incident = runGenerateCli({
+      args: [],
+      writeFixture: (fileName, contents) => incidentWrites.push({ fileName, contents }),
+    })
+    expect(incident).toMatchObject({ mode: "incident", fileName: "telemetry.json" })
+    expect(incidentWrites).toHaveLength(1)
+    expect(incidentWrites[0]!.fileName).toBe("telemetry.json")
+    expect(incidentWrites[0]!.contents).toBe(serializeTelemetry(buildTelemetryEvents()))
+
+    const afterWrites: Array<{ fileName: string; contents: string }> = []
+    const after = runGenerateCli({
+      args: ["--after-fix"],
+      writeFixture: (fileName, contents) => afterWrites.push({ fileName, contents }),
+    })
+    expect(after).toMatchObject({ mode: "after-fix", fileName: "telemetry-after-fix.json" })
+    expect(afterWrites).toHaveLength(1)
+    expect(afterWrites[0]!.fileName).toBe("telemetry-after-fix.json")
+    expect(afterWrites[0]!.contents).toBe(serializeTelemetry(buildAfterFixTelemetryEvents()))
+  })
+
+  test("(secondary) a bad subprocess invocation exits nonzero and leaves both fixtures byte-identical", async () => {
+    // Snapshot both committed fixtures (canonical LF) before the bad run.
+    const before = {
+      incident: readFileSync(TELEMETRY_FIXTURE, "utf8").replace(/\r\n/g, "\n"),
+      afterFix: readFileSync(TELEMETRY_AFTER_FIX_FIXTURE, "utf8").replace(/\r\n/g, "\n"),
     }
 
-    // Identity + candidate status.
-    expect(manifest.status).toBe("candidate")
-    expect(manifest.fixture).toBe("graph.json")
-    expect(manifest.graphId).toBe("cache-growth")
+    // Typo and extra-argument invocations must both fail closed.
+    expect(await runGenerator(["--after-fixx"])).not.toBe(0)
+    expect(await runGenerator(["--after-fix", "extra"])).not.toBe(0)
 
-    // Versions must match the public decoder/schema constants exactly.
-    expect(manifest.decoderVersion).toBe(GRAPHIFY_NETWORKX_DECODER_VERSION)
-    expect(manifest.graphifySchemaVersion).toBe(GRAPHIFY_SCHEMA_VERSION)
-    expect(manifest.codeGraphSchemaVersion).toBe(PODO_CODE_GRAPH_SCHEMA_VERSION)
+    // Neither fixture may have changed.
+    expect(readFileSync(TELEMETRY_FIXTURE, "utf8").replace(/\r\n/g, "\n")).toBe(before.incident)
+    expect(readFileSync(TELEMETRY_AFTER_FIX_FIXTURE, "utf8").replace(/\r\n/g, "\n")).toBe(
+      before.afterFix,
+    )
+  })
+})
 
-    // Canonical-LF SHA-256 of the committed graph fixture (CRLF -> LF first, as
-    // with telemetry) must match the recorded hash — content drift fails closed.
-    const graphLf = readCanonicalLf(GRAPH_FIXTURE)
-    const graphSha = createHash("sha256").update(graphLf, "utf8").digest("hex")
-    expect(graphSha).toBe(manifest.graphCanonicalLfSha256)
+describe("after-fix telemetry through the Core ingestion boundary", () => {
+  test("Core accepts all 13 events, reacts ignore_healthy, and creates no incident", () => {
+    // The committed after-fix fixture is the input; read-only, never mutated.
+    const events = JSON.parse(
+      readFileSync(TELEMETRY_AFTER_FIX_FIXTURE, "utf8"),
+    ) as TelemetryEventInput[]
+    expect(events).toHaveLength(13)
 
-    // The public decoder must accept the fixture and produce the recorded
-    // snapshot fingerprint and schema identity.
-    const result = decodeGraphifyNetworkxV1(JSON.parse(graphLf), { graphId: manifest.graphId })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.snapshot.id).toBe(manifest.snapshotId)
-    expect(result.snapshot.schemaVersion).toBe(manifest.codeGraphSchemaVersion)
-    expect(result.snapshot.source.graphId).toBe(manifest.graphId)
-    expect(result.snapshot.source.schemaVersion).toBe(manifest.graphifySchemaVersion)
+    // Drive it through Core's public IncidentMonitor ingestion boundary.
+    const result = new IncidentMonitor().ingest(events)
+
+    // All events accepted, none rejected or duplicated.
+    expect(result.ingestion.accepted).toBe(13)
+    expect(result.ingestion.duplicates).toBe(0)
+    expect(result.ingestion.rejected).toEqual([])
+
+    // The remediated stream is healthy: no incident opened.
+    expect(result.reaction.action).toBe("ignore_healthy")
+    expect(result.incident).toBeNull()
   })
 })

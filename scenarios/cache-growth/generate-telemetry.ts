@@ -178,23 +178,94 @@ export function serializeTelemetry(events: TelemetryEvent[]): string {
   return `${JSON.stringify(events, null, 2)}\n`
 }
 
+export type CliMode = "incident" | "after-fix"
+
+export class CliArgumentError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "CliArgumentError"
+  }
+}
+
+/**
+ * Fail-closed CLI argument parser.
+ *
+ * Accepts exactly one of:
+ *   - no arguments            → "incident"  (writes telemetry.json)
+ *   - exactly ["--after-fix"] → "after-fix" (writes telemetry-after-fix.json)
+ *
+ * Any unknown flag, a duplicated `--after-fix`, or an extra argument throws
+ * `CliArgumentError` before any fixture is written, so a typo can never
+ * silently regenerate (or fail to regenerate) a fixture.
+ */
+export function parseCliMode(args: readonly string[]): CliMode {
+  if (args.length === 0) return "incident"
+  if (args.length === 1 && args[0] === "--after-fix") return "after-fix"
+
+  // Anything else is rejected. Give a precise reason.
+  const extraAfterFix = args.filter((arg) => arg === "--after-fix").length > 1
+  if (extraAfterFix) {
+    throw new CliArgumentError(`Duplicate --after-fix argument: ${JSON.stringify(args)}`)
+  }
+  throw new CliArgumentError(
+    `Unexpected arguments: ${JSON.stringify(args)}. Use no arguments or exactly "--after-fix".`,
+  )
+}
+
+/** The fixture file each mode writes. */
+const FIXTURE_FILE: Record<CliMode, string> = {
+  incident: "telemetry.json",
+  "after-fix": "telemetry-after-fix.json",
+}
+
+export interface GenerateCliResult {
+  mode: CliMode
+  fileName: string
+  eventCount: number
+}
+
+/**
+ * Orchestrates one CLI invocation with an injected writer.
+ *
+ * Arguments are parsed FIRST via `parseCliMode`, which throws `CliArgumentError`
+ * on unknown/duplicate/extra input. Because parsing happens before the writer is
+ * ever referenced, an invalid invocation cannot reach `writeFixture` — no write
+ * of any kind occurs, even one that would produce identical bytes. This is the
+ * fail-closed guarantee the subprocess exit-code check alone cannot prove.
+ *
+ * `writeFixture(fileName, contents)` receives the fixture's basename and its
+ * canonical serialized contents; the real CLI resolves the path and writes.
+ */
+export function runGenerateCli(options: {
+  args: readonly string[]
+  writeFixture: (fileName: string, contents: string) => void
+}): GenerateCliResult {
+  const mode = parseCliMode(options.args) // throws before any write on bad args
+  const events = mode === "after-fix" ? buildAfterFixTelemetryEvents() : buildTelemetryEvents()
+  const fileName = FIXTURE_FILE[mode]
+  options.writeFixture(fileName, serializeTelemetry(events))
+  return { mode, fileName, eventCount: events.length }
+}
+
 // CLI: writes a fixture. Guarded so importing this module never writes to disk.
 //
 //   bun run scenarios/cache-growth/generate-telemetry.ts             → telemetry.json (incident)
 //   bun run scenarios/cache-growth/generate-telemetry.ts --after-fix → telemetry-after-fix.json (post-fix)
-//
-// Each mode writes only its own file; it never touches the other fixture.
 if (import.meta.main) {
   const { writeFileSync } = await import("node:fs")
   const { fileURLToPath } = await import("node:url")
   const { dirname, join } = await import("node:path")
 
-  const afterFix = process.argv.includes("--after-fix")
-  const events = afterFix ? buildAfterFixTelemetryEvents() : buildTelemetryEvents()
-  const fileName = afterFix ? "telemetry-after-fix.json" : "telemetry.json"
-
   const outDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures")
-  const outPath = join(outDir, fileName)
-  writeFileSync(outPath, serializeTelemetry(events))
-  console.log(`Wrote ${events.length} events to ${outPath}`)
+
+  try {
+    const result = runGenerateCli({
+      args: process.argv.slice(2),
+      writeFixture: (fileName, contents) => writeFileSync(join(outDir, fileName), contents),
+    })
+    console.log(`Wrote ${result.eventCount} events to ${join(outDir, result.fileName)}`)
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(2)
+  }
 }
