@@ -8,6 +8,8 @@ import type {
   IngestTelemetryResponse,
   InvestigationEvent,
   ListIncidentsResponse,
+  StartIncidentInvestigationRequest,
+  StartIncidentInvestigationResponse,
   StartInvestigationRequest,
   StartInvestigationResponse,
   SystemStatusResponse,
@@ -45,6 +47,10 @@ export interface RootlineClient {
   subscribeEvents(id: string, options?: SubscribeEventsOptions): AsyncIterable<InvestigationEvent>
 }
 
+export interface RootlineIncidentClient extends RootlineClient {
+  startIncidentInvestigation(id: string, input: StartIncidentInvestigationRequest): Promise<StartIncidentInvestigationResponse>
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = await response.text()
@@ -53,7 +59,7 @@ async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
 
-export function createRootlineClient(options: RootlineClientOptions = {}): RootlineClient {
+export function createRootlineClient(options: RootlineClientOptions = {}): RootlineIncidentClient {
   const baseUrl = (options.baseUrl ?? "http://127.0.0.1:4100").replace(/\/$/, "")
   const request = options.fetch ?? globalThis.fetch
   const investigationUrl = (id: string) => `${baseUrl}/api/investigations/${encodeURIComponent(id)}`
@@ -70,6 +76,7 @@ export function createRootlineClient(options: RootlineClientOptions = {}): Rootl
     ingestTelemetry: (events) => command<IngestTelemetryResponse>(`${baseUrl}/api/telemetry/events`, "POST", { events }),
     listIncidents: async () => readJson<ListIncidentsResponse>(await request(`${baseUrl}/api/incidents`)),
     getIncident: async (id) => readJson<GetIncidentResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}`)),
+    startIncidentInvestigation: (id, input) => command<StartIncidentInvestigationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/investigation`, "POST", input),
     start: (input) => command<StartInvestigationResponse>(`${baseUrl}/api/investigations`, "POST", input),
     get: async (id) => readJson<GetInvestigationResponse>(await request(investigationUrl(id))),
     cancel: (id) => command<CancelInvestigationResponse>(investigationUrl(id), "DELETE"),

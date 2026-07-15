@@ -85,6 +85,16 @@ export class IncidentMonitor {
     const incident = this.incidents.get(id)
     return incident ? structuredClone(incident) : null
   }
+
+  getEvidenceEvents(id: string): TelemetryEvent[] | null {
+    const incident = this.incidents.get(id)
+    if (!incident) return null
+    const byId = new Map(this.telemetry.list().map((event) => [event.id, event]))
+    return incident.evidence.flatMap((evidence) => {
+      const event = byId.get(evidence.sourceEventId)
+      return event ? [structuredClone(event)] : []
+    })
+  }
 }
 
 function detectCacheGrowth(events: readonly TelemetryEvent[]): DetectionDecision {

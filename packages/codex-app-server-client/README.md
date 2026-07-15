@@ -6,6 +6,11 @@ It owns JSONL framing, request correlation, initialization, timeouts and cancell
 
 It does not own incidents, Rootline approval policy, persistence, retries of failed investigations, or client-facing API contracts.
 
+`StartCodexThreadInput.developerInstructions` is an optional internal runtime
+field mapped directly to both `thread/start` and `thread/resume`. Core uses it to
+install trusted policy separately from turn input; it is not a Rootline public
+request field.
+
 ```sh
 bun test packages/codex-app-server-client
 bun run --cwd packages/codex-app-server-client typecheck

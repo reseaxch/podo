@@ -11,8 +11,18 @@
 - controlled lazy replacement of a failed Codex runtime.
 - core-owned settings plus telemetry ingestion and incident read APIs;
 - deterministic, replay-safe cache-growth incident detection.
+- incident-scoped, evidence-backed investigator handoff through the typed client.
 
-Durable persistence, automatic investigation handoff, graph-backed evidence, remediation, audit, and delivery remain workstream milestones.
+`POST /api/incidents/:id/investigation` is the product investigation entrypoint.
+It accepts only an absolute repository `cwd`; core selects the incident evidence,
+compiles the investigator policy prompt, fixes the sandbox to `read-only`, and
+retains the incident-to-investigation link. `observe` mode rejects the start,
+while `recommend` and `act_with_approval` may draft a diagnosis without granting
+mutation authority. Runtime approval requests from this investigator path are
+denied by core rather than exposed for approval.
+
+Durable persistence, graph-backed evidence, structured diagnosis validation,
+remediation, audit, and delivery remain workstream milestones.
 
 ## Run and validate
 

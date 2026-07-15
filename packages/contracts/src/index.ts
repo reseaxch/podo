@@ -89,6 +89,14 @@ export interface DetectedIncident {
   createdAt: string
   updatedAt: string
   evidence: IncidentEvidence[]
+  investigation?: IncidentInvestigationLink
+}
+
+export interface IncidentInvestigationLink {
+  id: string
+  status: InvestigationStatus
+  startedAt: string
+  updatedAt: string
 }
 
 export type IncidentReaction =
@@ -112,6 +120,15 @@ export interface ListIncidentsResponse {
 
 export interface GetIncidentResponse {
   incident: DetectedIncident
+}
+
+export interface StartIncidentInvestigationRequest {
+  cwd: string
+}
+
+export interface StartIncidentInvestigationResponse {
+  incident: DetectedIncident
+  investigation: Investigation
 }
 
 export type InvestigationStatus =

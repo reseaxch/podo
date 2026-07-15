@@ -24,6 +24,7 @@ interface InternalInvestigation {
   events: InvestigationEvent[]
   approval?: InternalApproval
   listeners: Set<(event: InvestigationEvent) => void>
+  approvalPolicy: "interactive" | "deny_all"
 }
 
 export interface InvestigationServiceOptions {
@@ -53,7 +54,13 @@ export class InvestigationService {
     return this.runtimeErrorMessage
   }
 
-  async start(input: StartInvestigationRequest): Promise<StartInvestigationResponse> {
+  async start(
+    input: StartInvestigationRequest,
+    options: {
+      approvalPolicy?: "interactive" | "deny_all"
+      developerInstructions?: string
+    } = {},
+  ): Promise<StartInvestigationResponse> {
     const now = new Date().toISOString()
     const investigation: InternalInvestigation = {
       public: {
@@ -69,12 +76,19 @@ export class InvestigationService {
       prompt: input.prompt,
       events: [],
       listeners: new Set(),
+      approvalPolicy: options.approvalPolicy ?? "interactive",
     }
     this.investigations.set(investigation.public.id, investigation)
     this.append(investigation, { kind: "investigation.started", payload: { status: "starting" } })
     try {
       const runtime = await this.getRuntime()
-      const thread = await runtime.startThread({ cwd: input.cwd, sandbox: input.sandbox })
+      const thread = await runtime.startThread({
+        cwd: input.cwd,
+        sandbox: input.sandbox,
+        ...(options.developerInstructions === undefined
+          ? {}
+          : { developerInstructions: options.developerInstructions }),
+      })
       investigation.threadId = thread.threadId
       this.byThread.set(thread.threadId, investigation.public.id)
       const turn = await runtime.startTurn(thread.threadId, input.prompt)
@@ -192,12 +206,23 @@ export class InvestigationService {
     if (!("threadId" in event)) return
     const id = this.byThread.get(event.threadId)
     const investigation = id ? this.investigations.get(id) : undefined
-    if (!investigation || isTerminal(investigation.public.status)) return
+    if (!investigation) return
+    if (isTerminal(investigation.public.status)) {
+      if (event.kind === "approval.requested" && investigation.approvalPolicy === "deny_all") {
+        this.denyRuntimeApproval(investigation, event.requestId)
+      }
+      return
+    }
     switch (event.kind) {
       case "output.delta":
         this.append(investigation, { kind: "output.delta", payload: { text: event.text } })
         break
       case "approval.requested": {
+        if (investigation.approvalPolicy === "deny_all") {
+          this.denyRuntimeApproval(investigation, event.requestId)
+          this.fail(investigation, `Investigator requested forbidden ${event.approvalKind} approval`)
+          return
+        }
         if (investigation.approval?.public.status === "pending") {
           void this.getRuntime().then((runtime) => runtime.resolveApproval(event.requestId, "deny")).catch(() => undefined)
           return
@@ -245,6 +270,17 @@ export class InvestigationService {
     this.runtimeUnsubscribe = runtime.onEvent((event) => {
       if (this.currentRuntime === runtime) this.handleRuntimeEvent(event)
     })
+  }
+
+  private denyRuntimeApproval(investigation: InternalInvestigation, requestId: string | number): void {
+    const stop = async (runtime: CodexRuntime) => {
+      await runtime.resolveApproval(requestId, "deny")
+      if (investigation.threadId && investigation.turnId) {
+        await runtime.interruptTurn(investigation.threadId, investigation.turnId)
+      }
+    }
+    const resolution = this.currentRuntime ? stop(this.currentRuntime) : this.getRuntime().then(stop)
+    void resolution.catch(() => undefined)
   }
 
   private append(investigation: InternalInvestigation, data: Omit<InvestigationEvent, "investigationId" | "sequence" | "timestamp">): void {

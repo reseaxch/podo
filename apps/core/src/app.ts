@@ -9,6 +9,7 @@ import type {
 } from "@rootline/contracts"
 import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
+import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
 import { SettingsStore } from "./settings"
 
 export interface CoreHandlerOptions {
@@ -34,6 +35,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   })
   const settings = new SettingsStore()
   const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
+  const incidentInvestigations = new IncidentInvestigationCoordinator(incidentMonitor, investigations, settings)
 
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -74,20 +76,39 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (!isTelemetryBatch(input)) {
         return json({ error: "invalid_telemetry_batch", message: "events must be a non-empty array of objects" }, 400)
       }
-      return json(incidentMonitor.ingest(input.events))
+      const result = incidentMonitor.ingest(input.events)
+      return json({
+        ...result,
+        incident: result.incident ? incidentInvestigations.publicIncident(result.incident) : null,
+      })
     }
 
     if (url.pathname === "/api/incidents") {
       return request.method === "GET"
-        ? json({ incidents: incidentMonitor.listIncidents() })
+        ? json({ incidents: incidentMonitor.listIncidents().map((incident) => incidentInvestigations.publicIncident(incident)) })
         : json({ error: "method_not_allowed" }, 405)
+    }
+
+    const incidentInvestigationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/investigation$/)
+    if (incidentInvestigationMatch?.[1]) {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      const input = await readBody(request)
+      if (!isStartIncidentInvestigationRequest(input)) {
+        return json({ error: "invalid_request", message: "An absolute cwd is required and no other fields are accepted" }, 400)
+      }
+      const result = await incidentInvestigations.start(decodeURIComponent(incidentInvestigationMatch[1]), input)
+      return result.ok
+        ? json({ incident: result.incident, investigation: result.investigation }, result.created ? 201 : 200)
+        : json({ error: result.error, message: result.message }, result.status)
     }
 
     const incidentMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)$/)
     if (incidentMatch?.[1]) {
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
       const incident = incidentMonitor.getIncident(decodeURIComponent(incidentMatch[1]))
-      return incident ? json({ incident }) : json({ error: "not_found" }, 404)
+      return incident
+        ? json({ incident: incidentInvestigations.publicIncident(incident) })
+        : json({ error: "not_found" }, 404)
     }
 
     if (url.pathname === "/api/investigations" && request.method === "POST") {
@@ -170,9 +191,18 @@ async function readBody(request: Request): Promise<unknown> {
 function isStartRequest(value: unknown): value is StartInvestigationRequest {
   if (!value || typeof value !== "object") return false
   const input = value as Record<string, unknown>
-  return typeof input.prompt === "string" && input.prompt.trim().length > 0
+  return Object.keys(input).length === 3
+    && typeof input.prompt === "string" && input.prompt.trim().length > 0
     && typeof input.cwd === "string" && input.cwd.startsWith("/")
     && (input.sandbox === "read-only" || input.sandbox === "workspace-write")
+}
+
+function isStartIncidentInvestigationRequest(value: unknown): value is { cwd: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const input = value as Record<string, unknown>
+  return Object.keys(input).length === 1
+    && typeof input.cwd === "string"
+    && input.cwd.startsWith("/")
 }
 
 function isApprovalDecision(value: unknown): value is ApprovalDecisionRequest {

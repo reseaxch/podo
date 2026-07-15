@@ -45,6 +45,29 @@ describe("createRootlineClient", () => {
     expect(requests[3]?.body).toEqual({ decision: "deny" })
   })
 
+  test("starts an incident investigation without accepting prompt, evidence, sandbox, mode, or approval", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = []
+    const client = createRootlineClient({
+      baseUrl: "http://rootline.test",
+      fetch: async (input, init) => {
+        requests.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+        })
+        return Response.json({ incident: { id: "incident-1" }, investigation: { id: "inv-1" } })
+      },
+    })
+
+    await client.startIncidentInvestigation("incident/1", { cwd: "/repo" })
+
+    expect(requests).toEqual([{
+      url: "http://rootline.test/api/incidents/incident%2F1/investigation",
+      method: "POST",
+      body: { cwd: "/repo" },
+    }])
+  })
+
   test("reads and updates the public settings contract", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = []
     const client = createRootlineClient({

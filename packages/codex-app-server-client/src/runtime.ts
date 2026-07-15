@@ -21,6 +21,7 @@ export type CodexRuntimeEvent =
 export interface StartCodexThreadInput {
   cwd: string
   sandbox: "read-only" | "workspace-write"
+  developerInstructions?: string
 }
 
 export interface CodexThreadHandle { threadId: string }
@@ -70,6 +71,7 @@ export class AppServerRuntime implements CodexRuntime {
       approvalPolicy: "on-request",
       approvalsReviewer: "user",
       ephemeral: false,
+      ...(input.developerInstructions === undefined ? {} : { developerInstructions: input.developerInstructions }),
     }
     const response = await this.transport.request("thread/start", params, options) as { thread: { id: string } }
     return { threadId: response.thread.id }
@@ -82,6 +84,7 @@ export class AppServerRuntime implements CodexRuntime {
       sandbox: input.sandbox,
       approvalPolicy: "on-request",
       approvalsReviewer: "user",
+      ...(input.developerInstructions === undefined ? {} : { developerInstructions: input.developerInstructions }),
     }
     const response = await this.transport.request("thread/resume", params, options) as { thread: { id: string } }
     return { threadId: response.thread.id }

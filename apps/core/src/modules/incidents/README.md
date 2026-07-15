@@ -16,6 +16,10 @@ Partial or noisy signals return `hold_for_more_evidence`; healthy input returns
 are content-derived, so replaying the same telemetry does not duplicate state.
 
 Core exposes this state through `GET /api/incidents` and
-`GET /api/incidents/:id`. The transition into the investigation orchestrator is
-still separate integration work; clients consume `@rootline/contracts` through
-`@rootline/client`, never this module directly.
+`GET /api/incidents/:id`. Incident reads project the current linked investigation
+status when one exists. The monitor also resolves each incident evidence record
+back to its normalized telemetry event for the core-owned investigator prompt;
+this internal provenance API is not exposed to clients.
+
+Clients start the transition through `@rootline/client`, never this module
+directly, and cannot submit replacement prompt text or evidence.
