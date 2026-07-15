@@ -73,8 +73,8 @@ export function IncidentsOverview({
   const activeCount = overview.incidents.filter(
     (item) => item.status !== "Resolved",
   ).length
-  const p1Count = overview.incidents.filter(
-    (item) => item.severity === "P1" && item.status !== "Resolved",
+  const diagnosedCount = overview.incidents.filter(
+    (item) => item.confidence !== null,
   ).length
 
   function openIncident(incident: IncidentSummary) {
@@ -115,19 +115,18 @@ export function IncidentsOverview({
               <i className="metric-signal live" />
               <span>
                 <strong>{activeCount} active</strong>
-                <small>{p1Count} critical · updated now</small>
+                <small>{diagnosedCount} diagnosed from Core</small>
               </span>
             </span>
             <Link className="secondary-button overview-toggle" href="/overview">
               <Icon name="squares-four" size={15} /> Overview
             </Link>
-            <button
+            <Link
               className="secondary-button refresh-button"
-              onClick={() => showToast("Incident list refreshed")}
-              type="button"
+              href="/incidents"
             >
               <Icon name="activity" size={16} /> Refresh
-            </button>
+            </Link>
           </div>
         </header>
 

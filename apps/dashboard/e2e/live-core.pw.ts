@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test"
 
+const corePort = Number(process.env.PODO_DASHBOARD_E2E_CORE_PORT ?? 4101)
+const coreOrigin = `http://127.0.0.1:${corePort}`
+
 test.beforeEach(async ({ request }) => {
-  await request.post("http://127.0.0.1:4101/__reset")
+  await request.post(`${coreOrigin}/__reset`)
 })
 
 test("live Core flow stays approval-gated through pull request delivery", async ({

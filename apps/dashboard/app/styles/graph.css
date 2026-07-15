@@ -287,7 +287,7 @@
 }
 .graph-node.root-cause {
   border-color: var(--primary);
-  color: white;
+  color: var(--on-primary-solid);
   background: var(--primary-solid);
   box-shadow: 0 8px 22px rgb(11 114 133 / 22%);
 }

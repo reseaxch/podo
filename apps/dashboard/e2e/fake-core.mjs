@@ -1,5 +1,6 @@
 import { createServer } from "node:http"
 
+const port = Number(process.env.PODO_DASHBOARD_E2E_CORE_PORT ?? 4101)
 const now = "2026-07-14T10:20:00.000Z"
 const evidence = {
   id: "evidence_metric",
@@ -178,4 +179,4 @@ createServer(async (request, response) => {
     return send(response, { delivery })
   }
   return send(response, { error: "not_found" }, 404)
-}).listen(4101, "127.0.0.1")
+}).listen(port, "127.0.0.1")

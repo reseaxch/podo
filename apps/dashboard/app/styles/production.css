@@ -96,8 +96,8 @@
 .production-meta .severity {
   padding: 3px 8px;
   border-radius: 5px;
-  color: white;
-  background: var(--critical);
+  color: var(--on-critical-solid);
+  background: var(--critical-solid);
   font-weight: 750;
 }
 
