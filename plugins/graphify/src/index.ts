@@ -1,5 +1,7 @@
 import type { PluginManifest } from "@rootline/plugin-sdk"
 
+export * from "./graph"
+
 export const graphifyPluginManifest = {
   id: "rootline.graphify",
   displayName: "Graphify code graph",
