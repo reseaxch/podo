@@ -211,6 +211,65 @@ export type InvestigationEvent = {
   timestamp: string
 } & InvestigationEventData
 
+export const PODO_CODE_GRAPH_SCHEMA_VERSION = "podo.code-graph.v1" as const
+
+export type CodeGraphNodeKind =
+  | "repository"
+  | "service"
+  | "file"
+  | "function"
+  | "endpoint"
+
+export type CodeGraphLinkType =
+  | "CONTAINS"
+  | "OWNS"
+  | "IMPORTS"
+  | "CALLS"
+  | "EXPOSES"
+
+export type CodeGraphProvenance = "extracted" | "inferred" | "ambiguous"
+
+export interface CodeGraphSourceLocation {
+  path: string
+  line: number
+  column?: number
+  endLine?: number
+  endColumn?: number
+}
+
+export interface NormalizedCodeGraphNode {
+  id: string
+  externalId: string
+  kind: CodeGraphNodeKind
+  label: string
+  provenance: CodeGraphProvenance
+  location?: CodeGraphSourceLocation
+}
+
+export interface NormalizedCodeGraphLink {
+  id: string
+  externalId: string
+  type: CodeGraphLinkType
+  fromNodeId: string
+  toNodeId: string
+  fromExternalId: string
+  toExternalId: string
+  provenance: CodeGraphProvenance
+  location?: CodeGraphSourceLocation
+}
+
+export interface NormalizedCodeGraphSnapshot {
+  id: string
+  schemaVersion: typeof PODO_CODE_GRAPH_SCHEMA_VERSION
+  source: {
+    provider: string
+    graphId: string
+    schemaVersion: string
+  }
+  nodes: NormalizedCodeGraphNode[]
+  links: NormalizedCodeGraphLink[]
+}
+
 export interface ApiErrorResponse {
   error: string
   message?: string

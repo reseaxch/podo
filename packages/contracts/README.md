@@ -1,6 +1,6 @@
 # Podo contracts
 
-`@podo/contracts` defines stable producer/consumer shapes for Podo settings, telemetry, incidents, investigations, approvals, and events.
+`@podo/contracts` defines stable producer/consumer shapes for Podo settings, telemetry, incidents, investigations, approvals, events, and normalized code graphs.
 
 An incident may include an additive `investigation` link with its public status.
 `StartIncidentInvestigationRequest` contains only `cwd`; investigator prompt,
@@ -8,6 +8,20 @@ evidence, sandbox, mode, and approval remain core-owned and are not part of the
 transport contract.
 
 Contracts should describe Podo concepts, not transport-library internals or raw Codex JSON-RPC. Keep them serializable and explicit about version-sensitive behavior.
+
+## Normalized code graph
+
+`NormalizedCodeGraphSnapshot` is the boundary between a source adapter and the
+core graph owner. Schema `podo.code-graph.v1` contains repository, service, file,
+function, and endpoint nodes plus typed links. Every node and link retains its
+source identity, provenance (`extracted`, `inferred`, or `ambiguous`), and optional
+repository-relative source location.
+
+This contract is already normalized Podo data. It is not the raw Graphify format.
+In particular, `scenarios/cache-growth/fixtures/graph.json` is a NetworkX node-link
+export with `directed`, `multigraph`, free-form nodes, and `source`/`target` links;
+passing it directly as `NormalizedCodeGraphSnapshot` is unsupported. A versioned
+Graphify raw-to-normalized decoder remains an explicit integration gap.
 
 ```sh
 bun run --cwd packages/contracts typecheck
