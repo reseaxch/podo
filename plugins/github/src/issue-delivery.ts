@@ -192,13 +192,13 @@ export class GitHubIssueDeliveryAdapter {
   }
 
   private async findExisting(delivery: ValidatedIssueDelivery): Promise<GitHubIssueResponse | null> {
-    for (let pageNumber = 1; pageNumber <= 10; pageNumber++) {
-      const query = new URLSearchParams({ state: "all", per_page: "100", page: String(pageNumber) })
+    for (let page = 1; page <= 10; page++) {
+      const query = new URLSearchParams({ state: "all", per_page: "100", page: String(page) })
       const response = await this.githubFetch(`${this.issuesUrl()}?${query}`, {}, "read")
       if (!response.ok) throw issueError("github_read_failed")
-      const providerPage = await parseIssueList(response)
-      if (!providerPage) throw issueError("invalid_github_response")
-      for (const issue of providerPage.issues) {
+      const issues = await parseIssueList(response)
+      if (!issues) throw issueError("invalid_github_response")
+      for (const issue of issues) {
         const marker = parseIssueMarker(issue.body, delivery.artifact.idempotencyKey)
         if (!marker) continue
         if (marker.draftId !== delivery.artifact.id || marker.contentSha256 !== delivery.artifact.contentSha256) {
@@ -209,7 +209,7 @@ export class GitHubIssueDeliveryAdapter {
         }
         return issue
       }
-      if (providerPage.itemCount < 100) return null
+      if (issues.length < 100) return null
     }
     throw issueError("github_read_failed")
   }
@@ -286,7 +286,7 @@ function parseIssueMarker(body: string, idempotencyKey: string): { draftId: stri
   return null
 }
 
-async function parseIssueList(response: Response): Promise<{ issues: GitHubIssueResponse[]; itemCount: number } | null> {
+async function parseIssueList(response: Response): Promise<GitHubIssueResponse[] | null> {
   try {
     const value = await response.json()
     if (!Array.isArray(value)) return null
@@ -297,7 +297,7 @@ async function parseIssueList(response: Response): Promise<{ issues: GitHubIssue
       if (!parsed) return null
       issues.push(parsed)
     }
-    return { issues, itemCount: value.length }
+    return issues
   } catch {
     return null
   }
