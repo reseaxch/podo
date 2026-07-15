@@ -15,6 +15,7 @@ import { IncidentInvestigationCoordinator } from "./modules/investigation/incide
 import { IncidentAuditStore } from "./modules/audit/incident-audit"
 import { IncidentRemediationService, type IncidentRemediationExecutor } from "./modules/remediation/incident-remediation"
 import { IncidentDeliveryService, type PullRequestDeliveryConfig } from "./modules/remediation/incident-delivery"
+import { IncidentIssueService, type IssueDeliveryConfig } from "./modules/remediation/incident-issue"
 import { SettingsStore } from "./settings"
 
 export interface CoreHandlerOptions {
@@ -27,6 +28,7 @@ export interface CoreHandlerOptions {
   remediationExecutor?: IncidentRemediationExecutor
   remediationExecutorFactory?: (runtimeProvider: () => Promise<CodexRuntime>) => IncidentRemediationExecutor
   pullRequestDelivery?: PullRequestDeliveryConfig
+  issueDelivery?: IssueDeliveryConfig
 }
 
 const serviceVersion = "0.0.0"
@@ -54,6 +56,14 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
     ?? options.remediationExecutorFactory?.(() => investigations.acquireRuntime())
   const incidentRemediations = new IncidentRemediationService(incidentMonitor, incidentInvestigations, settings, remediationExecutor)
   const incidentDeliveries = new IncidentDeliveryService(incidentRemediations, settings, options.pullRequestDelivery)
+  const incidentIssues = new IncidentIssueService(
+    incidentMonitor,
+    incidentInvestigations,
+    incidentRemediations,
+    settings,
+    incidentAudit,
+    options.issueDelivery,
+  )
   const remediationStatus = { configured: remediationExecutor !== undefined }
 
   return async function handleRequest(request: Request): Promise<Response> {
@@ -127,6 +137,26 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       return result.ok
         ? json({ incident: result.incident, investigation: result.investigation }, result.created ? 201 : 200)
         : json({ error: result.error, message: result.message }, result.status)
+    }
+
+    const incidentIssueMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/issue$/)
+    if (incidentIssueMatch?.[1]) {
+      const incidentId = decodeURIComponent(incidentIssueMatch[1])
+      if (request.method === "GET") {
+        const result = incidentIssues.get(incidentId)
+        return result.ok
+          ? json({ issueDelivery: result.issueDelivery })
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      if (request.method === "POST") {
+        const input = await readBody(request)
+        if (!isEmptyObject(input)) return json({ error: "invalid_request", message: "No caller-authored issue input is accepted" }, 400)
+        const result = await incidentIssues.start(incidentId)
+        return result.ok
+          ? json({ issueDelivery: result.issueDelivery }, result.created ? 201 : 200)
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      return json({ error: "method_not_allowed" }, 405)
     }
 
     const incidentCausalPathMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/causal-path$/)

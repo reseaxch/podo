@@ -71,10 +71,10 @@ This composition is a local/POC operator capability, not a broad production
 rollout gate. Core keeps a minimum in-memory audit boundary for investigation,
 remediation, and delivery: request, approval or denial, execution start,
 diagnosis outcome, and sanitized verification or delivery success/failure.
-`GET /api/incidents/:id/audit` returns the incident-wide investigation and
-diagnosis lifecycle with evidence attribution. It omits raw prompts, model
-output, commands, diffs, and provider errors. The in-memory POC retains the
-latest 256 immutable events per incident with monotonic sequence numbers.
+`GET /api/incidents/:id/audit` returns the incident-wide investigation,
+diagnosis, and issue lifecycle with evidence attribution. It omits raw prompts,
+model output, commands, diffs, and provider errors. The in-memory POC retains
+the latest 256 immutable events per incident with monotonic sequence numbers.
 `GET /api/incidents/:id/remediation/audit`
 returns the ordered typed events. It records stable Core identifiers, decisions,
 sanitized failure codes, and the stable full-artifact ID; it never records raw
@@ -143,6 +143,25 @@ the immutable verified artifact after the separate delivery approval, uses the
 Core delivery ID for remote reconciliation, and returns a strictly bound PR
 result. Incomplete or inconsistent configuration aborts startup with a stable
 sanitized error; disabling the feature constructs no publisher or adapter.
+
+GitHub issue fallback is independently disabled by default. Enable it with the
+same token and repository identity:
+
+```sh
+PODO_GITHUB_ISSUE_ENABLED=true
+PODO_GITHUB_TOKEN=github_token
+PODO_GITHUB_REPOSITORY=owner/repository
+```
+
+`POST /api/incidents/:id/issue` accepts no caller-authored content. Core permits
+it only for a validated diagnosis that is unsafe to remediate or whose
+remediation was denied/failed, then seals the diagnosis, evidence IDs, proposed
+action, fallback reason, and authorization into an idempotent GitHub request.
+Core rejects recognized credential and secret material before invoking the
+provider, and accepts success only when the provider result exactly matches the
+sealed draft, authorization, incident, repository, URL, and open issue state.
+No branch is published and no unverified patch is attached. `GET` on the same
+path reads the sanitized delivery state.
 
 The token must have access to the configured repository and permission to push
 the derived remediation branch and create pull requests. Durable Core state,

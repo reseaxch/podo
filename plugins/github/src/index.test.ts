@@ -3,13 +3,16 @@ import { describe, expect, test } from "bun:test"
 import {
   GitHubDeliveryAdapter,
   GitHubDeliveryError,
+  GitHubIssueAdapter,
   GitCliDeliveryBranchPublisher,
   computeDeliveryArtifactSha256,
+  computeIssueContentSha256,
   computePatchSha256,
   type GitHubBranchPublisher,
   type GitHubDeliveryArtifact,
   type GitHubDeliveryRequest,
   type GitHubFetch,
+  type GitHubIssueRequest,
 } from "./index"
 
 import type { PublishVerifiedBranchInput } from "./git-branch-publisher"
@@ -417,6 +420,123 @@ describe("GitHubDeliveryAdapter", () => {
   })
 })
 
+describe("GitHubIssueAdapter", () => {
+  test("creates one evidence-backed issue without publishing a branch", async () => {
+    const requests: Array<{ method: string; body?: Record<string, unknown> }> = []
+    let createdIssue: Record<string, unknown> | null = null
+    const adapter = new GitHubIssueAdapter({
+      token,
+      repository: { owner: "reseaxch", name: "podo" },
+      fetch: async (_input, init) => {
+        const method = init?.method ?? "GET"
+        const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined
+        requests.push({ method, ...(body ? { body } : {}) })
+        if (method === "GET") return Response.json(createdIssue ? [createdIssue] : [])
+        createdIssue = {
+          number: 81,
+          html_url: "https://github.com/reseaxch/podo/issues/81",
+          state: "open",
+          title: body?.title,
+          body: body?.body,
+        }
+        return Response.json(createdIssue, { status: 201 })
+      },
+    })
+    const request = issueRequest()
+
+    const [first, concurrent] = await Promise.all([adapter.create(request), adapter.create(request)])
+    const repeated = await adapter.create(request)
+
+    expect(first).toMatchObject({
+      status: "created",
+      repository: { owner: "reseaxch", name: "podo" },
+      issue: { number: 81, url: "https://github.com/reseaxch/podo/issues/81", state: "open" },
+      draft: { id: "issue-draft-1", idempotencyKey: "incident-1-remediation-fallback" },
+      authorization: { id: "issue-command-1" },
+      incident: { id: "incident-1", reason: "remediation_not_safe", evidenceIds: ["ev:1", "ev:2"] },
+    })
+    expect(concurrent).toEqual(first)
+    expect(repeated.status).toBe("existing")
+    expect(requests.map(({ method }) => method)).toEqual(["GET", "POST", "GET"])
+    expect(JSON.stringify(requests)).toContain("podo-issue")
+    expect(JSON.stringify(requests)).not.toContain(token)
+  })
+
+  test("fails closed without core authorization and ignores pull requests in issue search", async () => {
+    let creates = 0
+    const request = issueRequest()
+    const adapter = new GitHubIssueAdapter({
+      token,
+      repository: { owner: "reseaxch", name: "podo" },
+      fetch: async (_input, init) => {
+        if ((init?.method ?? "GET") === "POST") creates++
+        return Response.json([{
+          number: 80,
+          html_url: "https://github.com/reseaxch/podo/pull/80",
+          state: "open",
+          title: request.content.title,
+          body: `${request.content.body}\n\n<!-- podo-issue:${request.idempotencyKey}:${request.draftId}:${request.contentSha256} -->`,
+          pull_request: {},
+        }])
+      },
+    })
+
+    await expect(adapter.create({ ...request, authorization: undefined as never })).rejects.toMatchObject({
+      code: "authorization_required",
+    })
+    await expect(adapter.create(request)).rejects.toMatchObject({ code: "github_write_failed" })
+    expect(creates).toBe(1)
+  })
+
+  test("finds an existing issue on page 2 after 99 issues and one pull request", async () => {
+    const request = issueRequest()
+    let gets = 0
+    let posts = 0
+    const ordinaryIssues = Array.from({ length: 99 }, (_, index) => ({
+      number: index + 1,
+      html_url: `https://github.com/reseaxch/podo/issues/${index + 1}`,
+      state: "open",
+      title: `Unrelated issue ${index + 1}`,
+      body: "Unrelated body",
+    }))
+    const adapter = new GitHubIssueAdapter({
+      token,
+      repository: { owner: "reseaxch", name: "podo" },
+      fetch: async (input, init) => {
+        if ((init?.method ?? "GET") === "POST") {
+          posts++
+          return Response.json({}, { status: 500 })
+        }
+        gets++
+        const page = new URL(String(input)).searchParams.get("page")
+        if (page === "1") {
+          return Response.json([...ordinaryIssues, {
+            number: 100,
+            html_url: "https://github.com/reseaxch/podo/pull/100",
+            state: "open",
+            title: request.content.title,
+            body: "Pull request body",
+            pull_request: {},
+          }])
+        }
+        return Response.json([{
+          number: 101,
+          html_url: "https://github.com/reseaxch/podo/issues/101",
+          state: "open",
+          title: request.content.title,
+          body: `${request.content.body}\n\n<!-- podo-issue:${request.idempotencyKey}:${request.draftId}:${request.contentSha256} -->`,
+        }])
+      },
+    })
+
+    const result = await adapter.create(request)
+
+    expect(result).toMatchObject({ status: "existing", issue: { number: 101, state: "open" } })
+    expect(gets).toBe(2)
+    expect(posts).toBe(0)
+  })
+})
+
 function adapterWith(input: { fetch: GitHubFetch; publisher: GitHubBranchPublisher }) {
   return new GitHubDeliveryAdapter({
     token,
@@ -429,6 +549,28 @@ function adapterWith(input: { fetch: GitHubFetch; publisher: GitHubBranchPublish
     fetch: input.fetch,
     publisher: input.publisher,
   })
+}
+
+function issueRequest(): GitHubIssueRequest {
+  const content = {
+    incidentId: "incident-1",
+    reason: "remediation_not_safe" as const,
+    title: "Incident checkout-service: remediation fallback",
+    body: "Diagnosis: unbounded cache retention. No verified patch was produced.",
+    evidenceIds: ["ev:1", "ev:2"],
+  }
+  return {
+    authorization: {
+      kind: "core.issue_fallback.v1",
+      decision: "authorized",
+      authorizationId: "issue-command-1",
+      authorizedAt: "2026-07-15T10:00:00.000Z",
+    },
+    draftId: "issue-draft-1",
+    idempotencyKey: "incident-1-remediation-fallback",
+    content,
+    contentSha256: computeIssueContentSha256(content),
+  }
 }
 
 function noOpPublisher(): GitHubBranchPublisher {

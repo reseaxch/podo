@@ -182,6 +182,212 @@ export interface GitHubDeliveryAdapterConfig {
 
 export type GitHubFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
+export type GitHubIssueFallbackReason = "remediation_not_safe" | "remediation_denied" | "remediation_failed"
+
+export interface GitHubIssueContent {
+  incidentId: string
+  reason: GitHubIssueFallbackReason
+  title: string
+  body: string
+  evidenceIds: string[]
+}
+
+export interface GitHubIssueRequest {
+  authorization: {
+    kind: "core.issue_fallback.v1"
+    decision: "authorized"
+    authorizationId: string
+    authorizedAt: string
+  }
+  draftId: string
+  idempotencyKey: string
+  contentSha256: string
+  content: GitHubIssueContent
+}
+
+export interface GitHubIssueResult {
+  status: "created" | "existing"
+  repository: { owner: string; name: string }
+  issue: { number: number; url: string; state: "open" | "closed" }
+  draft: { id: string; idempotencyKey: string; contentSha256: string }
+  authorization: { id: string; authorizedAt: string }
+  incident: { id: string; reason: GitHubIssueFallbackReason; evidenceIds: string[] }
+}
+
+export type GitHubIssueErrorCode =
+  | "invalid_issue_config"
+  | "authorization_required"
+  | "invalid_authorization"
+  | "invalid_issue"
+  | "issue_hash_mismatch"
+  | "issue_identity_conflict"
+  | "github_read_failed"
+  | "github_write_failed"
+  | "invalid_github_response"
+
+export class GitHubIssueError extends Error {
+  constructor(readonly code: GitHubIssueErrorCode) {
+    super(code)
+    this.name = "GitHubIssueError"
+  }
+}
+
+export interface GitHubIssueAdapterConfig {
+  token: string
+  repository: { owner: string; name: string }
+  fetch?: GitHubFetch
+  apiBaseUrl?: string
+}
+
+interface GitHubIssueResponse {
+  number: number
+  html_url: string
+  state: "open" | "closed"
+  title: string
+  body: string | null
+  pull_request?: unknown
+}
+
+export class GitHubIssueAdapter {
+  private readonly token: string
+  private readonly repository: { owner: string; name: string }
+  private readonly request: GitHubFetch
+  private readonly apiBaseUrl: string
+  private readonly pending = new Map<string, Promise<GitHubIssueResult>>()
+
+  constructor(config: GitHubIssueAdapterConfig) {
+    if (!config || typeof config !== "object"
+      || !isBoundedText(config.token, 8_192)
+      || !isRepositoryPart(config.repository?.owner)
+      || !isRepositoryPart(config.repository?.name)
+      || containsToken(config.repository, config.token)
+      || (config.fetch !== undefined && typeof config.fetch !== "function")
+      || (config.apiBaseUrl !== undefined && config.apiBaseUrl !== "https://api.github.com")) {
+      throw issueError("invalid_issue_config")
+    }
+    this.token = config.token
+    this.repository = { ...config.repository }
+    this.request = config.fetch ?? globalThis.fetch
+    this.apiBaseUrl = config.apiBaseUrl ?? "https://api.github.com"
+  }
+
+  async create(value: GitHubIssueRequest): Promise<GitHubIssueResult> {
+    const request = this.validate(value)
+    const key = `${this.repository.owner}/${this.repository.name}:${request.idempotencyKey}:${request.draftId}:${request.contentSha256}`
+    const pending = this.pending.get(key)
+    if (pending) return copy(await pending)
+    const operation = this.perform(request)
+    this.pending.set(key, operation)
+    try {
+      return copy(await operation)
+    } finally {
+      this.pending.delete(key)
+    }
+  }
+
+  private validate(value: unknown): GitHubIssueRequest {
+    if (!isPlainObject(value)) throw issueError("authorization_required")
+    if (value.authorization === undefined || value.authorization === null) throw issueError("authorization_required")
+    if (!isIssueAuthorization(value.authorization)) throw issueError("invalid_authorization")
+    if (!hasExactKeys(value, ["authorization", "draftId", "idempotencyKey", "contentSha256", "content"])
+      || !isIdentifier(value.draftId)
+      || !isIdentifier(value.idempotencyKey)
+      || !isSha256(value.contentSha256)
+      || !isIssueContent(value.content)) throw issueError("invalid_issue")
+    if (computeIssueContentSha256(value.content) !== value.contentSha256) throw issueError("issue_hash_mismatch")
+    if (containsToken(value, this.token)) throw issueError("invalid_issue")
+    return copy(value as unknown as GitHubIssueRequest)
+  }
+
+  private async perform(request: GitHubIssueRequest): Promise<GitHubIssueResult> {
+    const existing = await this.findExisting(request)
+    if (existing) return this.result("existing", existing, request)
+    const response = await this.githubFetch(this.issuesUrl(), {
+      method: "POST",
+      body: JSON.stringify({ title: request.content.title, body: expectedIssueBody(request) }),
+    }, "write")
+    if (response.status === 422) {
+      const concurrent = await this.findExisting(request)
+      if (concurrent) return this.result("existing", concurrent, request)
+      throw issueError("github_write_failed")
+    }
+    if (response.status !== 201) throw issueError("github_write_failed")
+    const issue = await parseIssueResponse(response)
+    if (!issue
+      || issue.pull_request !== undefined
+      || issue.title !== request.content.title
+      || issue.body !== expectedIssueBody(request)) throw issueError("invalid_github_response")
+    return this.result("created", issue, request)
+  }
+
+  private async findExisting(request: GitHubIssueRequest): Promise<GitHubIssueResponse | null> {
+    for (let page = 1; page <= 10; page++) {
+      const query = new URLSearchParams({ state: "all", per_page: "100", page: String(page) })
+      const response = await this.githubFetch(`${this.issuesUrl()}?${query}`, {}, "read")
+      if (!response.ok) throw issueError("github_read_failed")
+      const issues = await parseIssueList(response)
+      if (!issues) throw issueError("invalid_github_response")
+      for (const issue of issues) {
+        if (issue.pull_request !== undefined || !issue.body) continue
+        const marker = parseIssueMarker(issue.body, request.idempotencyKey, request.draftId)
+        if (!marker) continue
+        if (marker !== request.contentSha256
+          || issue.title !== request.content.title
+          || issue.body !== expectedIssueBody(request)) throw issueError("issue_identity_conflict")
+        return issue
+      }
+      if (issues.length < 100) return null
+    }
+    throw issueError("github_read_failed")
+  }
+
+  private async githubFetch(url: string, init: RequestInit, operation: "read" | "write"): Promise<Response> {
+    try {
+      return await this.request(url, {
+        ...init,
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${this.token}`,
+          "x-github-api-version": "2022-11-28",
+          ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+        },
+      })
+    } catch {
+      throw issueError(operation === "read" ? "github_read_failed" : "github_write_failed")
+    }
+  }
+
+  private issuesUrl(): string {
+    return `${this.apiBaseUrl}/repos/${encodeURIComponent(this.repository.owner)}/${encodeURIComponent(this.repository.name)}/issues`
+  }
+
+  private result(status: "created" | "existing", issue: GitHubIssueResponse, request: GitHubIssueRequest): GitHubIssueResult {
+    return {
+      status,
+      repository: { ...this.repository },
+      issue: {
+        number: issue.number,
+        url: sanitizeIssueUrl(issue.html_url, this.token, this.repository, issue.number),
+        state: issue.state,
+      },
+      draft: {
+        id: request.draftId,
+        idempotencyKey: request.idempotencyKey,
+        contentSha256: request.contentSha256,
+      },
+      authorization: {
+        id: request.authorization.authorizationId,
+        authorizedAt: request.authorization.authorizedAt,
+      },
+      incident: {
+        id: request.content.incidentId,
+        reason: request.content.reason,
+        evidenceIds: [...request.content.evidenceIds],
+      },
+    }
+  }
+}
+
 interface ValidatedDelivery {
   authorization: GitHubDeliveryAuthorization
   artifact: GitHubDeliveryArtifact
@@ -422,6 +628,89 @@ export function computeDeliveryArtifactSha256(content: GitHubDeliveryArtifactCon
     headRef: content.headRef,
   }
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex")
+}
+
+export function computeIssueContentSha256(content: GitHubIssueContent): string {
+  return createHash("sha256").update(JSON.stringify({
+    incidentId: content.incidentId,
+    reason: content.reason,
+    title: content.title,
+    body: content.body,
+    evidenceIds: [...content.evidenceIds],
+  })).digest("hex")
+}
+
+function isIssueAuthorization(value: unknown): value is GitHubIssueRequest["authorization"] {
+  return isPlainObject(value)
+    && hasExactKeys(value, ["kind", "decision", "authorizationId", "authorizedAt"])
+    && value.kind === "core.issue_fallback.v1"
+    && value.decision === "authorized"
+    && isIdentifier(value.authorizationId)
+    && isIsoInstant(value.authorizedAt)
+}
+
+function isIssueContent(value: unknown): value is GitHubIssueContent {
+  return isPlainObject(value)
+    && hasExactKeys(value, ["incidentId", "reason", "title", "body", "evidenceIds"])
+    && isIdentifier(value.incidentId)
+    && (value.reason === "remediation_not_safe" || value.reason === "remediation_denied" || value.reason === "remediation_failed")
+    && isBoundedText(value.title, 300)
+    && isBoundedText(value.body, 20_000)
+    && isStringList(value.evidenceIds, 1, 500, 256)
+}
+
+function expectedIssueBody(request: GitHubIssueRequest): string {
+  return `${request.content.body.trim()}\n\n<!-- podo-issue:${request.idempotencyKey}:${request.draftId}:${request.contentSha256} -->`
+}
+
+function parseIssueMarker(body: string, idempotencyKey: string, draftId: string): string | null {
+  const escapedKey = idempotencyKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const escapedDraftId = draftId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return body.match(new RegExp(`<!-- podo-issue:${escapedKey}:${escapedDraftId}:([a-f0-9]{64}) -->`))?.[1] ?? null
+}
+
+async function parseIssueList(response: Response): Promise<GitHubIssueResponse[] | null> {
+  try {
+    const value = await response.json()
+    if (!Array.isArray(value)) return null
+    const parsed = value.map(parseIssue)
+    return parsed.every((issue): issue is GitHubIssueResponse => issue !== null) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+async function parseIssueResponse(response: Response): Promise<GitHubIssueResponse | null> {
+  try { return parseIssue(await response.json()) } catch { return null }
+}
+
+function parseIssue(value: unknown): GitHubIssueResponse | null {
+  if (!isPlainObject(value)
+    || !Number.isSafeInteger(value.number)
+    || (value.number as number) < 1
+    || typeof value.html_url !== "string"
+    || (value.state !== "open" && value.state !== "closed")
+    || !isBoundedText(value.title, 300)
+    || (value.body !== null && typeof value.body !== "string")) return null
+  return value as unknown as GitHubIssueResponse
+}
+
+function sanitizeIssueUrl(
+  value: string,
+  token: string,
+  repository: { owner: string; name: string },
+  number: number,
+): string {
+  try {
+    const url = new URL(value)
+    if (url.origin !== "https://github.com"
+      || url.pathname !== `/${repository.owner}/${repository.name}/issues/${number}`
+      || url.username || url.password || url.search || url.hash
+      || value.includes(token) || value.length > 2_048) throw new Error()
+    return url.toString()
+  } catch {
+    throw issueError("invalid_github_response")
+  }
 }
 
 function validateConfig(config: GitHubDeliveryAdapterConfig): GitHubDeliveryAdapterConfig {
@@ -671,4 +960,8 @@ function copy<T>(value: T): T {
 
 function error(code: GitHubDeliveryErrorCode): GitHubDeliveryError {
   return new GitHubDeliveryError(code)
+}
+
+function issueError(code: GitHubIssueErrorCode): GitHubIssueError {
+  return new GitHubIssueError(code)
 }

@@ -64,6 +64,34 @@ test("production composition keeps the incident graph disabled by default", asyn
   expect(receivedIncidentGraph).toBeUndefined()
 })
 
+test("production composition injects the opt-in GitHub issue fallback", async () => {
+  let receivedIssueDelivery: unknown
+  await createProductionCoreHandler({
+    PODO_GITHUB_ISSUE_ENABLED: "true",
+    PODO_GITHUB_TOKEN: "github-token",
+    PODO_GITHUB_REPOSITORY: "owner/repository",
+  }, {
+    githubIssue: {
+      createAdapter() {
+        return {
+          async create() {
+            throw new Error("not invoked during composition")
+          },
+        }
+      },
+    },
+    createHandler(options) {
+      receivedIssueDelivery = options.issueDelivery
+      return async () => new Response()
+    },
+  })
+
+  expect(receivedIssueDelivery).toMatchObject({
+    expectedRepository: "owner/repository",
+    port: { create: expect.any(Function) },
+  })
+})
+
 test("production composition fails before creating a handler when graph bootstrap is invalid", async () => {
   let createdHandler = false
   const creation = createProductionCoreHandler(enabledEnvironment, {
