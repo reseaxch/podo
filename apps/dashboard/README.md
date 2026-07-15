@@ -10,11 +10,13 @@ The default route reads detected incidents server-side through
 incident. The judge-facing fixture workspace remains isolated at `/demo`; it is
 not imported by the production route and is not a production data source.
 
-The live incident view is intentionally read-only and fail-closed. Core now
-exposes an incident-linked investigation command and status, but the production
-route does not yet invoke or stream that lifecycle. Diagnosis, remediation, and
-pull-request controls remain unavailable until their core-owned contracts are
-implemented; the dashboard must not synthesize those states from fixtures.
+The live incident view is intentionally read-only and fail-closed. It renders
+the incident-linked investigation lifecycle and validated diagnosis returned by
+core, including confidence, recommended action, and links to the diagnosis's
+existing core evidence records. Failed or structurally incomplete lifecycle
+responses never expose diagnosis or remediation guidance. The production route
+does not import demo fixtures, create local incident state, or offer approval,
+remediation, pull-request, or graph controls.
 
 ```sh
 bun run dev:dashboard
