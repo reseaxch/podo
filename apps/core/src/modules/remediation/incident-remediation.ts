@@ -24,7 +24,9 @@ export interface IncidentRemediationExecutorInput {
 
 export interface IncidentRemediationExecutorResult {
   provenance: {
+    baseRef: string
     baseCommit: string
+    resultTreeOid: string
   }
   patch: {
     summary: string
@@ -259,7 +261,7 @@ export class IncidentRemediationService {
       return
     }
 
-    record.remediation.artifact = toPublicArtifact(parsed.value)
+    record.remediation.artifact = toPublicArtifact(parsed.value, record.diagnosis.evidenceIds)
     record.remediation.status = "completed"
     record.remediation.updatedAt = new Date().toISOString()
     this.recordAudit(record, {
@@ -378,9 +380,16 @@ function isPatch(value: unknown): value is IncidentRemediationExecutorResult["pa
 
 function isProvenance(value: unknown): value is IncidentRemediationExecutorResult["provenance"] {
   return isPlainObject(value)
-    && hasExactKeys(value, ["baseCommit"])
+    && hasExactKeys(value, ["baseRef", "baseCommit", "resultTreeOid"])
+    && isBranch(value.baseRef)
+    && !value.baseRef.includes("..")
+    && !value.baseRef.includes("//")
+    && !value.baseRef.endsWith("/")
+    && !value.baseRef.endsWith(".")
     && typeof value.baseCommit === "string"
     && /^[a-f0-9]{40,64}$/.test(value.baseCommit)
+    && typeof value.resultTreeOid === "string"
+    && /^[a-f0-9]{40,64}$/.test(value.resultTreeOid)
 }
 
 function isRegression(value: unknown): value is IncidentRemediationExecutorResult["regression"] {
@@ -411,8 +420,16 @@ function isPullRequestPreview(value: unknown): value is IncidentRemediationExecu
     && value.baseBranch !== value.headBranch
 }
 
-function toPublicArtifact(result: IncidentRemediationExecutorResult): IncidentRemediationArtifact {
-  const provenance = { baseCommit: result.provenance.baseCommit }
+function toPublicArtifact(
+  result: IncidentRemediationExecutorResult,
+  authoritativeEvidenceIds: string[],
+): IncidentRemediationArtifact {
+  const provenance = {
+    baseRef: result.provenance.baseRef,
+    baseCommit: result.provenance.baseCommit,
+    resultTreeOid: result.provenance.resultTreeOid,
+  }
+  const evidenceIds = [...authoritativeEvidenceIds].sort(compareCodeUnits)
   const patch = {
     summary: result.patch.summary.trim(),
     changedFiles: result.patch.changedFiles.map((path) => path.trim()),
@@ -427,8 +444,12 @@ function toPublicArtifact(result: IncidentRemediationExecutorResult): IncidentRe
     baseBranch: result.pullRequestPreview.baseBranch,
     headBranch: result.pullRequestPreview.headBranch,
   }
-  const id = `pr_preview_${createHash("sha256").update(JSON.stringify({ provenance, patch, regression, validation, preview })).digest("hex").slice(0, 24)}`
-  return { provenance, patch, regression, validation, pullRequestPreview: { id, ...preview } }
+  const id = `pr_preview_${createHash("sha256").update(JSON.stringify({ provenance, evidenceIds, patch, regression, validation, preview })).digest("hex").slice(0, 24)}`
+  return { provenance, evidenceIds, patch, regression, validation, pullRequestPreview: { id, ...preview } }
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

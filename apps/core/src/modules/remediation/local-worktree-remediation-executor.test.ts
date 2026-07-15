@@ -19,6 +19,8 @@ describe("LocalWorktreeRemediationExecutor", () => {
   test("proves red then green in a detached worktree and returns the exact verified diff", async () => {
     const fixture = await createRepository()
     const trustedBaseCommit = await git(fixture.repositoryRoot, ["rev-parse", "HEAD"])
+    const sourceIndexBefore = new Uint8Array(await Bun.file(join(fixture.repositoryRoot, ".git/index")).arrayBuffer())
+    const sourceObjectsBefore = await directoryFiles(join(fixture.repositoryRoot, ".git/objects"))
     await Bun.write(join(fixture.repositoryRoot, "local-uncommitted.txt"), "must remain untouched\n")
     const hookDirectory = join(fixture.parent, "hooks")
     const hookMarker = join(fixture.parent, "hook-executed")
@@ -57,12 +59,15 @@ describe("LocalWorktreeRemediationExecutor", () => {
     expect(worktreeHead).toBe(trustedBaseCommit)
     expect(stagedBeforeFix).toBe("")
     expect(result).toMatchObject({
-      provenance: { baseCommit: trustedBaseCommit },
+      provenance: {
+        baseRef: "main",
+        baseCommit: trustedBaseCommit,
+      },
       regression: { prePatch: "failed", postPatch: "passed" },
       validation: { status: "passed", checks: ["validation-1"] },
       patch: { changedFiles: ["src/cache.ts", "test/cache.test.ts"] },
       pullRequestPreview: {
-        baseBranch: "main",
+        baseBranch: "github-main",
         headBranch: expect.stringMatching(/^podo\/remediation-[a-f0-9]{16}$/),
       },
     })
@@ -70,10 +75,19 @@ describe("LocalWorktreeRemediationExecutor", () => {
     expect(result.patch.unifiedDiff).toContain("diff --git a/test/cache.test.ts b/test/cache.test.ts")
     expect(result.patch.unifiedDiff).toContain("cacheLimit = 10")
     expect(result.patch.unifiedDiff).toContain("cache is bounded")
+    expect(result.provenance.resultTreeOid).toMatch(/^[a-f0-9]{40,64}$/)
+    expect(result.provenance.resultTreeOid).toBe(await treeAfterApplying(
+      fixture.repositoryRoot,
+      trustedBaseCommit,
+      result.patch.unifiedDiff,
+      fixture.parent,
+    ))
     expect(await readdir(fixture.scratchParent)).toEqual([])
     expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
     expect(await Bun.file(join(fixture.repositoryRoot, "src/cache.ts")).text()).toBe("export const cacheLimit = 0\n")
     expect(await Bun.file(join(fixture.repositoryRoot, "local-uncommitted.txt")).text()).toBe("must remain untouched\n")
+    expect(new Uint8Array(await Bun.file(join(fixture.repositoryRoot, ".git/index")).arrayBuffer())).toEqual(sourceIndexBefore)
+    expect(await directoryFiles(join(fixture.repositoryRoot, ".git/objects"))).toEqual(sourceObjectsBefore)
     expect(await Bun.file(join(fixture.parent, "escaped")).exists()).toBe(false)
     expect(await Bun.file(hookMarker).exists()).toBe(false)
 
@@ -298,6 +312,7 @@ function config(fixture: RepositoryFixture, producer: RemediationPatchProducer) 
   return {
     repositoryRoot: fixture.repositoryRoot,
     trustedBaseRef: "main",
+    pullRequestBaseBranch: "github-main",
     scratchParent: fixture.scratchParent,
     regressionCommand: [process.execPath, "test", "test/cache.test.ts"],
     validationCommands: [[process.execPath, "test", "test/cache.test.ts"]],
@@ -349,4 +364,35 @@ async function git(cwd: string, args: string[]): Promise<string> {
 async function worktreePaths(repositoryRoot: string): Promise<string[]> {
   const output = await git(repositoryRoot, ["worktree", "list", "--porcelain"])
   return output.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => line.slice("worktree ".length))
+}
+
+async function treeAfterApplying(
+  repositoryRoot: string,
+  baseCommit: string,
+  unifiedDiff: string,
+  parent: string,
+): Promise<string> {
+  const checkout = join(parent, `expected-tree-${crypto.randomUUID()}`)
+  const patchPath = join(parent, `expected-patch-${crypto.randomUUID()}.diff`)
+  await git(parent, ["clone", "--no-local", "--no-checkout", "--", repositoryRoot, checkout])
+  try {
+    await git(checkout, ["-c", "core.hooksPath=/dev/null", "checkout", "--detach", baseCommit])
+    await Bun.write(patchPath, unifiedDiff)
+    await git(checkout, ["apply", "--binary", "--", patchPath])
+    await git(checkout, ["add", "--all", "--"])
+    return await git(checkout, ["write-tree"])
+  } finally {
+    await rm(patchPath, { force: true })
+    await rm(checkout, { recursive: true, force: true })
+  }
+}
+
+async function directoryFiles(root: string, directory = root): Promise<string[]> {
+  const files: string[] = []
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) files.push(...await directoryFiles(root, path))
+    else files.push(path.slice(root.length + 1))
+  }
+  return files.sort()
 }

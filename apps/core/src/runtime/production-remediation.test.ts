@@ -19,6 +19,7 @@ const enabledEnvironment = {
   PODO_REMEDIATION_ENABLED: "true",
   PODO_REMEDIATION_REPOSITORY_ROOT: "/repo",
   PODO_REMEDIATION_BASE_REF: "refs/heads/main",
+  PODO_REMEDIATION_PULL_REQUEST_BASE_BRANCH: "main",
   PODO_REMEDIATION_SCRATCH_PARENT: "/scratch",
   PODO_REMEDIATION_REGRESSION_COMMAND: '["bun","test","demo/services/checkout-service"]',
   PODO_REMEDIATION_VALIDATION_COMMANDS: '[["bun","run","typecheck"],["bun","test"]]',
@@ -44,6 +45,7 @@ describe("production remediation composition", () => {
       { PODO_REMEDIATION_ENABLED: "true" },
       { ...enabledEnvironment, PODO_REMEDIATION_ENABLED: "yes" },
       { ...enabledEnvironment, PODO_REMEDIATION_REPOSITORY_ROOT: "relative/repo" },
+      { ...enabledEnvironment, PODO_REMEDIATION_PULL_REQUEST_BASE_BRANCH: "refs/remotes/origin/main" },
       { ...enabledEnvironment, PODO_REMEDIATION_REGRESSION_COMMAND: '"bun test"' },
       { ...enabledEnvironment, PODO_REMEDIATION_VALIDATION_COMMANDS: '[["bun","test"],[]]' },
       { ...enabledEnvironment, PODO_REMEDIATION_COMMAND_TIMEOUT_MS: "0" },
@@ -90,6 +92,7 @@ describe("production remediation composition", () => {
     expect(executorConfig).toEqual({
       repositoryRoot: "/repo",
       trustedBaseRef: "refs/heads/main",
+      pullRequestBaseBranch: "main",
       scratchParent: "/scratch",
       regressionCommand: ["bun", "test", "demo/services/checkout-service"],
       validationCommands: [["bun", "run", "typecheck"], ["bun", "test"]],

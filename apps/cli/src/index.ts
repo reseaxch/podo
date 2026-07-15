@@ -36,6 +36,12 @@ Usage:
                                             Approve its pending remediation
   podo incidents deny-remediation <incidentId> <approvalId>
                                             Deny its pending remediation
+  podo incidents deliver <incidentId>       Request separately approved PR delivery
+  podo incidents delivery <incidentId>      Show its delivery state
+  podo incidents approve-delivery <incidentId> <approvalId>
+                                            Approve its pending delivery
+  podo incidents deny-delivery <incidentId> <approvalId>
+                                            Deny its pending delivery
 
 Settings:
   autonomyMode       observe | recommend | act_with_approval
@@ -191,6 +197,66 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
     output(
       JSON.stringify(
         await client.denyIncidentRemediation(firstArgument, secondArgument),
+        null,
+        2,
+      ),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "deliver") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents deliver <incidentId>")
+      return 1
+    }
+    output(
+      JSON.stringify(await client.startIncidentDelivery(firstArgument), null, 2),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "delivery") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents delivery <incidentId>")
+      return 1
+    }
+    output(
+      JSON.stringify(await client.getIncidentDelivery(firstArgument), null, 2),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "approve-delivery") {
+    if (
+      args.length !== 4
+      || !isNonBlank(firstArgument)
+      || !isNonBlank(secondArgument)
+    ) {
+      error(
+        "Invalid arguments. Usage: podo incidents approve-delivery <incidentId> <approvalId>",
+      )
+      return 1
+    }
+    output(
+      JSON.stringify(
+        await client.approveIncidentDelivery(firstArgument, secondArgument),
+        null,
+        2,
+      ),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "deny-delivery") {
+    if (
+      args.length !== 4
+      || !isNonBlank(firstArgument)
+      || !isNonBlank(secondArgument)
+    ) {
+      error(
+        "Invalid arguments. Usage: podo incidents deny-delivery <incidentId> <approvalId>",
+      )
+      return 1
+    }
+    output(
+      JSON.stringify(
+        await client.denyIncidentDelivery(firstArgument, secondArgument),
         null,
         2,
       ),

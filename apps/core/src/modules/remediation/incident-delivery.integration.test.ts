@@ -74,7 +74,7 @@ function completeDiagnosis(runtime: DiagnosisRuntime, evidenceIds: string[]): vo
 
 function verifiedExecutorResult() {
   return {
-    provenance: { baseCommit },
+    provenance: { baseRef: "main", baseCommit, resultTreeOid: "b".repeat(40) },
     patch: {
       summary: "Bound checkout cache retention",
       changedFiles: ["demo/services/checkout-service/src/cache.ts"],
