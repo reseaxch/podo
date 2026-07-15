@@ -17,6 +17,9 @@ export interface SystemStatusResponse {
   status: "ready" | "degraded"
   version: string
   codex: CodexRuntimeStatus
+  remediation: {
+    configured: boolean
+  }
 }
 
 export type AutonomyMode = "observe" | "recommend" | "act_with_approval"

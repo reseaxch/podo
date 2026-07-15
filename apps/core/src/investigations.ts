@@ -55,6 +55,10 @@ export class InvestigationService {
     return this.runtimeErrorMessage
   }
 
+  acquireRuntime(): Promise<CodexRuntime> {
+    return this.getRuntime()
+  }
+
   async start(
     input: StartInvestigationRequest,
     options: {

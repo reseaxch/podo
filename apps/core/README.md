@@ -42,8 +42,36 @@ provenance returns 409 without a partial path.
 Successful paths include normalized file/function labels, external identities,
 and optional source locations rather than opaque graph IDs alone.
 
-Durable persistence, production composition of the shared Codex runtime,
-complete audit history, and GitHub delivery remain MVP workstream milestones.
+Production remediation is disabled by default. When explicitly configured, the
+Core startup composes the detached-worktree executor with the same supervised
+Codex runtime used by investigations; it does not start a second app-server
+connection. `/api/system` and `/readyz` expose `remediation.configured` without
+making remediation availability a process-readiness requirement.
+
+Enable it with the following complete, fail-closed configuration:
+
+```sh
+PODO_REMEDIATION_ENABLED=true
+PODO_REMEDIATION_REPOSITORY_ROOT=/absolute/path/to/repository
+PODO_REMEDIATION_BASE_REF=refs/remotes/origin/main
+PODO_REMEDIATION_SCRATCH_PARENT=/absolute/path/to/worktrees
+PODO_REMEDIATION_REGRESSION_COMMAND='["bun","test","demo/services/checkout-service"]'
+PODO_REMEDIATION_VALIDATION_COMMANDS='[["bun","run","typecheck"],["bun","test"]]'
+PODO_REMEDIATION_COMMAND_TIMEOUT_MS=120000
+PODO_REMEDIATION_TURN_TIMEOUT_MS=90000
+PODO_REMEDIATION_MAX_OUTPUT_BYTES=524288
+```
+
+Repository and scratch paths must be normalized absolute paths and must not
+overlap. The trusted base must be an explicit safe git ref. Commands must be
+non-empty JSON argv arrays—shell-shaped strings are rejected. If remediation is
+enabled with an incomplete or structurally invalid configuration, Core refuses
+to start. Directory existence, canonical paths, repository identity, and the
+trusted base ref are revalidated immediately before an isolated worktree is
+created; those checks fail the remediation without mutating the source checkout.
+
+Durable persistence, complete audit history, and GitHub delivery remain MVP
+workstream milestones.
 
 ## Run and validate
 
