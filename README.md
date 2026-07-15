@@ -9,12 +9,12 @@ Podo connects infrastructure signals, runtime evidence, deployments, commits,
 and code into a living system graph, then uses Codex to produce remediation
 through an approval-gated workflow.
 
-> **Status:** active POC development. Codex App Server supervision, typed clients,
-> deterministic telemetry replay, incident detection, evidence-backed
-> investigation start, and a strict Graphify import boundary are runnable. The
-> remaining POC work is structured diagnosis, graph overlay/query integration,
-> production dashboard control, isolated remediation, regression validation, and
-> a reproducible pull-request preview.
+> **Status:** active POC development. The canonical graph and telemetry fixtures
+> now run through Graphify decoding, typed replay, incident detection, the
+> evidence-specific deployment/commit/code graph, and a validated structured
+> diagnosis behind the real core/client boundary. The remaining POC work is
+> production dashboard control, isolated remediation, regression validation,
+> and a reproducible pull-request preview.
 
 ## MVP outcome
 
@@ -145,6 +145,19 @@ These areas answer different questions:
 - `tests`: did the implementation satisfy its software contracts?
 
 The canonical demo uses `scenarios/cache-growth`. Negative and adversarial controls live beside it so benchmark claims do not depend on a single happy path.
+
+The first cross-boundary POC proof is executable without a live server, network,
+or Codex process:
+
+```sh
+bun test tests/integration/canonical-poc.test.ts
+```
+
+It proves the canonical fixture reaches a detected evidence-backed incident,
+resolves `deploy-1042 → trusted commit → cache.ts → CheckoutCache`, and exposes
+only a validated `podo.diagnosis.v1` after the deterministic runtime completes.
+The proof reads expected incident/diagnosis outcomes from `scenario.json`; its
+`safeToAttemptFix` flag neither grants approval nor starts remediation.
 
 Initial product gates from the MVP plan include:
 

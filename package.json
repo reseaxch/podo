@@ -16,7 +16,7 @@
     "dev:tui": "bun run --cwd apps/tui dev",
     "dev:dashboard": "bun run --cwd apps/dashboard dev",
     "typecheck": "bun run --workspaces --if-present typecheck",
-    "test": "bun test ./apps ./packages ./plugins ./evals ./benchmarks",
+    "test": "bun test ./apps ./packages ./plugins ./evals ./benchmarks ./tests",
     "build": "bun run --workspaces --if-present build",
     "check": "bun run typecheck && bun run test && bun run build",
     "codex:generate": "bun run --cwd packages/codex-protocol generate",
