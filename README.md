@@ -230,6 +230,13 @@ The judge-facing demo experience is also one command:
 bun run demo
 ```
 
+For an automated readiness check that cleans up its child processes after the
+incident route is ready, run:
+
+```sh
+bun run demo:verify
+```
+
 It checks Codex compatibility, builds the production Dashboard, and starts one
 connected deterministic Core-backed flow. The visible incident, causal path,
 diagnosis, approvals, tested diff, delivery state, and audit all come through

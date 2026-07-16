@@ -58,6 +58,10 @@ export interface DemoCoreStatus {
   issueCalls: number;
 }
 
+export interface DemoRunOptions {
+  verify: boolean;
+}
+
 interface DemoConfigurationOptions {
   repositoryRoot?: string;
   bunExecutable?: string;
@@ -211,6 +215,26 @@ export function createDemoConfiguration(
   };
 }
 
+/**
+ * Parse the tiny public command-line contract for the judge demo before it
+ * creates child processes. `--verify` proves the full ready state and then
+ * exits; the default remains the interactive presentation.
+ */
+export function parseDemoRunOptions(
+  arguments_: readonly string[],
+): DemoRunOptions {
+  if (arguments_.length === 0) return { verify: false };
+  if (arguments_.length === 1 && arguments_[0] === "--verify")
+    return { verify: true };
+
+  const unexpected = arguments_.find((argument) => argument !== "--verify");
+  throw new DemoConfigurationError(
+    unexpected
+      ? `Unknown demo option: ${unexpected}`
+      : "Demo accepts --verify at most once",
+  );
+}
+
 export async function seedCanonicalIncident(
   client: DemoClient,
   telemetry: readonly unknown[],
@@ -266,6 +290,7 @@ export function parseCanonicalScenario(
 
 export async function runDemo(
   environment: Environment = process.env,
+  options: DemoRunOptions = { verify: false },
 ): Promise<void> {
   const config = createDemoConfiguration(environment);
   const children: DemoChildProcess[] = [];
@@ -382,6 +407,10 @@ export async function runDemo(
         ? "Core owns the complete local incident → evidence → diagnosis → tested fix → PR flow. GitHub delivery is deterministic and performs no external writes."
         : "GitHub writes are disabled. Live Codex may correctly stop at issue fallback when code provenance is insufficient.",
     );
+    if (options.verify) {
+      console.log("Verification complete; stopping Core and Dashboard.");
+      return;
+    }
     console.log("Press Ctrl-C to stop Core and Dashboard.");
     await waitForShutdown(children, lifecycle);
   } catch (error) {
@@ -646,8 +675,12 @@ export class DemoRuntimeError extends Error {
   }
 }
 
+async function main(): Promise<void> {
+  await runDemo(process.env, parseDemoRunOptions(process.argv.slice(2)));
+}
+
 if (import.meta.main) {
-  runDemo().catch((error) => {
+  main().catch((error) => {
     const message =
       error instanceof Error ? error.message : "unknown demo failure";
     console.error(`Podo demo failed: ${message}`);

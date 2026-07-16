@@ -7,6 +7,7 @@ import {
   DemoConfigurationError,
   parseCanonicalScenario,
   parseDemoCoreStatus,
+  parseDemoRunOptions,
   seedCanonicalIncident,
 } from "../../demo/run";
 
@@ -119,6 +120,17 @@ describe("one-command judge demo", () => {
     expect(configuration.dashboardUrl).toBe("http://127.0.0.1:3000");
     expect(configuration.dashboardEnvironment.PODO_DASHBOARD_MODE).toBe("live");
     expect(configuration.coreEnvironment.PODO_DEMO_OUTCOME).toBe("success");
+  });
+
+  test("parses finite verification before any child process can start", () => {
+    expect(parseDemoRunOptions([])).toEqual({ verify: false });
+    expect(parseDemoRunOptions(["--verify"])).toEqual({ verify: true });
+    expect(() => parseDemoRunOptions(["--unknown"])).toThrow(
+      "Unknown demo option: --unknown",
+    );
+    expect(() => parseDemoRunOptions(["--verify", "--verify"])).toThrow(
+      "Demo accepts --verify at most once",
+    );
   });
 
   test("validates the bounded deterministic Core readiness contract", () => {
