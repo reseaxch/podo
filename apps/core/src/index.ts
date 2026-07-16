@@ -10,6 +10,7 @@ const handler = await createProductionCoreHandler(process.env)
 const server = Bun.serve({
   hostname: host,
   port,
+  idleTimeout: 60,
   fetch: handler,
 })
 
