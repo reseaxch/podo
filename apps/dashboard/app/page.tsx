@@ -3,6 +3,7 @@ import { IncidentPageState } from "./components/incident-page-state"
 import { ProductionIncidentWorkspace } from "./components/production-incident-workspace"
 import {
   getDemoIncidentWorkspace,
+  getIncidentCausalPath,
   getIncidentWorkflow,
   getIncidentWorkspace,
 } from "./lib/incident-data"
@@ -49,6 +50,15 @@ export default async function Page({ searchParams }: PageProps) {
     incidentId ? { incidentId } : undefined,
   )
   if (!incident) return <IncidentPageState kind="empty" />
-  const workflow = await getIncidentWorkflow(incident.id)
-  return <ProductionIncidentWorkspace incident={incident} {...workflow} />
+  const [workflow, causalPath] = await Promise.all([
+    getIncidentWorkflow(incident.id),
+    getIncidentCausalPath(incident),
+  ])
+  return (
+    <ProductionIncidentWorkspace
+      incident={incident}
+      causalPath={causalPath}
+      {...workflow}
+    />
+  )
 }

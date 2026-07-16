@@ -8,6 +8,7 @@ const coreURL = `http://127.0.0.1:${corePort}`
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.pw.ts",
+  testIgnore: "**/real-core.pw.ts",
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
@@ -19,7 +20,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: `PODO_DASHBOARD_MODE=demo PODO_CORE_URL=${coreURL} ./node_modules/.bin/next dev -H 127.0.0.1 -p ${dashboardPort}`,
+      command: `PODO_DASHBOARD_MODE=demo PODO_CORE_URL=${coreURL} bun run build && PODO_DASHBOARD_MODE=demo PODO_CORE_URL=${coreURL} bun run start --hostname 127.0.0.1 --port ${dashboardPort}`,
       url: `${baseURL}/demo`,
       reuseExistingServer: !process.env.CI,
     },

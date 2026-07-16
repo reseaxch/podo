@@ -192,6 +192,20 @@ The canonical POC is one command:
 bun run poc
 ```
 
+The judge-facing demo experience is also one command:
+
+```sh
+bun run demo
+```
+
+It checks Codex compatibility, builds the production Dashboard, and starts one
+connected deterministic Core-backed flow. The visible incident, causal path,
+diagnosis, approvals, tested diff, delivery state, and audit all come through
+the typed Core API. GitHub delivery is deterministic and performs no external
+writes. See
+[`demo/README.md`](demo/README.md) for prerequisites, expected state, ports, and
+reset behavior.
+
 The command first performs a real handshake with the pinned Codex App Server.
 It then proves the canonical fixture reaches a detected evidence-backed
 incident, resolves `deploy-1042 → trusted commit → cache.ts → CheckoutCache`,

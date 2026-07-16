@@ -60,6 +60,11 @@ jobs:
           PODO_DASHBOARD_E2E_CORE_PORT: 4110
           PODO_DASHBOARD_E2E_PORT: 3010
         run: bun run --cwd apps/dashboard test:e2e
+      - name: Run real Core browser flow
+        env:
+          PODO_DASHBOARD_CORE_E2E_CORE_PORT: 4120
+          PODO_DASHBOARD_CORE_E2E_PORT: 3020
+        run: bun run --cwd apps/dashboard test:e2e:core
 
   codex-compatibility:
     name: Codex compatibility
