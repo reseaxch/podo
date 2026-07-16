@@ -104,6 +104,34 @@ test("production composition injects the opt-in GitHub issue fallback", async ()
   })
 })
 
+test("production composition injects the opt-in GitHub Actions boundary", async () => {
+  let receivedGitHubActions: unknown
+  await createProductionCoreHandler({
+    PODO_GITHUB_ACTIONS_ENABLED: "true",
+    PODO_GITHUB_TOKEN: "github-actions-token",
+    PODO_GITHUB_REPOSITORY: "owner/repository",
+    PODO_GITHUB_ACTIONS_WEBHOOK_SECRET: "github-actions-webhook-secret",
+    PODO_GITHUB_ACTIONS_REPOSITORY_CWD: "/configured/repository",
+    PODO_GITHUB_OPERATOR_IDENTITY: "local-operator",
+  }, {
+    createHandler(options) {
+      receivedGitHubActions = options.githubActions
+      return async () => new Response()
+    },
+  })
+
+  expect(receivedGitHubActions).toMatchObject({
+    repository: { owner: "owner", name: "repository" },
+    repositoryCwd: "/configured/repository",
+    operatorIdentity: "local-operator",
+    decodeWebhook: expect.any(Function),
+    captureFailedRun: expect.any(Function),
+    getCurrentRun: expect.any(Function),
+    listRunsForHead: expect.any(Function),
+    retryFailedJobs: expect.any(Function),
+  })
+})
+
 test("production composition fails before creating a handler when graph bootstrap is invalid", async () => {
   let createdHandler = false
   const creation = createProductionCoreHandler(enabledEnvironment, {

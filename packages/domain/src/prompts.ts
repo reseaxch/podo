@@ -15,6 +15,8 @@ export const INVESTIGATOR_READ_TOOLS = [
   "get_related_logs",
   "get_trace",
   "search_code",
+  "get_workflow_run",
+  "get_workflow_jobs",
 ] as const
 
 export type InvestigatorTool = (typeof INVESTIGATOR_READ_TOOLS)[number]
@@ -43,7 +45,7 @@ export function buildInvestigatorPrompt(input: { mode: AutonomyLevel }): PromptP
   return {
     systemPrompt,
     allowedTools: INVESTIGATOR_READ_TOOLS,
-    forbiddenTools: ["run_test", "apply_patch", "create_pull_request", "production_command"],
+    forbiddenTools: ["run_test", "apply_patch", "create_pull_request", "retry_ci", "production_command"],
   }
 }
 

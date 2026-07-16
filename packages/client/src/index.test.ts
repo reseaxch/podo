@@ -209,6 +209,73 @@ describe("createPodoClient", () => {
     ])
   })
 
+  test("uses the Core-owned build incident retry and verification contracts", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = []
+    const client = createPodoClient({
+      baseUrl: "http://podo.test/",
+      fetch: async (input, init) => {
+        requests.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+        })
+        return Response.json({ incidents: [], events: [], incident: {}, retry: {}, verification: {} })
+      },
+    })
+
+    await client.listBuildIncidents()
+    await client.getBuildIncident("build/1")
+    await client.getBuildIncidentAudit("build/1")
+    await client.startBuildIncidentRetry("build/1")
+    await client.getBuildIncidentRetry("build/1")
+    await client.decideBuildIncidentRetry("build/1", "approval/1", { decision: "approve" })
+    await client.decideBuildIncidentRetry("build/1", "approval/2", { decision: "deny" })
+    await client.startBuildRemediationVerification("build/1")
+    await client.getBuildRemediationVerification("build/1")
+
+    expect(requests).toEqual([
+      { url: "http://podo.test/api/build-incidents", method: "GET" },
+      { url: "http://podo.test/api/build-incidents/build%2F1", method: "GET" },
+      { url: "http://podo.test/api/build-incidents/build%2F1/audit", method: "GET" },
+      {
+        url: "http://podo.test/api/build-incidents/build%2F1/retry",
+        method: "POST",
+        body: {},
+      },
+      { url: "http://podo.test/api/build-incidents/build%2F1/retry", method: "GET" },
+      {
+        url: "http://podo.test/api/build-incidents/build%2F1/retry/approvals/approval%2F1",
+        method: "POST",
+        body: { decision: "approve" },
+      },
+      {
+        url: "http://podo.test/api/build-incidents/build%2F1/retry/approvals/approval%2F2",
+        method: "POST",
+        body: { decision: "deny" },
+      },
+      {
+        url: "http://podo.test/api/build-incidents/build%2F1/remediation/verification",
+        method: "POST",
+        body: {},
+      },
+      {
+        url: "http://podo.test/api/build-incidents/build%2F1/remediation/verification",
+        method: "GET",
+      },
+    ])
+  })
+
+  test("surfaces build incident API errors through the shared decoder", async () => {
+    const client = createPodoClient({
+      baseUrl: "http://podo.test",
+      fetch: async () => new Response('{"error":"github_actions_not_configured"}', { status: 503 }),
+    })
+
+    await expect(client.listBuildIncidents()).rejects.toThrow(
+      'Podo request failed (503): {"error":"github_actions_not_configured"}',
+    )
+  })
+
   test("reads and updates the public settings contract", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = []
     const client = createPodoClient({

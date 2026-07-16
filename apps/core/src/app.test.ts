@@ -34,6 +34,7 @@ describe("Podo core handler", () => {
     expect(() => createCoreHandler({
       pullRequestDelivery: {
         expectedRepository: "caller-controlled-or-missing-owner",
+        operatorIdentity: "fixture-operator",
         port: { async deliver() { return {} } },
       },
     })).toThrow("invalid_pull_request_delivery_repository")
