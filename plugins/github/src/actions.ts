@@ -9,7 +9,7 @@ import {
 const GITHUB_API_ORIGIN = "https://api.github.com"
 const GITHUB_WEB_ORIGIN = "https://github.com"
 const GITHUB_API_VERSION = "2022-11-28"
-const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024
+export const MAX_GITHUB_ACTIONS_WEBHOOK_BYTES = 2 * 1024 * 1024
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 const MAX_PAGES = 10
 const PAGE_SIZE = 100
@@ -220,7 +220,7 @@ export class GitHubActionsWebhookDecoder {
     }
     if (!hasExactKeys(value, ["eventType", "deliveryId", "signatureSha256", "body"])
       || typeof value.body !== "string"
-      || Buffer.byteLength(value.body, "utf8") > MAX_WEBHOOK_BYTES
+      || Buffer.byteLength(value.body, "utf8") > MAX_GITHUB_ACTIONS_WEBHOOK_BYTES
       || !isIdentifier(value.deliveryId)
       || containsValue(value.deliveryId, this.secret)) throw failure("invalid_webhook_input")
     if (typeof value.signatureSha256 !== "string" || !/^sha256=[a-f0-9]{64}$/.test(value.signatureSha256)) {

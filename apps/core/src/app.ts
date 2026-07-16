@@ -12,11 +12,12 @@ import type {
   StartInvestigationRequest,
   SystemStatusResponse,
 } from "@podo/contracts"
-import type {
-  GitHubActionsRetryRequest,
-  GitHubActionsRunBinding,
-  GitHubActionsWebhookInput,
-  GitHubActionsWorkflowRunListRequest,
+import {
+  MAX_GITHUB_ACTIONS_WEBHOOK_BYTES,
+  type GitHubActionsRetryRequest,
+  type GitHubActionsRunBinding,
+  type GitHubActionsWebhookInput,
+  type GitHubActionsWorkflowRunListRequest,
 } from "@podo/plugin-github"
 import { AgentChatService, type AgentChatConfig } from "./agent-chat"
 import { InvestigationService } from "./investigations"
@@ -70,6 +71,63 @@ const serviceVersion = "0.0.0"
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } })
+}
+
+type WebhookBodyReadResult =
+  | { ok: true; body: string }
+  | { ok: false }
+
+async function readWebhookBody(request: Request): Promise<WebhookBodyReadResult> {
+  const declaredLength = request.headers.get("content-length")
+  if (declaredLength !== null) {
+    const normalizedLength = declaredLength.trim()
+    const parsedLength = Number(normalizedLength)
+    if (!/^\d+$/.test(normalizedLength)
+      || !Number.isSafeInteger(parsedLength)
+      || parsedLength > MAX_GITHUB_ACTIONS_WEBHOOK_BYTES) {
+      await cancelBody(request.body)
+      return { ok: false }
+    }
+  }
+
+  if (!request.body) return { ok: true, body: "" }
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  try {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      if (next.value.byteLength > MAX_GITHUB_ACTIONS_WEBHOOK_BYTES - totalBytes) {
+        await cancelReader(reader)
+        return { ok: false }
+      }
+      chunks.push(next.value)
+      totalBytes += next.value.byteLength
+    }
+  } catch {
+    await cancelReader(reader)
+    return { ok: false }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return { ok: true, body: new TextDecoder().decode(bytes) }
+}
+
+async function cancelBody(body: ReadableStream<Uint8Array> | null): Promise<void> {
+  if (!body) return
+  try { await body.cancel() } catch {}
+}
+
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  try { await reader.cancel() } catch {}
 }
 
 export function createCoreHandler(options: CoreHandlerOptions = {}): (request: Request) => Promise<Response> {
@@ -288,11 +346,15 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         || !request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
         return json({ error: "invalid_webhook", message: "GitHub Actions webhook was invalid" }, 400)
       }
+      const body = await readWebhookBody(request)
+      if (!body.ok) {
+        return json({ error: "invalid_webhook", message: "GitHub Actions webhook was invalid" }, 422)
+      }
       const webhookInput: GitHubActionsWebhookInput = {
         eventType: request.headers.get("x-github-event") ?? "",
         deliveryId: request.headers.get("x-github-delivery") ?? "",
         signatureSha256: request.headers.get("x-hub-signature-256") ?? "",
-        body: await request.text(),
+        body: body.body,
       }
       let signal: unknown
       try {

@@ -14,6 +14,7 @@ export {
   GitHubActionsReadAdapter,
   GitHubActionsRetryAdapter,
   GitHubActionsWebhookDecoder,
+  MAX_GITHUB_ACTIONS_WEBHOOK_BYTES,
 } from "./actions"
 export type {
   GitHubActionsConclusion,

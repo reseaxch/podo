@@ -800,6 +800,7 @@ function buildIncidentId(signal: GitHubActionsWorkflowRunSignal): string {
     signal.repository.owner,
     signal.repository.name,
     signal.run.id,
+    signal.run.attempt,
     signal.run.headSha,
   ])}`
 }

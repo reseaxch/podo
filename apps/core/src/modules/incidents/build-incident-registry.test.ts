@@ -93,7 +93,10 @@ const signal: GitHubActionsWorkflowRunSignal = {
   },
 }
 
-function failureSnapshot(deliveryId = signal.deliveryId): GitHubActionsFailureSnapshot {
+function failureSnapshot(
+  deliveryId = signal.deliveryId,
+  attempt = signal.run.attempt,
+): GitHubActionsFailureSnapshot {
   return {
     schemaVersion: "podo.github-actions.failure.v1",
     deliveryId,
@@ -104,7 +107,7 @@ function failureSnapshot(deliveryId = signal.deliveryId): GitHubActionsFailureSn
       workflowName: "Workspace",
       workflowPath: ".github/workflows/ci.yml",
       runNumber: 77,
-      attempt: 1,
+      attempt,
       event: "push",
       headBranch: "main",
       headSha: "c".repeat(40),
@@ -118,7 +121,7 @@ function failureSnapshot(deliveryId = signal.deliveryId): GitHubActionsFailureSn
       {
         id: 81001,
         runId: 91377001,
-        attempt: 1,
+        attempt,
         headSha: "c".repeat(40),
         name: "Workspace",
         status: "completed",
@@ -147,7 +150,7 @@ function failureSnapshot(deliveryId = signal.deliveryId): GitHubActionsFailureSn
       {
         id: 81002,
         runId: 91377001,
-        attempt: 1,
+        attempt,
         headSha: "c".repeat(40),
         name: "Dashboard",
         status: "completed",
@@ -313,7 +316,9 @@ describe("BuildIncidentRegistry", () => {
     const captures: GitHubActionsWorkflowRunSignal[] = []
     const fixture = createFixture(async (input) => {
       captures.push(structuredClone(input))
-      return gate
+      return input.run.attempt === signal.run.attempt
+        ? gate
+        : failureSnapshot(input.deliveryId, input.run.attempt)
     })
     const replay = { ...signal, deliveryId: "delivery-build-replayed" }
 
@@ -337,17 +342,29 @@ describe("BuildIncidentRegistry", () => {
       deliveryId: "delivery-build-later-attempt",
       run: { ...signal.run, attempt: signal.run.attempt + 1 },
     })
-    if (!laterFailedAttempt.ok) throw new Error("expected existing build incident")
-    expect(laterFailedAttempt.created).toBe(false)
-    expect(laterFailedAttempt.incident.id).toBe(first.incident.id)
-    expect(captures).toHaveLength(1)
-    expect(fixture.runtime.threads).toHaveLength(1)
+    if (!laterFailedAttempt.ok) throw new Error("expected later failed-attempt incident")
+    expect(laterFailedAttempt.created).toBe(true)
+    expect(laterFailedAttempt.incident.id).not.toBe(first.incident.id)
+    expect(laterFailedAttempt.incident.sourceRun.attempt).toBe(signal.run.attempt + 1)
+    expect(captures).toHaveLength(2)
+    expect(captures.map(({ run }) => run.attempt)).toEqual([1, 2])
+    expect(fixture.runtime.threads).toHaveLength(2)
     expect(fixture.audit.getBuild(first.incident.id).map(({ kind }) => kind)).toEqual([
       "build.signal_received",
       "build.evidence_captured",
       "build.incident_created",
       "investigation.requested",
       "investigation.started",
+    ])
+    expect(fixture.audit.getBuild(laterFailedAttempt.incident.id)).toEqual([
+      expect.objectContaining({
+        kind: "build.signal_received",
+        runAttempt: signal.run.attempt + 1,
+      }),
+      expect.objectContaining({ kind: "build.evidence_captured" }),
+      expect.objectContaining({ kind: "build.incident_created" }),
+      expect.objectContaining({ kind: "investigation.requested" }),
+      expect.objectContaining({ kind: "investigation.started" }),
     ])
   })
 

@@ -20,6 +20,8 @@ import {
   GitHubActionsReadAdapter,
   GitHubActionsRetryAdapter,
   GitHubActionsWebhookDecoder,
+  MAX_GITHUB_ACTIONS_WEBHOOK_BYTES,
+  type GitHubActionsWebhookInput,
 } from "@podo/plugin-github"
 import { createPodoClient } from "../../../packages/client/src/index"
 
@@ -79,7 +81,7 @@ const repository = {
 }
 const repositoryIdentity = `${repository.owner}/${repository.name}`
 const runsPath = `/repos/${repository.owner}/${repository.name}/actions/runs`
-const canonicalIncidentId = "build_incident_391da29c410c8fed7bc07a1d"
+const canonicalIncidentId = "build_incident_26ce94f5d1689e756c311741"
 const canonicalEvidenceIds = [
   "build_evidence_5f30ba336df64238a39baf03",
   "build_evidence_468ea0c7316be8b06008fe71",
@@ -119,7 +121,9 @@ class DiagnosisRuntime implements CodexRuntime {
   async close() {}
 }
 
-function createFixture() {
+function createFixture(options: {
+  decodeWebhook?: (input: GitHubActionsWebhookInput) => unknown
+} = {}) {
   const runtime = new DiagnosisRuntime()
   const github = createFixtureGitHubTransport()
   const decoder = new GitHubActionsWebhookDecoder({ secret: webhookSecret, repository })
@@ -135,7 +139,7 @@ function createFixture() {
       repositoryCwd,
       operatorIdentity: "uc13-fixture-operator",
       verificationTimeoutMs: 60_000,
-      decodeWebhook(input) { return decoder.decode(input) },
+      decodeWebhook(input) { return options.decodeWebhook?.(input) ?? decoder.decode(input) },
       captureFailedRun(signal) { return reader.captureFailedRun(signal) },
       getCurrentRun(binding) { return reader.getCurrentRun(binding) },
       listRunsForHead(input) { return reader.listRunsForHead(input) },
@@ -248,6 +252,69 @@ describe("UC-13 GitHub Actions Build Incident HTTP vertical slice", () => {
     expect(fixture.github.writes).toEqual([])
     const incidents = await requestJson<{ incidents: BuildIncident[] }>(fixture.handler, "/api/build-incidents")
     expect(incidents.body.incidents).toEqual([])
+  })
+
+  test("rejects declared and streamed webhook bodies above 2 MiB before decoding", async () => {
+    const decodedBodies: string[] = []
+    const fixture = createFixture({
+      decodeWebhook(input) {
+        decodedBodies.push(input.body)
+        throw new Error("oversized webhook reached decoder")
+      },
+    })
+    const headers = {
+      "content-type": "application/json",
+      "x-github-event": "workflow_run",
+      "x-github-delivery": "uc13-oversized-webhook",
+      "x-hub-signature-256": `sha256=${"0".repeat(64)}`,
+    }
+
+    const declared = await fixture.handler(new Request("http://podo.test/api/github/actions/workflow-runs", {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-length": String(MAX_GITHUB_ACTIONS_WEBHOOK_BYTES + 1),
+      },
+      body: "{}",
+    }))
+    expect(declared.status).toBe(422)
+    expect(await declared.json()).toEqual({
+      error: "invalid_webhook",
+      message: "GitHub Actions webhook was invalid",
+    })
+    expect(decodedBodies).toEqual([])
+
+    let pulls = 0
+    let cancelled = false
+    const chunk = new Uint8Array(1024 * 1024).fill(0x61)
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        controller.enqueue(pulls <= 2 ? chunk : new Uint8Array([0x61]))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const streamed = await fixture.handler(new Request("http://podo.test/api/github/actions/workflow-runs", {
+      method: "POST",
+      headers: {
+        ...headers,
+        "x-github-delivery": "uc13-oversized-streamed-webhook",
+      },
+      body,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" }))
+    expect(streamed.status).toBe(422)
+    expect(await streamed.json()).toEqual({
+      error: "invalid_webhook",
+      message: "GitHub Actions webhook was invalid",
+    })
+    expect(pulls).toBe(3)
+    expect(cancelled).toBe(true)
+    expect(decodedBodies).toEqual([])
+    expect(fixture.runtime.threads).toEqual([])
+    expect(fixture.github.writes).toEqual([])
   })
 
   test("signed failure webhook produces evidence and an approved idempotent retry verifies only attempt + 1", async () => {
@@ -379,6 +446,91 @@ describe("UC-13 GitHub Actions Build Incident HTTP vertical slice", () => {
       decision: "approve",
       decidedBy: "uc13-fixture-operator",
     })
+  })
+
+  test("captures a later failed attempt as distinct evidence and verifies its approved retry", async () => {
+    const fixture = createFixture()
+    const first = await captureDiagnosedIncident(
+      fixture.handler,
+      fixture.runtime,
+      "uc13-attempt-aware-first",
+    )
+    const laterAttempt = failureRun.run_attempt + 1
+    fixture.github.setFailedAttempt(laterAttempt)
+    const laterBody = failureWebhookBodyForAttempt(laterAttempt)
+    const signature = `sha256=${createHmac("sha256", webhookSecret).update(laterBody).digest("hex")}`
+    const captured = await requestJson<{ created: boolean; incident: BuildIncident }>(
+      fixture.handler,
+      "/api/github/actions/workflow-runs",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-github-event": "workflow_run",
+          "x-github-delivery": "uc13-attempt-aware-second",
+          "x-hub-signature-256": signature,
+        },
+        body: laterBody,
+      },
+    )
+    expect(captured.response.status).toBe(201)
+    expect(captured.body.created).toBe(true)
+    expect(captured.body.incident.id).not.toBe(first.id)
+    expect(captured.body.incident.sourceRun).toMatchObject({
+      id: failureRun.id,
+      attempt: laterAttempt,
+      headSha: failureRun.head_sha,
+      conclusion: "failure",
+    })
+    expect(captured.body.incident.evidence).toHaveLength(3)
+    expect(captured.body.incident.evidence.every(({ runAttempt }) => runAttempt === laterAttempt)).toBe(true)
+    expect(evidenceIds(captured.body.incident)).not.toEqual(evidenceIds(first))
+    expect(fixture.github.capturedAttempts).toEqual([failureRun.run_attempt, laterAttempt])
+
+    completeDiagnosis(fixture.runtime, captured.body.incident)
+    const diagnosed = await requestJson<{ incident: BuildIncident }>(
+      fixture.handler,
+      `/api/build-incidents/${encodeURIComponent(captured.body.incident.id)}`,
+    )
+    expect(diagnosed.body.incident).toMatchObject({
+      status: "awaiting_action",
+      diagnosis: { status: "validated" },
+    })
+
+    const started = await requestJson<{ retry: BuildIncidentRetry }>(
+      fixture.handler,
+      `/api/build-incidents/${encodeURIComponent(captured.body.incident.id)}/retry`,
+      jsonInit("POST", {}),
+    )
+    expect(started.response.status).toBe(201)
+    const approved = await requestJson<{ incident: BuildIncident; retry: BuildIncidentRetry }>(
+      fixture.handler,
+      `/api/build-incidents/${encodeURIComponent(captured.body.incident.id)}/retry/approvals/${encodeURIComponent(started.body.retry.approval.id)}`,
+      jsonInit("POST", { decision: "approve" }),
+    )
+    expect(approved.response.status).toBe(200)
+    expect(approved.body).toMatchObject({
+      incident: { status: "verified" },
+      retry: {
+        status: "verified",
+        sourceRun: { id: failureRun.id, attempt: laterAttempt, headSha: failureRun.head_sha },
+        result: {
+          mode: "retry",
+          runId: failureRun.id,
+          runAttempt: laterAttempt + 1,
+          headSha: failureRun.head_sha,
+          conclusion: "success",
+        },
+      },
+    })
+    expect(fixture.github.writes).toHaveLength(1)
+    expect((await getBuildAudit(fixture.handler, captured.body.incident.id)).map(({ kind }) => kind))
+      .toEqual(expect.arrayContaining([
+        "build.signal_received",
+        "build.evidence_captured",
+        "build.retry_dispatched",
+        "build.retry_verified",
+      ]))
   })
 
   test("approved tested remediation and fake PR delivery verify CI only for the exact delivered head", async () => {
@@ -702,9 +854,11 @@ function sortedEvidenceIds(incident: BuildIncident): string[] {
 }
 
 function createFixtureGitHubTransport() {
-  let retryAccepted = false
+  let currentRun = structuredClone(failureRun)
+  let currentJobs = structuredClone(failureJobs)
   const writes: GitHubWrite[] = []
   const listedHeads: string[] = []
+  const capturedAttempts: number[] = []
 
   const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = input instanceof Request
@@ -714,11 +868,13 @@ function createFixtureGitHubTransport() {
     const method = request.method.toUpperCase()
 
     if (method === "GET" && url.pathname === `${runsPath}/${failureRun.id}`) {
-      return Response.json(retryAccepted ? retrySuccessRun : failureRun)
+      return Response.json(currentRun)
     }
     if (method === "GET"
-      && url.pathname === `${runsPath}/${failureRun.id}/attempts/${failureRun.run_attempt}/jobs`) {
-      return Response.json(failureJobs)
+      && url.pathname === `${runsPath}/${failureRun.id}/attempts/${currentRun.run_attempt}/jobs`
+      && currentRun.conclusion === "failure") {
+      capturedAttempts.push(currentRun.run_attempt)
+      return Response.json(currentJobs)
     }
     if (method === "POST" && url.pathname === `${runsPath}/${failureRun.id}/rerun-failed-jobs`) {
       writes.push({
@@ -726,7 +882,10 @@ function createFixtureGitHubTransport() {
         method,
         body: await request.text() || null,
       })
-      retryAccepted = true
+      currentRun = {
+        ...retrySuccessRun,
+        run_attempt: currentRun.run_attempt + 1,
+      }
       return new Response(null, { status: 201 })
     }
     if (method === "GET" && url.pathname === runsPath) {
@@ -739,7 +898,36 @@ function createFixtureGitHubTransport() {
     throw new Error(`unexpected fixture GitHub request: ${method} ${url.pathname}`)
   }
 
-  return { fetch, writes, listedHeads }
+  return {
+    fetch,
+    writes,
+    listedHeads,
+    capturedAttempts,
+    setFailedAttempt(attempt: number) {
+      currentRun = {
+        ...failureRun,
+        run_attempt: attempt,
+        updated_at: `2026-07-16T08:${String(attempt).padStart(2, "0")}:00Z`,
+      }
+      currentJobs = failureJobsForAttempt(attempt)
+    },
+  }
+}
+
+function failureWebhookBodyForAttempt(attempt: number): string {
+  const payload = JSON.parse(failureWebhookBody) as { workflow_run: GitHubRunFixture }
+  payload.workflow_run = {
+    ...payload.workflow_run,
+    run_attempt: attempt,
+    updated_at: `2026-07-16T08:${String(attempt).padStart(2, "0")}:00Z`,
+  }
+  return JSON.stringify(payload)
+}
+
+function failureJobsForAttempt(attempt: number): unknown {
+  const payload = structuredClone(failureJobs) as { jobs: Array<Record<string, unknown>> }
+  payload.jobs = payload.jobs.map((job) => ({ ...job, run_attempt: attempt }))
+  return payload
 }
 
 async function getBuildAudit(
