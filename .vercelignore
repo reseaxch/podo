@@ -1,0 +1,6 @@
+**/.next
+**/.next-dev
+**/node_modules
+**/test-results
+.playwright-cli
+output
