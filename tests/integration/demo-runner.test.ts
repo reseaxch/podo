@@ -6,6 +6,7 @@ import {
   createDemoConfiguration,
   DemoConfigurationError,
   parseCanonicalScenario,
+  parseDemoCoreStatus,
   seedCanonicalIncident,
 } from "../../demo/run";
 
@@ -13,7 +14,7 @@ const repositoryRoot = "/tmp/podo-demo-repository";
 const bunExecutable = "/tmp/podo-demo-runtime/bun";
 
 describe("one-command judge demo", () => {
-  test("builds a live, approval-gated configuration without forwarding GitHub credentials", () => {
+  test("builds a live, approval-gated configuration with an allowlisted child environment", () => {
     const configuration = createDemoConfiguration(
       {
         PATH: "/usr/bin:/bin",
@@ -21,6 +22,8 @@ describe("one-command judge demo", () => {
         GH_TOKEN: "gh-secret",
         GITHUB_TOKEN: "github-secret",
         PODO_GITHUB_TOKEN: "podo-github-secret",
+        AWS_SECRET_ACCESS_KEY: "unknown-secret",
+        NODE_AUTH_TOKEN: "registry-secret",
         PODO_DEMO_CORE_PORT: "4510",
         PODO_DEMO_DASHBOARD_PORT: "4511",
         PODO_DEMO_SCRATCH_PARENT: "/tmp/podo-demo-scratch",
@@ -48,6 +51,8 @@ describe("one-command judge demo", () => {
     expect(configuration.coreEnvironment.GH_TOKEN).toBeUndefined();
     expect(configuration.coreEnvironment.GITHUB_TOKEN).toBeUndefined();
     expect(configuration.coreEnvironment.PODO_GITHUB_TOKEN).toBeUndefined();
+    expect(configuration.coreEnvironment.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+    expect(configuration.coreEnvironment.NODE_AUTH_TOKEN).toBeUndefined();
     expect(
       JSON.parse(
         configuration.coreEnvironment.PODO_REMEDIATION_REGRESSION_COMMAND!,
@@ -87,7 +92,7 @@ describe("one-command judge demo", () => {
     ).toThrow(DemoConfigurationError);
   });
 
-  test("defaults to the deterministic POC gate and explicit fixture dashboard", () => {
+  test("defaults to one Core-backed production Dashboard flow", () => {
     const configuration = createDemoConfiguration(
       {
         PODO_DEMO_SCRATCH_PARENT: "/tmp/podo-demo-scratch",
@@ -96,19 +101,47 @@ describe("one-command judge demo", () => {
     );
 
     expect(configuration.mode).toBe("deterministic");
-    expect(configuration.proofCommand).toEqual([bunExecutable, "run", "poc"]);
-    expect(configuration.dashboardUrl).toBe("http://127.0.0.1:3000/demo");
-    expect(configuration.dashboardEnvironment.PODO_DASHBOARD_MODE).toBe("demo");
+    expect(configuration.smokeCommand).toEqual([
+      bunExecutable,
+      "run",
+      "codex:smoke",
+    ]);
+    expect(configuration.coreCommand).toEqual([
+      bunExecutable,
+      "run",
+      "--cwd",
+      `${repositoryRoot}/demo`,
+      "core",
+    ]);
+    expect(configuration.dashboardBuildCommand).toContain("build");
+    expect(configuration.dashboardCommand).toContain("start");
+    expect(configuration.dashboardCommand).not.toContain("dev");
+    expect(configuration.dashboardUrl).toBe("http://127.0.0.1:3000");
+    expect(configuration.dashboardEnvironment.PODO_DASHBOARD_MODE).toBe("live");
+    expect(configuration.coreEnvironment.PODO_DEMO_OUTCOME).toBe("success");
+  });
 
-    const sharedUnusedCorePort = createDemoConfiguration(
-      {
-        PODO_DEMO_CORE_PORT: "3000",
-        PODO_DEMO_DASHBOARD_PORT: "3000",
-        PODO_DEMO_SCRATCH_PARENT: "/tmp/podo-demo-scratch",
-      },
-      { repositoryRoot, bunExecutable },
-    );
-    expect(sharedUnusedCorePort.dashboardPort).toBe(3000);
+  test("validates the bounded deterministic Core readiness contract", () => {
+    expect(
+      parseDemoCoreStatus({
+        status: "ready",
+        outcome: "validation_failure",
+        incidentId: "incident-1",
+        repositoryRoot: "/tmp/repository",
+        deliveryCalls: 0,
+        issueCalls: 1,
+      }),
+    ).toMatchObject({ outcome: "validation_failure", issueCalls: 1 });
+    expect(() =>
+      parseDemoCoreStatus({
+        status: "ready",
+        outcome: "success",
+        incidentId: "incident-1",
+        repositoryRoot: "relative/repository",
+        deliveryCalls: 0,
+        issueCalls: 0,
+      }),
+    ).toThrow("readiness response is invalid");
   });
 
   test("sets approval mode, replays canonical telemetry, and exposes exactly one expected incident", async () => {

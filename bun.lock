@@ -84,6 +84,7 @@
         "@podo/client": "workspace:*",
         "@podo/codex-app-server-client": "workspace:*",
         "@podo/contracts": "workspace:*",
+        "@podo/core": "workspace:*",
         "@podo/plugin-otel-replay": "workspace:*",
       },
     },

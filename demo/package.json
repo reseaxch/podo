@@ -7,9 +7,11 @@
     "@podo/client": "workspace:*",
     "@podo/codex-app-server-client": "workspace:*",
     "@podo/contracts": "workspace:*",
+    "@podo/core": "workspace:*",
     "@podo/plugin-otel-replay": "workspace:*"
   },
   "scripts": {
+    "core": "bun core.ts",
     "start": "bun run.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }

@@ -1,6 +1,6 @@
 # Podo dashboard
 
-`@podo/dashboard` is the judge-facing browser UI. It will cover the incident list, causal graph, evidence timeline, diagnosis, approvals, remediation diff and tests, delivery state, and audit history.
+`@podo/dashboard` is the judge-facing browser UI. Its production routes cover incidents, the Core causal path, evidence, diagnosis, approvals, remediation diff and tests, delivery state, and audit history.
 
 The dashboard is a client of core. It must use public Podo contracts and must not access persistence or Codex directly.
 
@@ -33,4 +33,6 @@ bun run --cwd apps/dashboard build
 
 The production incident-to-PR controls, operational pages, audit, approvals,
 graph, evidence summary, and Core settings are backed by the typed Core client.
-The richer judge fixture remains available only at `/demo`.
+`bun run --cwd apps/dashboard test:e2e:core` runs both the successful PR path
+and the failed-validation-to-issue path against an actual Core HTTP server.
+The visual fixture remains available only at `/demo`.

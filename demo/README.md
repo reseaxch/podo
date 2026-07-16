@@ -3,22 +3,21 @@
 This directory owns the judge-facing, one-command demonstration of Podo's canonical flow:
 
 ```text
-incident replay → evidence-backed diagnosis → approved tested fix → PR preview
+incident replay → causal graph → evidence-backed diagnosis → approved tested fix → delivery approval → pull request
 ```
 
-The default runner executes the canonical POC gate and then opens the explicit
-judge fixture in the dashboard. The proof composes the real graph, replay,
-Core, typed client, Codex remediation boundary, isolated worktree, regression
-gate, validation, and PR preview. The fixture UI makes that already-proved flow
-deterministic and easy to present. It does not contain a second implementation
-of Core, scenario data, eval logic, or benchmark logic.
+The default runner starts one connected production Dashboard and deterministic
+Core composition. Core owns graph bootstrap, telemetry replay, incident state,
+diagnosis, both approvals, isolated remediation, regression and validation,
+delivery, issue fallback, and audit history. The deterministic Codex and GitHub
+ports make the presentation repeatable without external writes; they do not
+replace Core or duplicate scenario data.
 
 ## Prerequisites
 
 - Bun `1.3.10` and workspace dependencies installed with `bun install`;
-- a clean clone with the canonical defect present on local `main`;
 - the pinned Codex app-server available as `codex`, or through `CODEX_BIN`;
-- port `3000` available on loopback.
+- ports `3000` and `4100` available on loopback.
 
 ## Run
 
@@ -26,11 +25,10 @@ of Core, scenario data, eval logic, or benchmark logic.
 bun run demo
 ```
 
-The command runs `bun run poc` first. Any failed Codex compatibility, graph,
-replay, evidence, remediation, red-to-green regression, validation, or PR
-preview assertion stops the command and no dashboard is presented. When the
-gate passes, the command starts the dashboard at `/demo` with the explicit,
-local-only judge fixture.
+The command first checks the pinned Codex app-server, builds the Dashboard for
+production, starts Core, bootstraps the canonical graph, replays telemetry, and
+then opens the production incident route backed by `@podo/client`. Any failed
+readiness or build check stops the command and cleans up child processes.
 
 Open the printed incident URL and follow the visible flow:
 
@@ -38,16 +36,17 @@ Open the printed incident URL and follow the visible flow:
 2. review the validated diagnosis and causal graph;
 3. request remediation and explicitly approve its isolated checkout;
 4. inspect the red-to-green regression result, validation, and sealed diff;
-5. stop at the reproducible pull-request preview.
+5. explicitly approve delivery and reach the pull-request result.
 
 The terminal success signal is `Podo judge demo is ready`. The final UI success
-state is a completed remediation with a verified PR preview. GitHub issue and
-pull-request writes are deliberately disabled, so the command cannot push a
-branch, mutate the default branch, or require a GitHub token.
+state is `Open PR #1842`. The local GitHub adapter validates the exact sealed
+artifact and performs no network or repository writes. To exercise the
+negative path, run `PODO_DEMO_OUTCOME=validation_failure bun run demo`; failed
+validation exposes issue fallback and never exposes PR delivery.
 
-The Dashboard stays attached to the terminal. Press Ctrl-C once to stop it.
-The POC gate owns and removes every remediation worktree; a
-later run is safe and starts from the canonical fixtures again.
+The Dashboard and Core stay attached to the terminal. Press Ctrl-C once to stop
+both. The runner owns and removes its temporary git checkout and remediation
+worktrees, so a later run starts from canonical fixtures again.
 
 If the dashboard port is occupied, choose another one:
 
@@ -64,8 +63,9 @@ without fixture state:
 PODO_DEMO_MODE=live bun run demo
 ```
 
-This mode uses the scenario-owned graph bootstrap and approval-gated production
-remediation. A live model may correctly decide that telemetry alone is
+This mode uses the production Core, real Codex runtime, scenario-owned graph
+bootstrap, and approval-gated production remediation. A live model may
+correctly decide that telemetry alone is
 insufficient for a code fix and stop at the issue-fallback state; therefore it
 is a diagnostic mode, not the deterministic judge presentation. GitHub writes
 remain disabled. `PODO_DEMO_CORE_PORT`, `PODO_DEMO_SCRATCH_PARENT`, and

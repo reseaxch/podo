@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { inspectCodexRuntime } from "@podo/codex-app-server-client";
 import { createPodoClient, type PodoClient } from "@podo/client";
 import type { DetectedIncident } from "@podo/contracts";
 import { replayTelemetry, type ReplaySummary } from "@podo/plugin-otel-replay";
@@ -21,6 +20,11 @@ interface DemoChildProcess {
   kill(signal?: NodeJS.Signals | number): void;
 }
 
+interface DemoLifecycle {
+  readonly signal: AbortSignal;
+  dispose(): void;
+}
+
 export interface DemoConfiguration {
   mode: "deterministic" | "live";
   repositoryRoot: string;
@@ -29,8 +33,9 @@ export interface DemoConfiguration {
   dashboardUrl: string;
   telemetryPath: string;
   scenarioPath: string;
-  proofCommand: string[];
+  smokeCommand: string[];
   coreCommand: string[];
+  dashboardBuildCommand: string[];
   dashboardCommand: string[];
   coreEnvironment: Record<string, string>;
   dashboardEnvironment: Record<string, string>;
@@ -44,6 +49,15 @@ export interface DemoSeedResult {
   replay: ReplaySummary;
 }
 
+export interface DemoCoreStatus {
+  status: "ready";
+  outcome: "success" | "validation_failure";
+  incidentId: string;
+  repositoryRoot: string;
+  deliveryCalls: number;
+  issueCalls: number;
+}
+
 interface DemoConfigurationOptions {
   repositoryRoot?: string;
   bunExecutable?: string;
@@ -55,11 +69,23 @@ interface CanonicalScenarioExpectation {
 }
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const sensitiveChildVariables = new Set([
-  "GH_TOKEN",
-  "GITHUB_TOKEN",
-  "NPM_TOKEN",
-  "PODO_GITHUB_TOKEN",
+const allowedChildVariables = new Set([
+  "BUN_INSTALL",
+  "CI",
+  "CODEX_BIN",
+  "CODEX_HOME",
+  "COLORTERM",
+  "FORCE_COLOR",
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "NO_COLOR",
+  "PATH",
+  "SHELL",
+  "TERM",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
 ]);
 
 export function createDemoConfiguration(
@@ -86,7 +112,7 @@ export function createDemoConfiguration(
     3000,
     "PODO_DEMO_DASHBOARD_PORT",
   );
-  if (mode === "live" && corePort === dashboardPort)
+  if (corePort === dashboardPort)
     throw new DemoConfigurationError("Demo ports must be different");
 
   const scratchParent = normalizedAbsolutePath(
@@ -96,14 +122,14 @@ export function createDemoConfiguration(
   );
   const inherited = sanitizeChildEnvironment(environment);
   const coreUrl = `http://${host}:${corePort}`;
-  const dashboardUrl = `http://${host}:${dashboardPort}${mode === "deterministic" ? "/demo" : ""}`;
+  const dashboardUrl = `http://${host}:${dashboardPort}`;
   const regressionCommand = [
     bunExecutable,
     "test",
     "demo/services/checkout-service",
   ];
 
-  const coreEnvironment = {
+  const liveCoreEnvironment = {
     ...inherited,
     PODO_CORE_HOST: host,
     PODO_CORE_PORT: String(corePort),
@@ -126,11 +152,17 @@ export function createDemoConfiguration(
     PODO_GITHUB_DELIVERY_ENABLED: "false",
     PODO_GITHUB_ISSUE_ENABLED: "false",
   };
+  const deterministicCoreEnvironment = {
+    ...inherited,
+    PODO_CORE_PORT: String(corePort),
+    PODO_DEMO_OUTCOME: parseOutcome(environment.PODO_DEMO_OUTCOME),
+    PODO_DEMO_SCRATCH_PARENT: scratchParent,
+  };
   const dashboardEnvironment = {
     ...inherited,
     NEXT_TELEMETRY_DISABLED: "1",
     PODO_CORE_URL: coreUrl,
-    PODO_DASHBOARD_MODE: mode === "deterministic" ? "demo" : "live",
+    PODO_DASHBOARD_MODE: "live",
     PODO_INCIDENT_CWD: root,
   };
 
@@ -145,26 +177,33 @@ export function createDemoConfiguration(
       "scenarios/cache-growth/fixtures/telemetry.json",
     ),
     scenarioPath: resolve(root, "scenarios/cache-growth/scenario.json"),
-    proofCommand: [bunExecutable, "run", "poc"],
-    coreCommand: [
+    smokeCommand: [bunExecutable, "run", "codex:smoke"],
+    coreCommand:
+      mode === "deterministic"
+        ? [bunExecutable, "run", "--cwd", resolve(root, "demo"), "core"]
+        : [bunExecutable, "run", "--cwd", resolve(root, "apps/core"), "start"],
+    dashboardBuildCommand: [
       bunExecutable,
       "run",
       "--cwd",
-      resolve(root, "apps/core"),
-      "start",
+      resolve(root, "apps/dashboard"),
+      "build",
     ],
     dashboardCommand: [
       bunExecutable,
       "run",
       "--cwd",
       resolve(root, "apps/dashboard"),
-      "dev",
+      "start",
       "--hostname",
       host,
       "--port",
       String(dashboardPort),
     ],
-    coreEnvironment,
+    coreEnvironment:
+      mode === "deterministic"
+        ? deterministicCoreEnvironment
+        : liveCoreEnvironment,
     dashboardEnvironment,
     host,
     corePort,
@@ -230,58 +269,40 @@ export async function runDemo(
 ): Promise<void> {
   const config = createDemoConfiguration(environment);
   const children: DemoChildProcess[] = [];
+  const lifecycle = createDemoLifecycle();
 
   try {
-    if (config.mode === "deterministic") {
-      await assertPortAvailable(config.host, config.dashboardPort, "Dashboard");
-      const proof = spawn(
-        config.proofCommand,
-        config.repositoryRoot,
-        config.coreEnvironment,
-      );
-      children.push(proof);
-      const exitCode = await proof.exited;
-      children.pop();
-      if (exitCode !== 0)
-        throw new DemoRuntimeError("Canonical POC gate failed");
-
-      const dashboard = spawn(
-        config.dashboardCommand,
-        config.repositoryRoot,
-        config.dashboardEnvironment,
-      );
-      children.push(dashboard);
-      await waitForEndpoint(
-        dashboard,
-        config.dashboardUrl,
-        "Dashboard",
-        60_000,
-      );
-
-      console.log("");
-      console.log("Podo judge demo is ready.");
-      console.log(`Dashboard: ${config.dashboardUrl}`);
-      console.log(
-        "Backend proof: canonical incident → evidence → diagnosis → tested fix → PR preview passed.",
-      );
-      console.log(
-        "GitHub writes are disabled; the explicit demo UI is deterministic and local-only.",
-      );
-      console.log("Press Ctrl-C to stop the Dashboard.");
-      await waitForShutdown(children);
-      return;
-    }
-
     await Promise.all([
       assertPortAvailable(config.host, config.corePort, "Core"),
       assertPortAvailable(config.host, config.dashboardPort, "Dashboard"),
       mkdir(config.scratchParent, { recursive: true }),
     ]);
 
-    const runtime = await inspectCodexRuntime(
-      config.coreEnvironment.CODEX_BIN ?? "codex",
+    const smoke = spawn(
+      config.smokeCommand,
+      config.repositoryRoot,
+      config.coreEnvironment,
     );
-    console.log(`Podo live demo: Codex ${runtime.version} (${runtime.binary})`);
+    children.push(smoke);
+    await requireSuccessfulExit(
+      smoke,
+      "Codex app-server smoke check",
+      lifecycle,
+    );
+    children.pop();
+
+    const dashboardBuild = spawn(
+      config.dashboardBuildCommand,
+      config.repositoryRoot,
+      config.dashboardEnvironment,
+    );
+    children.push(dashboardBuild);
+    await requireSuccessfulExit(
+      dashboardBuild,
+      "Dashboard production build",
+      lifecycle,
+    );
+    children.pop();
 
     const core = spawn(
       config.coreCommand,
@@ -289,50 +310,84 @@ export async function runDemo(
       config.coreEnvironment,
     );
     children.push(core);
-    await waitForEndpoint(core, `${config.coreUrl}/healthz`, "Core");
 
     const client = createPodoClient({ baseUrl: config.coreUrl });
-    const [telemetry, scenario] = await Promise.all([
-      Bun.file(config.telemetryPath).json(),
-      Bun.file(config.scenarioPath).json(),
-    ]);
-    const seeded = await seedCanonicalIncident(
-      client,
-      telemetry as readonly unknown[],
-      parseCanonicalScenario(scenario),
-    );
+    let incident: DetectedIncident;
+    let dashboardEnvironment = config.dashboardEnvironment;
+    let replay: ReplaySummary | null = null;
 
+    if (config.mode === "deterministic") {
+      const status = await waitForDemoCore(
+        core,
+        config.coreUrl,
+        lifecycle.signal,
+      );
+      const { incident: coreIncident } = await client.getIncident(
+        status.incidentId,
+      );
+      incident = coreIncident;
+      dashboardEnvironment = {
+        ...dashboardEnvironment,
+        PODO_INCIDENT_CWD: status.repositoryRoot,
+      };
+    } else {
+      await waitForEndpoint(
+        core,
+        `${config.coreUrl}/readyz`,
+        "Core",
+        lifecycle.signal,
+      );
+      const [telemetry, scenario] = await Promise.all([
+        Bun.file(config.telemetryPath).json(),
+        Bun.file(config.scenarioPath).json(),
+      ]);
+      const seeded = await seedCanonicalIncident(
+        client,
+        telemetry as readonly unknown[],
+        parseCanonicalScenario(scenario),
+      );
+      incident = seeded.incident;
+      replay = seeded.replay;
+    }
+
+    const incidentUrl = `${config.dashboardUrl}/?incident=${encodeURIComponent(incident.id)}`;
     const dashboard = spawn(
       config.dashboardCommand,
       config.repositoryRoot,
-      config.dashboardEnvironment,
+      dashboardEnvironment,
     );
     children.push(dashboard);
     await waitForEndpoint(
       dashboard,
-      `${config.dashboardUrl}/?incident=${encodeURIComponent(seeded.incident.id)}`,
+      incidentUrl,
       "Dashboard",
+      lifecycle.signal,
       60_000,
     );
 
     console.log("");
-    console.log("Podo live diagnostic demo is ready.");
     console.log(
-      `Dashboard: ${config.dashboardUrl}/?incident=${encodeURIComponent(seeded.incident.id)}`,
+      config.mode === "deterministic"
+        ? "Podo judge demo is ready."
+        : "Podo live diagnostic demo is ready.",
     );
+    console.log(`Dashboard: ${incidentUrl}`);
+    console.log(`Incident: ${incident.id} (${incident.affectedService})`);
+    if (replay)
+      console.log(
+        `Replay: ${replay.accepted} accepted events, ${replay.rejected} rejected`,
+      );
     console.log(
-      `Incident: ${seeded.incident.id} (${seeded.incident.affectedService})`,
-    );
-    console.log(
-      `Replay: ${seeded.replay.accepted} accepted events, ${seeded.replay.rejected} rejected`,
-    );
-    console.log(
-      "GitHub writes are disabled. Live Codex may correctly stop at issue fallback when code provenance is insufficient.",
+      config.mode === "deterministic"
+        ? "Core owns the complete local incident → evidence → diagnosis → tested fix → PR flow. GitHub delivery is deterministic and performs no external writes."
+        : "GitHub writes are disabled. Live Codex may correctly stop at issue fallback when code provenance is insufficient.",
     );
     console.log("Press Ctrl-C to stop Core and Dashboard.");
-
-    await waitForShutdown(children);
+    await waitForShutdown(children, lifecycle);
+  } catch (error) {
+    if (!lifecycle.signal.aborted) throw error;
   } finally {
+    lifecycle.dispose();
     await stopChildren(children);
   }
 }
@@ -351,20 +406,76 @@ function spawn(
   });
 }
 
+async function requireSuccessfulExit(
+  child: DemoChildProcess,
+  label: string,
+  lifecycle: DemoLifecycle,
+): Promise<void> {
+  const exitCode = await Promise.race([
+    child.exited,
+    aborted(lifecycle.signal).then(() => null),
+  ]);
+  if (exitCode === null) throw new DemoRuntimeError(`${label} interrupted`);
+  if (exitCode !== 0) throw new DemoRuntimeError(`${label} failed`);
+}
+
+async function waitForDemoCore(
+  child: DemoChildProcess,
+  coreUrl: string,
+  signal: AbortSignal,
+): Promise<DemoCoreStatus> {
+  let status: DemoCoreStatus | null = null;
+  await waitForEndpoint(
+    child,
+    `${coreUrl}/__demo/status`,
+    "Demo Core",
+    signal,
+    30_000,
+    async (response) => {
+      const value = (await response.json()) as unknown;
+      status = parseDemoCoreStatus(value);
+      return true;
+    },
+  );
+  if (!status) throw new DemoRuntimeError("Demo Core returned no status");
+  return status;
+}
+
+export function parseDemoCoreStatus(value: unknown): DemoCoreStatus {
+  if (
+    !isRecord(value) ||
+    value.status !== "ready" ||
+    (value.outcome !== "success" && value.outcome !== "validation_failure") ||
+    !isBoundedText(value.incidentId, 256) ||
+    !isBoundedText(value.repositoryRoot, 4096) ||
+    !isAbsolute(value.repositoryRoot) ||
+    !Number.isSafeInteger(value.deliveryCalls) ||
+    !Number.isSafeInteger(value.issueCalls)
+  ) {
+    throw new DemoRuntimeError("Demo Core readiness response is invalid");
+  }
+  return value as unknown as DemoCoreStatus;
+}
+
 async function waitForEndpoint(
   child: DemoChildProcess,
   url: string,
   label: string,
+  signal: AbortSignal,
   timeoutMs = 30_000,
+  validate: (response: Response) => Promise<boolean> = async () => true,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (signal.aborted)
+      throw new DemoRuntimeError(`${label} startup interrupted`);
     if (child.exitCode !== null)
       throw new DemoRuntimeError(`${label} exited before becoming ready`);
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
-      if (response.ok) return;
-    } catch {
+      if (response.ok && (await validate(response))) return;
+    } catch (error) {
+      if (error instanceof DemoRuntimeError) throw error;
       // Startup polling deliberately ignores transient connection errors.
     }
     await delay(100);
@@ -397,27 +508,34 @@ async function assertPortAvailable(
   });
 }
 
-async function waitForShutdown(children: DemoChildProcess[]): Promise<void> {
-  await new Promise<void>((resolvePromise, reject) => {
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const finish = (operation: () => void) => {
-      if (timer) clearInterval(timer);
+function createDemoLifecycle(): DemoLifecycle {
+  const controller = new AbortController();
+  const onSignal = () => controller.abort();
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  return {
+    signal: controller.signal,
+    dispose() {
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
-      operation();
-    };
-    const onSignal = () => finish(resolvePromise);
-    process.once("SIGINT", onSignal);
-    process.once("SIGTERM", onSignal);
-    timer = setInterval(() => {
-      if (children.some((child) => child.exitCode !== null)) {
-        finish(() =>
-          reject(new DemoRuntimeError("A demo process exited unexpectedly")),
-        );
-      }
-    }, 100);
-    timer.unref();
-  });
+    },
+  };
+}
+
+async function waitForShutdown(
+  children: DemoChildProcess[],
+  lifecycle: DemoLifecycle,
+): Promise<void> {
+  await Promise.race([
+    aborted(lifecycle.signal),
+    Promise.race(
+      children.map((child) =>
+        child.exited.then(() => {
+          throw new DemoRuntimeError("A demo process exited unexpectedly");
+        }),
+      ),
+    ),
+  ]);
 }
 
 async function stopChildren(children: DemoChildProcess[]): Promise<void> {
@@ -442,7 +560,7 @@ function sanitizeChildEnvironment(
 ): Record<string, string> {
   const sanitized: Record<string, string> = {};
   for (const [key, value] of Object.entries(environment)) {
-    if (typeof value === "string" && !sensitiveChildVariables.has(key))
+    if (typeof value === "string" && allowedChildVariables.has(key))
       sanitized[key] = value;
   }
   return sanitized;
@@ -470,6 +588,16 @@ function parseMode(value: string | undefined): "deterministic" | "live" {
   );
 }
 
+function parseOutcome(
+  value: string | undefined,
+): "success" | "validation_failure" {
+  if (value === undefined || value === "success") return "success";
+  if (value === "validation_failure") return "validation_failure";
+  throw new DemoConfigurationError(
+    "PODO_DEMO_OUTCOME must be success or validation_failure",
+  );
+}
+
 function normalizedAbsolutePath(value: string, name: string): string {
   if (!isAbsolute(value) || resolve(value) !== value)
     throw new DemoConfigurationError(
@@ -488,6 +616,13 @@ function isBoundedText(value: unknown, maximum: number): value is string {
     value.length > 0 &&
     value.length <= maximum &&
     value === value.trim()
+  );
+}
+
+function aborted(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolvePromise) =>
+    signal.addEventListener("abort", () => resolvePromise(), { once: true }),
   );
 }
 

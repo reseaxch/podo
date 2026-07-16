@@ -166,10 +166,11 @@ The judge-facing demo experience is also one command:
 bun run demo
 ```
 
-It first requires the complete canonical POC gate to pass, then starts the
-explicit local judge fixture at `/demo` for a deterministic presentation of the
-proven incident-to-PR flow. GitHub writes are disabled; the final visible
-artifact is the verified, reproducible PR preview. See
+It checks Codex compatibility, builds the production Dashboard, and starts one
+connected deterministic Core-backed flow. The visible incident, causal path,
+diagnosis, approvals, tested diff, delivery state, and audit all come through
+the typed Core API. GitHub delivery is deterministic and performs no external
+writes. See
 [`demo/README.md`](demo/README.md) for prerequisites, expected state, ports, and
 reset behavior.
 
