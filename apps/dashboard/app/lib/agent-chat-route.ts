@@ -4,6 +4,11 @@ import type {
   SendAgentChatMessageRequest,
 } from "@podo/contracts"
 
+import {
+  agentChatTransportFailure,
+  agentChatTransportFailureKind,
+} from "./agent-chat-transport"
+
 const maxRequestBytes = 16_384
 const allowedCoreErrors = new Set([
   "agent_chat_not_configured",
@@ -182,6 +187,7 @@ export function agentEventStream(
         controller.enqueue(encoder.encode(toSse(result.value)))
       } catch {
         await finalize()
+        controller.enqueue(encoder.encode(toTransportFailureSse()))
         controller.close()
       }
     },
@@ -202,4 +208,8 @@ export function agentEventStream(
 
 function toSse(event: AgentChatEvent): string {
   return `id: ${event.sequence}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`
+}
+
+function toTransportFailureSse(): string {
+  return `event: ${agentChatTransportFailureKind}\ndata: ${JSON.stringify(agentChatTransportFailure())}\n\n`
 }
