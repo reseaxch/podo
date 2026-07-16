@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
@@ -9,6 +9,35 @@ vi.mock("next/navigation", () => ({
 }))
 
 describe("IconRail utilities", () => {
+  it("opens the mobile navigation, exposes every primary route, and restores focus", async () => {
+    const user = userEvent.setup()
+    render(<IconRail />)
+
+    const trigger = screen.getByRole("button", {
+      name: "Open primary navigation",
+    })
+    await user.click(trigger)
+
+    const dialog = screen.getByRole("dialog", { name: "Primary navigation" })
+    expect(
+      within(dialog).getByRole("link", { name: "Overview" }),
+    ).toHaveAttribute("href", "/overview")
+    expect(
+      within(dialog).getByRole("link", { name: "Safety & approvals" }),
+    ).toHaveAttribute("href", "/safety")
+    expect(
+      within(dialog).getByRole("link", { name: "Settings" }),
+    ).toHaveAttribute("href", "/settings")
+
+    await user.keyboard("{Escape}")
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Primary navigation" }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(trigger).toHaveFocus()
+  })
+
   it("opens contextual help and switches to the command line", async () => {
     const user = userEvent.setup()
     render(<IconRail />)
@@ -44,5 +73,22 @@ describe("IconRail utilities", () => {
     expect(
       within(dialog).queryByRole("link", { name: /Open settings/ }),
     ).not.toBeInTheDocument()
+  })
+
+  it("opens the contextual Podo Agent from the floating trigger", async () => {
+    const user = userEvent.setup()
+    render(<IconRail />)
+
+    await user.click(screen.getByRole("button", { name: "Open Podo Agent" }))
+
+    const dialog = screen.getByRole("dialog", { name: "Podo Agent" })
+    expect(
+      screen.queryByRole("button", { name: "Open Podo Agent" }),
+    ).not.toBeInTheDocument()
+    expect(within(dialog).getByText("Project context")).toBeInTheDocument()
+    expect(within(dialog).getByText("podo-cloud")).toBeInTheDocument()
+    expect(within(dialog).getByText("All project evidence")).toBeInTheDocument()
+    expect(within(dialog).queryByText("/system-graph")).not.toBeInTheDocument()
+    expect(within(dialog).getByText("Read-only")).toBeInTheDocument()
   })
 })

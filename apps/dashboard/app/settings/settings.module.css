@@ -7,7 +7,7 @@
 .heading {
   display: flex;
   width: 100%;
-  max-width: 1680px;
+  max-width: var(--page-content-max);
   margin: 0 auto 18px;
   align-items: end;
   justify-content: space-between;
@@ -16,7 +16,7 @@
 .workspacePulse {
   display: grid;
   width: 100%;
-  max-width: 1680px;
+  max-width: var(--page-content-max);
   min-height: 72px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0 auto 14px;
@@ -141,7 +141,7 @@
 .layout {
   display: grid;
   width: 100%;
-  max-width: 1680px;
+  max-width: var(--page-content-max);
   min-height: min(650px, calc(100dvh - 278px));
   margin: 0 auto;
   grid-template-columns: 270px minmax(0, 1fr);

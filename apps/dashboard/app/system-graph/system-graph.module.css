@@ -1,13 +1,18 @@
 .page {
-  min-height: 100vh;
+  display: grid;
+  height: 100dvh;
+  min-height: 0;
   margin-left: var(--rail-width);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
   padding: calc(var(--topbar-height) + 24px) 24px 24px;
   background: var(--background);
 }
 
 .heading {
   display: flex;
-  max-width: 1680px;
+  width: 100%;
+  max-width: var(--page-content-max);
   margin: 0 auto 18px;
   align-items: end;
   justify-content: space-between;
@@ -95,7 +100,8 @@
 
 .contextBar {
   display: flex;
-  max-width: 1680px;
+  width: 100%;
+  max-width: var(--page-content-max);
   min-height: 49px;
   margin: 0 auto;
   align-items: center;
@@ -180,11 +186,12 @@
 
 .workspace {
   display: grid;
-  max-width: 1680px;
-  height: min(760px, calc(100vh - 206px));
-  min-height: 570px;
+  width: 100%;
+  max-width: var(--page-content-max);
+  height: auto;
+  min-height: 0;
   margin: 0 auto;
-  grid-template-columns: minmax(0, 1fr) 318px;
+  grid-template-columns: minmax(0, 1fr) clamp(330px, 21vw, 370px);
   overflow: hidden;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
@@ -216,6 +223,11 @@
 }
 .graphMeta strong {
   color: var(--primary);
+}
+.graphMetaActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .canvas {
@@ -313,6 +325,142 @@
   }
 }
 
+@keyframes graphNodeEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes graphEdgeEnter {
+  from {
+    opacity: 0;
+    stroke-dashoffset: 18;
+  }
+  to {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes edgeBeamMove {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes scrollEdgeDraw {
+  from {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+  to {
+    opacity: 0.32;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes selectedNodeGlow {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 32%, transparent);
+  }
+  55% {
+    box-shadow:
+      0 0 0 8px transparent,
+      0 12px 28px var(--shadow-color);
+  }
+  100% {
+    box-shadow: 0 10px 25px var(--shadow-color);
+  }
+}
+
+@keyframes inspectorEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(30px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes inspectorExit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(20px, 0, 0);
+  }
+}
+
+@keyframes causalLineEnter {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .node {
+    animation: graphNodeEnter 320ms var(--motion-ease-emphasized) both;
+  }
+  .edge path {
+    animation: graphEdgeEnter 420ms var(--motion-ease-standard) both;
+  }
+  .edge .edgeBeam {
+    animation: edgeBeamMove var(--edge-flow-duration, 4.8s) linear infinite;
+  }
+  .node[aria-pressed="true"] {
+    animation:
+      graphNodeEnter 320ms var(--motion-ease-emphasized) both,
+      selectedNodeGlow 620ms var(--motion-ease-emphasized) 320ms both;
+  }
+  .inspectorOpen {
+    animation: inspectorEnter 360ms var(--motion-ease-emphasized) both;
+  }
+  .inspectorClosed {
+    animation: inspectorExit 200ms var(--motion-ease-standard) both;
+  }
+  .causalFlow::before {
+    transform-origin: top;
+    animation: causalLineEnter 420ms var(--motion-ease-standard) both;
+  }
+  .causalFlow > span {
+    animation: graphNodeEnter 260ms var(--motion-ease-standard) both;
+  }
+  .causalFlow > span:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  .causalFlow > span:nth-child(3) {
+    animation-delay: 120ms;
+  }
+  .causalFlow > span:nth-child(n + 4) {
+    animation-delay: 180ms;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .edge .edgeReveal {
+      animation: scrollEdgeDraw linear both;
+      animation-timeline: view(block);
+      animation-range: entry 5% cover 38%;
+    }
+  }
+}
+
 .edges {
   position: absolute;
   inset: 0;
@@ -343,6 +491,51 @@
 .edge.critical marker path {
   fill: var(--critical);
 }
+.edge .edgeReveal {
+  stroke: color-mix(in srgb, var(--primary) 72%, transparent);
+  stroke-width: 2.4;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  opacity: 0.2;
+  filter: drop-shadow(
+    0 0 3px color-mix(in srgb, var(--primary) 38%, transparent)
+  );
+  pointer-events: none;
+}
+.edge .edgeBeam {
+  --edge-flow-duration: 4.8s;
+  --edge-beam-color: color-mix(in srgb, var(--graph-causal) 72%, white 28%);
+  stroke: var(--edge-beam-color);
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-dasharray: 0.085 0.915;
+  opacity: 0.12;
+  filter: blur(1px)
+    drop-shadow(
+      0 0 7px color-mix(in srgb, var(--graph-causal) 64%, transparent)
+    );
+  pointer-events: none;
+}
+.edge.warning .edgeBeam {
+  --edge-flow-duration: 3.7s;
+  --edge-beam-color: color-mix(in srgb, var(--graph-degraded) 82%, white 18%);
+  opacity: 0.34;
+}
+.edge.critical .edgeBeam {
+  --edge-flow-duration: 3s;
+  --edge-beam-color: color-mix(in srgb, var(--graph-critical) 82%, white 18%);
+  opacity: 0.42;
+}
+.edge .edgeBeam.edgeBeamActive {
+  --edge-flow-duration: 2.15s;
+  stroke: var(--edge-beam-color);
+  stroke-width: 3.2;
+  opacity: 0.72;
+  filter: blur(1.2px)
+    drop-shadow(
+      0 0 8px color-mix(in srgb, var(--edge-beam-color) 72%, transparent)
+    );
+}
 .dimmed {
   opacity: 0.14 !important;
 }
@@ -358,11 +551,11 @@
   gap: 7px 9px;
   padding: 11px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--verified);
+  border-left: 3px solid var(--graph-healthy);
   border-radius: 9px;
   text-align: left;
   color: var(--text);
-  background: var(--surface-elevated);
+  background: var(--graph-node-surface);
   box-shadow: 0 6px 18px
     color-mix(in srgb, var(--shadow-color) 55%, transparent);
   cursor: pointer;
@@ -384,13 +577,13 @@
   box-shadow: 0 10px 25px var(--shadow-color);
 }
 .node.degraded {
-  border-left-color: var(--warning);
+  border-left-color: var(--graph-degraded);
 }
 .node.critical {
-  border-left-color: var(--critical);
+  border-left-color: var(--graph-critical);
 }
 .node.changed {
-  border-left-color: var(--information);
+  border-left-color: var(--graph-changed);
 }
 
 .nodeIcon {
@@ -471,23 +664,19 @@
 }
 
 .zoomControls {
-  position: absolute;
-  z-index: 5;
-  right: 12px;
-  bottom: 48px;
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface-glass);
-  box-shadow: 0 5px 16px var(--shadow-color);
+  border-radius: 6px;
+  background: var(--surface);
 }
 .zoomControls button,
 .zoomControls span {
   display: grid;
-  height: 31px;
-  min-width: 32px;
+  height: 27px;
+  min-width: 28px;
   place-items: center;
   border: 0;
   border-left: 1px solid var(--border-soft);
@@ -505,12 +694,36 @@
   background: var(--surface-hover);
 }
 .zoomControls span {
-  min-width: 45px;
+  min-width: 40px;
   color: var(--muted);
   font-size: 9px;
+  font-variant-numeric: tabular-nums;
 }
 .zoomControls button:last-child {
-  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+}
+
+.panHint {
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 48px;
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  background: var(--surface-glass);
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--shadow-color) 48%, transparent);
+  font-size: 9px;
+  pointer-events: none;
 }
 
 .legend {
@@ -545,26 +758,26 @@
   border-radius: 2px;
 }
 .legend .legendHealthy {
-  color: var(--verified);
-  background: var(--verified);
+  color: var(--graph-healthy);
+  background: var(--graph-healthy);
 }
 .legend .legendDegraded {
-  color: var(--warning);
-  background: var(--warning);
+  color: var(--graph-degraded);
+  background: var(--graph-degraded);
 }
 .legend .legendCritical {
-  color: var(--critical);
-  background: var(--critical);
+  color: var(--graph-critical);
+  background: var(--graph-critical);
 }
 .legend .legendChanged {
-  color: var(--information);
-  background: var(--information);
+  color: var(--graph-changed);
+  background: var(--graph-changed);
 }
 .legend .legendCausal {
   width: 19px;
   height: 0;
   border: 0;
-  border-top: 2px solid var(--critical);
+  border-top: 2px solid var(--graph-causal);
   border-radius: 0;
   background: transparent;
 }
@@ -573,10 +786,23 @@
 }
 
 .inspector {
+  display: grid;
   min-width: 0;
-  overflow-y: auto;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
   border-left: 1px solid var(--border);
   background: var(--surface);
+  will-change: transform, opacity;
+}
+.inspectorBody {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.inspectorClosed {
+  pointer-events: none;
 }
 .inspector > header {
   display: grid;
@@ -903,7 +1129,11 @@
 .inspectorActions {
   display: grid;
   gap: 7px;
-  padding: 4px 15px 16px;
+  padding: 11px 15px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 -10px 24px
+    color-mix(in srgb, var(--shadow-color) 36%, transparent);
 }
 .inspectorActions button,
 .inspectorActions a {
@@ -1252,7 +1482,11 @@
 
 @media (max-width: 820px) {
   .page {
+    display: block;
+    height: auto;
+    min-height: 100dvh;
     margin-left: 0;
+    overflow: visible;
     padding: 78px 12px 12px;
   }
   .heading {
@@ -1299,6 +1533,14 @@
   .inspector .causalBlock {
     display: none;
   }
+  .inspectorActions {
+    position: static;
+    z-index: 2;
+    bottom: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-top: 10px;
+    background: var(--surface);
+  }
   .graphMeta span:last-child {
     display: none;
   }
@@ -1323,7 +1565,7 @@
   .segmented button {
     padding-inline: 8px;
   }
-  .filterButton:last-child {
+  .filterButton:last-of-type {
     display: none;
   }
   .workspace {
@@ -1338,10 +1580,6 @@
   .legend span:last-child {
     display: none;
   }
-  .zoomControls {
-    bottom: 47px;
-  }
-
   .traceBackdrop {
     align-items: end;
     padding: 8px;

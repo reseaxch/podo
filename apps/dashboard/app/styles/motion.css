@@ -1,0 +1,350 @@
+:root {
+  --motion-duration-fast: 140ms;
+  --motion-duration-normal: 260ms;
+  --motion-duration-slow: 420ms;
+  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-distance-sm: 6px;
+  --motion-distance-md: 12px;
+}
+
+@keyframes motion-page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-distance-md), 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes motion-item-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-distance-sm), 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes motion-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes motion-backdrop-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-dialog-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes motion-dialog-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.99);
+  }
+}
+
+@keyframes motion-drawer-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(-14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes motion-drawer-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-10px, 0, 0);
+  }
+}
+
+@keyframes motion-toast-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes motion-toast-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.98);
+  }
+}
+
+@keyframes motion-status-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--verified) 24%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+@keyframes motion-view-old {
+  to {
+    opacity: 0;
+    transform: scale(0.995);
+  }
+}
+
+@keyframes motion-view-new {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.995);
+  }
+}
+
+::view-transition-old(root) {
+  animation: motion-view-old 180ms ease-in both;
+}
+
+::view-transition-new(root) {
+  animation: motion-view-new 260ms var(--motion-ease-emphasized) both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell[data-ready="true"] > section,
+  .production-shell[data-ready="true"] > section,
+  .page-state-card {
+    animation: motion-page-enter var(--motion-duration-slow)
+      var(--motion-ease-emphasized) both;
+  }
+
+  .motion-list-item,
+  .incident-row,
+  .evidence-row,
+  .activity-row,
+  [class*="decisionList"] > button,
+  [class*="investigationList"] > button,
+  [class*="activityList"] > a,
+  [class*="queueList"] > button,
+  [class*="historyRows"] > article {
+    animation: motion-item-enter var(--motion-duration-normal)
+      var(--motion-ease-standard) both;
+  }
+
+  .motion-list-item:nth-child(2),
+  .incident-row:nth-child(2),
+  .evidence-row:nth-child(2) {
+    animation-delay: 30ms;
+  }
+  .motion-list-item:nth-child(3),
+  .incident-row:nth-child(3),
+  .evidence-row:nth-child(3) {
+    animation-delay: 55ms;
+  }
+  .motion-list-item:nth-child(4),
+  .incident-row:nth-child(4),
+  .evidence-row:nth-child(4) {
+    animation-delay: 80ms;
+  }
+  .motion-list-item:nth-child(n + 5),
+  .incident-row:nth-child(n + 5),
+  .evidence-row:nth-child(n + 5) {
+    animation-delay: 100ms;
+  }
+
+  .toast,
+  [class*="toast"][role="status"] {
+    animation: motion-toast-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) both;
+  }
+
+  .toast[data-motion-state="exiting"],
+  [class*="toast"][role="status"][data-motion-state="exiting"] {
+    animation: motion-toast-exit var(--motion-duration-fast) ease-in both;
+  }
+
+  .shell-overlay-backdrop,
+  .diagnosis-backdrop,
+  [class*="dialogBackdrop"],
+  [class*="traceBackdrop"] {
+    animation: motion-backdrop-enter var(--motion-duration-normal) ease-out both;
+  }
+
+  .shell-overlay,
+  .diagnosis-panel,
+  [class*="dialogBackdrop"] > [role="dialog"],
+  [class*="traceBackdrop"] > [role="dialog"] {
+    animation: motion-dialog-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) both;
+  }
+
+  .shell-overlay-backdrop[data-motion-state="exiting"] {
+    animation: motion-backdrop-exit var(--motion-duration-fast) ease-in both;
+  }
+
+  .shell-overlay-backdrop[data-motion-state="exiting"] .shell-overlay {
+    animation: motion-dialog-exit var(--motion-duration-fast) ease-in both;
+  }
+
+  .mobile-nav-backdrop {
+    animation: motion-backdrop-enter var(--motion-duration-normal) ease-out both;
+  }
+
+  .mobile-nav-dialog {
+    animation: motion-drawer-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) both;
+  }
+
+  .mobile-nav-backdrop[data-motion-state="exiting"] {
+    animation: motion-backdrop-exit var(--motion-duration-fast) ease-in both;
+  }
+
+  .mobile-nav-dialog[data-motion-state="exiting"] {
+    animation: motion-drawer-exit var(--motion-duration-fast) ease-in both;
+  }
+
+  .metric-signal.live,
+  [class*="live"] > i:only-child,
+  .production-connection i,
+  .production-status i {
+    animation: motion-status-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+button:not(:disabled),
+a,
+[role="tab"] {
+  transition:
+    color var(--motion-duration-fast) ease,
+    background-color var(--motion-duration-fast) ease,
+    border-color var(--motion-duration-fast) ease,
+    box-shadow var(--motion-duration-fast) ease,
+    opacity var(--motion-duration-fast) ease,
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+button:not(:disabled):active,
+a:active {
+  transform: translate3d(0, 1px, 0) scale(0.985);
+}
+
+[role="tab"][aria-selected="true"],
+[aria-pressed="true"] {
+  transition-duration: var(--motion-duration-normal);
+}
+
+.animated-number {
+  display: inline-block;
+  min-width: 1ch;
+  font-variant-numeric: tabular-nums;
+}
+
+@property --motion-border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0turn;
+}
+
+.motion-border-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: transparent !important;
+}
+
+.motion-border-cta::before,
+.motion-border-cta::after {
+  position: absolute;
+  content: "";
+  pointer-events: none;
+}
+
+.motion-border-cta::before {
+  z-index: -2;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--motion-border-angle),
+    color-mix(in srgb, var(--primary) 48%, white) 0 76%,
+    color-mix(in srgb, var(--primary) 24%, white) 84%,
+    white 88%,
+    color-mix(in srgb, var(--primary) 24%, white) 92%,
+    color-mix(in srgb, var(--primary) 48%, white) 100%
+  );
+}
+
+.motion-border-cta::after {
+  z-index: -1;
+  inset: 1px;
+  border-radius: inherit;
+  background: var(--primary-solid);
+}
+
+@keyframes motionBorderOrbit {
+  to {
+    --motion-border-angle: 1turn;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .motion-border-cta::before {
+    animation: motionBorderOrbit 3.2s linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-border-cta::before {
+    animation: none !important;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-delay: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+  }
+}

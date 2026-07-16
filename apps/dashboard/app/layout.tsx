@@ -12,11 +12,16 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("podo-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem("podo-theme-v2");document.documentElement.dataset.theme=t==="light"?"light":"dark"}catch(e){document.documentElement.dataset.theme="dark"}})()`,
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var r=document.documentElement;r.dataset.inputModality="pointer";addEventListener("pointerdown",function(){r.dataset.inputModality="pointer"},true);addEventListener("keydown",function(e){if(!e.metaKey&&!e.ctrlKey&&!e.altKey)r.dataset.inputModality="keyboard"},true)})()`,
           }}
         />
       </head>

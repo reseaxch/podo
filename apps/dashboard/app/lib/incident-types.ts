@@ -27,6 +27,7 @@ export type IconName =
   | "moon"
   | "question"
   | "rocket-launch"
+  | "robot"
   | "share-network"
   | "shield-check"
   | "squares-four"

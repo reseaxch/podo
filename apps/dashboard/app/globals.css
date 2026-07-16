@@ -1,5 +1,7 @@
 @import "./styles/base.css";
+@import "./styles/motion.css";
 @import "./styles/shell.css";
+@import "./styles/agent.css";
 @import "./styles/evidence.css";
 @import "./styles/diagnosis.css";
 @import "./styles/graph.css";

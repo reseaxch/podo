@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { useToast } from "../../hooks/use-toast"
+import { runViewTransition } from "../../lib/view-transition"
 import type { AuditEvent, AuditLogViewModel } from "../../lib/audit-types"
 import {
   auditEventIncidentTab,
@@ -57,7 +58,7 @@ export function AuditLog({
   const [pageSize, setPageSize] = useState(defaultPageSize)
   const [page, setPage] = useState(1)
   const [live, setLive] = useState(true)
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
 
   const categories = useMemo(
     () => [
@@ -276,10 +277,12 @@ export function AuditLog({
                   <button
                     aria-selected={view === item}
                     key={item}
-                    onClick={() => {
-                      setView(item)
-                      setPage(1)
-                    }}
+                    onClick={() =>
+                      void runViewTransition(() => {
+                        setView(item)
+                        setPage(1)
+                      })
+                    }
                     role="tab"
                     type="button"
                   >
@@ -298,30 +301,36 @@ export function AuditLog({
                 <SelectMenu
                   label="Filter by category"
                   leadingIcon="stack"
-                  onValueChange={(value) => {
-                    setCategory(value)
-                    setPage(1)
-                  }}
+                  onValueChange={(value) =>
+                    void runViewTransition(() => {
+                      setCategory(value)
+                      setPage(1)
+                    })
+                  }
                   options={categories}
                   value={category}
                 />
                 <SelectMenu
                   label="Filter by actor"
                   leadingIcon="terminal-window"
-                  onValueChange={(value) => {
-                    setActor(value)
-                    setPage(1)
-                  }}
+                  onValueChange={(value) =>
+                    void runViewTransition(() => {
+                      setActor(value)
+                      setPage(1)
+                    })
+                  }
                   options={actors}
                   value={actor}
                 />
                 <SelectMenu
                   label="Filter by outcome"
                   leadingIcon="check-circle"
-                  onValueChange={(value) => {
-                    setOutcome(value)
-                    setPage(1)
-                  }}
+                  onValueChange={(value) =>
+                    void runViewTransition(() => {
+                      setOutcome(value)
+                      setPage(1)
+                    })
+                  }
                   options={outcomes}
                   value={outcome}
                 />
@@ -356,12 +365,12 @@ export function AuditLog({
                       <tr
                         aria-label={`Inspect ${event.id}: ${event.title}`}
                         aria-selected={selectedEvent?.id === event.id}
-                        className={
+                        className={`${styles.motionRow} ${
                           selectedEvent?.id === event.id
                             ? styles.selectedTableRow
-                            : undefined
-                        }
-                        key={event.id}
+                            : ""
+                        }`}
+                        key={`${view}-${category}-${actor}-${outcome}-${safePage}-${event.id}`}
                         onClick={() => setSelectedId(event.id)}
                         onKeyDown={(keyboardEvent) => {
                           if (
@@ -372,6 +381,7 @@ export function AuditLog({
                             setSelectedId(event.id)
                           }
                         }}
+                        style={{ viewTransitionName: `audit-${event.id}` }}
                         tabIndex={0}
                       >
                         <td className={styles.tableTime}>
@@ -586,7 +596,7 @@ export function AuditLog({
       </section>
 
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" data-motion-state={toastState} role="status">
           <Icon name="check-circle" size={18} /> {toast}
         </div>
       ) : null}

@@ -60,7 +60,7 @@ export function EvidenceSources({
   const [actionError, setActionError] = useState<string | null>(null)
   const [dialogSourceId, setDialogSourceId] = useState<string | null>(null)
   const [catalogOpen, setCatalogOpen] = useState(false)
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
 
   const categories = useMemo(
     () => Array.from(new Set(sources.map((source) => source.category))).sort(),
@@ -383,7 +383,7 @@ export function EvidenceSources({
         />
       ) : null}
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" data-motion-state={toastState} role="status">
           <Icon name="check-circle" /> {toast}
         </div>
       ) : null}

@@ -2,11 +2,13 @@ import type { AuditEvent } from "./audit-types"
 import type { IncidentTab } from "./incident-types"
 
 export function incidentWorkspaceHref({
+  anchor = true,
   eventId,
   incidentId,
   nodeId,
   tab,
 }: {
+  anchor?: boolean
   eventId?: string
   incidentId: string
   nodeId?: string
@@ -15,7 +17,7 @@ export function incidentWorkspaceHref({
   const params = new URLSearchParams({ incident: incidentId, tab })
   if (eventId) params.set("event", eventId)
   if (nodeId) params.set("node", nodeId)
-  return `/?${params.toString()}#workspace`
+  return `/?${params.toString()}${anchor ? "#workspace" : ""}`
 }
 
 export function auditEventIncidentTab(event: AuditEvent): IncidentTab {

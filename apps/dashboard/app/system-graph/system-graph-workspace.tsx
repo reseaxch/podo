@@ -13,10 +13,12 @@ import {
 
 import { IconRail } from "../components/shell/icon-rail"
 import { Topbar } from "../components/shell/topbar"
+import { AnimatedNumber } from "../components/ui/animated-number"
 import { Icon } from "../components/ui/pictogram"
 import { useToast } from "../hooks/use-toast"
 import { incidentWorkspaceHref } from "../lib/incident-links"
 import type { IconName } from "../lib/incident-types"
+import { runViewTransition } from "../lib/view-transition"
 import type {
   GraphHealth,
   GraphLayer,
@@ -76,6 +78,7 @@ export function SystemGraphWorkspace({
   const [issuesOnly, setIssuesOnly] = useState(false)
   const [selectedId, setSelectedId] = useState("checkout-service")
   const [detailsOpen, setDetailsOpen] = useState(true)
+  const [inspectorMounted, setInspectorMounted] = useState(true)
   const [inspectorEngaged, setInspectorEngaged] = useState(false)
   const [tracesOpen, setTracesOpen] = useState(false)
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null)
@@ -91,7 +94,8 @@ export function SystemGraphWorkspace({
     originY: number
   } | null>(null)
   const autoFitRef = useRef(true)
-  const { toast, showToast } = useToast()
+  const inspectorExitRef = useRef<number | null>(null)
+  const { toast, toastState, showToast } = useToast()
   const activeWindow = graph.windows[windowIndex] ?? {
     label: "Last 30m",
     traces: graph.stats.traces,
@@ -147,6 +151,35 @@ export function SystemGraphWorkspace({
       return [{ edge, node, direction: outgoing ? "outgoing" : "incoming" }]
     })
   }, [graph.edges, graph.nodes, selected, visibleIds])
+
+  function openNode(node: SystemGraphNode) {
+    if (inspectorExitRef.current !== null) {
+      window.clearTimeout(inspectorExitRef.current)
+      inspectorExitRef.current = null
+    }
+    setSelectedId(node.id)
+    setInspectorMounted(true)
+    setDetailsOpen(true)
+    setInspectorEngaged(true)
+    setTracesOpen(false)
+    setSelectedTraceId(node.traces?.[0]?.id ?? null)
+  }
+
+  function closeInspector() {
+    setDetailsOpen(false)
+    inspectorExitRef.current = window.setTimeout(() => {
+      setInspectorMounted(false)
+      inspectorExitRef.current = null
+    }, 220)
+  }
+
+  useEffect(
+    () => () => {
+      if (inspectorExitRef.current !== null)
+        window.clearTimeout(inspectorExitRef.current)
+    },
+    [],
+  )
 
   const fitGraph = useCallback(() => {
     const canvas = canvasRef.current
@@ -315,15 +348,21 @@ export function SystemGraphWorkspace({
           </div>
           <div className={styles.summary} aria-label="Graph summary">
             <span>
-              <strong>{graph.stats.services}</strong>
+              <strong>
+                <AnimatedNumber value={graph.stats.services} />
+              </strong>
               <small>components</small>
             </span>
             <span className={styles.alertMetric}>
-              <strong>{graph.stats.unhealthy}</strong>
+              <strong>
+                <AnimatedNumber value={graph.stats.unhealthy} />
+              </strong>
               <small>unhealthy</small>
             </span>
             <span>
-              <strong>{graph.stats.changes}</strong>
+              <strong>
+                <AnimatedNumber value={graph.stats.changes} />
+              </strong>
               <small>recent change</small>
             </span>
             <span>
@@ -352,7 +391,7 @@ export function SystemGraphWorkspace({
                 <button
                   aria-pressed={layer === item}
                   key={item}
-                  onClick={() => setLayer(item)}
+                  onClick={() => void runViewTransition(() => setLayer(item))}
                   type="button"
                 >
                   {item === "all"
@@ -364,7 +403,11 @@ export function SystemGraphWorkspace({
             <button
               aria-pressed={issuesOnly}
               className={styles.filterButton}
-              onClick={() => setIssuesOnly((current) => !current)}
+              onClick={() =>
+                void runViewTransition(() =>
+                  setIssuesOnly((current) => !current),
+                )
+              }
               type="button"
             >
               <i className={styles.issueDot} /> Issues only
@@ -372,9 +415,11 @@ export function SystemGraphWorkspace({
             <button
               className={styles.filterButton}
               onClick={() =>
-                setWindowIndex(
-                  (current) =>
-                    (current + 1) % Math.max(graph.windows.length, 1),
+                void runViewTransition(() =>
+                  setWindowIndex(
+                    (current) =>
+                      (current + 1) % Math.max(graph.windows.length, 1),
+                  ),
                 )
               }
               type="button"
@@ -385,7 +430,7 @@ export function SystemGraphWorkspace({
         </div>
 
         <div
-          className={`${styles.workspace} ${!detailsOpen ? styles.workspaceFull : ""}`}
+          className={`${styles.workspace} ${!inspectorMounted ? styles.workspaceFull : ""}`}
         >
           <section
             className={styles.graphPanel}
@@ -402,11 +447,38 @@ export function SystemGraphWorkspace({
                 }{" "}
                 relations
               </span>
-              {normalizedQuery ? (
-                <strong>{matchingIds.size} matches</strong>
-              ) : (
-                <span>Drag to pan · scroll to zoom</span>
-              )}
+              <div className={styles.graphMetaActions}>
+                {normalizedQuery ? (
+                  <strong>{matchingIds.size} matches</strong>
+                ) : null}
+                <div
+                  className={styles.zoomControls}
+                  aria-label="Graph viewport controls"
+                >
+                  <button
+                    aria-label="Zoom out"
+                    onClick={() => setZoom(viewport.zoom - 0.1)}
+                    type="button"
+                  >
+                    −
+                  </button>
+                  <span>{Math.round(viewport.zoom * 100)}%</span>
+                  <button
+                    aria-label="Zoom in"
+                    onClick={() => setZoom(viewport.zoom + 0.1)}
+                    type="button"
+                  >
+                    +
+                  </button>
+                  <button
+                    aria-label="Fit graph"
+                    onClick={fitGraph}
+                    type="button"
+                  >
+                    <Icon name="graph" size={13} /> Fit
+                  </button>
+                </div>
+              </div>
             </div>
             <div
               aria-label="Pan and zoom system graph"
@@ -469,14 +541,31 @@ export function SystemGraphWorkspace({
                       normalizedQuery &&
                       !matchingIds.has(from.id) &&
                       !matchingIds.has(to.id)
+                    const activeEdge =
+                      edge.from === resolvedSelectedId ||
+                      edge.to === resolvedSelectedId
+                    const path = graphPath(from, to)
                     return (
                       <g
                         className={`${styles.edge} ${styles[edge.health]} ${dimmed ? styles.dimmed : ""}`}
                         key={edge.id}
                       >
                         <path
-                          d={graphPath(from, to)}
+                          className={styles.edgeTrack}
+                          d={path}
                           markerEnd="url(#graph-arrow)"
+                        />
+                        <path
+                          aria-hidden="true"
+                          className={styles.edgeReveal}
+                          d={path}
+                          pathLength={1}
+                        />
+                        <path
+                          aria-hidden="true"
+                          className={`${styles.edgeBeam} ${activeEdge ? styles.edgeBeamActive : ""}`}
+                          d={path}
+                          pathLength={1}
                         />
                       </g>
                     )
@@ -487,14 +576,8 @@ export function SystemGraphWorkspace({
                   <button
                     aria-pressed={resolvedSelectedId === node.id}
                     className={`${styles.node} ${styles[node.health] ?? ""} ${normalizedQuery && !matchingIds.has(node.id) ? styles.dimmed : ""}`}
-                    key={node.id}
-                    onClick={() => {
-                      setSelectedId(node.id)
-                      setDetailsOpen(true)
-                      setInspectorEngaged(true)
-                      setTracesOpen(false)
-                      setSelectedTraceId(node.traces?.[0]?.id ?? null)
-                    }}
+                    key={`${layer}-${issuesOnly}-${node.id}`}
+                    onClick={() => openNode(node)}
                     style={{ left: node.x, top: node.y }}
                     type="button"
                   >
@@ -519,29 +602,10 @@ export function SystemGraphWorkspace({
                 ))}
               </div>
 
-              <div
-                className={styles.zoomControls}
-                aria-label="Graph viewport controls"
-              >
-                <button
-                  aria-label="Zoom in"
-                  onClick={() => setZoom(viewport.zoom + 0.1)}
-                  type="button"
-                >
-                  +
-                </button>
-                <span>{Math.round(viewport.zoom * 100)}%</span>
-                <button
-                  aria-label="Zoom out"
-                  onClick={() => setZoom(viewport.zoom - 0.1)}
-                  type="button"
-                >
-                  −
-                </button>
-                <button aria-label="Fit graph" onClick={fitGraph} type="button">
-                  Fit
-                </button>
-              </div>
+              <span className={styles.panHint}>
+                <Icon name="share-network" size={14} /> Drag to pan · scroll to
+                zoom
+              </span>
 
               <div className={styles.legend} aria-label="Graph legend">
                 <span>
@@ -564,10 +628,13 @@ export function SystemGraphWorkspace({
             </div>
           </section>
 
-          {detailsOpen && selected ? (
+          {inspectorMounted && selected ? (
             <aside
-              className={`${styles.inspector} ${!inspectorEngaged ? styles.inspectorInitial : ""}`}
+              aria-hidden={!detailsOpen}
               aria-label="Node details"
+              className={`${styles.inspector} ${detailsOpen ? styles.inspectorOpen : styles.inspectorClosed} ${!inspectorEngaged ? styles.inspectorInitial : ""}`}
+              inert={!detailsOpen}
+              key={selected.id}
             >
               <header>
                 <div
@@ -583,108 +650,109 @@ export function SystemGraphWorkspace({
                 </div>
                 <button
                   aria-label="Close node details"
-                  onClick={() => setDetailsOpen(false)}
+                  onClick={closeInspector}
                   type="button"
                 >
                   <Icon name="x" size={15} />
                 </button>
               </header>
-              <div className={styles.healthStrip}>
-                <span>
-                  <i className={styles[selected.health]} />{" "}
-                  {healthLabels[selected.health]}
-                </span>
-                <small>Updated {selected.updated}</small>
-              </div>
-              <p className={styles.description}>{selected.description}</p>
-
-              <dl className={styles.nodeMeta} aria-label="Node ownership">
-                <div>
-                  <dt>Owner</dt>
-                  <dd>{selected.owner}</dd>
-                </div>
-                <div>
-                  <dt>Layer</dt>
-                  <dd>{selected.layer}</dd>
-                </div>
-              </dl>
-
-              <section className={styles.metricGrid} aria-label="Node metrics">
-                {selected.metrics.map((metric) => (
-                  <span key={metric.label}>
-                    <small>{metric.label}</small>
-                    <strong>{metric.value}</strong>
-                    {metric.trend ? <em>{metric.trend}</em> : null}
+              <div className={styles.inspectorBody}>
+                <div className={styles.healthStrip}>
+                  <span>
+                    <i className={styles[selected.health]} />{" "}
+                    {healthLabels[selected.health]}
                   </span>
-                ))}
-              </section>
-
-              <section className={styles.evidenceBlock}>
-                <div className={styles.sectionTitle}>
-                  <span>Correlated evidence</span>
-                  <small>{selected.evidence.length} signals</small>
+                  <small>Updated {selected.updated}</small>
                 </div>
-                {selected.evidence.map((item) => (
-                  <div className={styles.evidenceRow} key={item.label}>
-                    <span>
-                      <i className={styles[item.tone]} /> {item.label}
+                <p className={styles.description}>{selected.description}</p>
+
+                <dl className={styles.nodeMeta} aria-label="Node ownership">
+                  <div>
+                    <dt>Owner</dt>
+                    <dd>{selected.owner}</dd>
+                  </div>
+                  <div>
+                    <dt>Layer</dt>
+                    <dd>{selected.layer}</dd>
+                  </div>
+                </dl>
+
+                <section
+                  className={styles.metricGrid}
+                  aria-label="Node metrics"
+                >
+                  {selected.metrics.map((metric) => (
+                    <span key={metric.label}>
+                      <small>{metric.label}</small>
+                      <strong>{metric.value}</strong>
+                      {metric.trend ? <em>{metric.trend}</em> : null}
                     </span>
-                    <strong>{item.value}</strong>
-                  </div>
-                ))}
-              </section>
-
-              {selectedConnections.length ? (
-                <section className={styles.connectionBlock}>
-                  <div className={styles.sectionTitle}>
-                    <span>Connected topology</span>
-                    <small>{selectedConnections.length} relations</small>
-                  </div>
-                  <div className={styles.connectionList}>
-                    {selectedConnections.map(({ direction, edge, node }) => (
-                      <button
-                        key={edge.id}
-                        onClick={() => {
-                          setSelectedId(node.id)
-                          setInspectorEngaged(true)
-                          setTracesOpen(false)
-                        }}
-                        type="button"
-                      >
-                        <span className={styles.connectionIcon}>
-                          <Icon name={nodeIcons[node.kind]} size={14} />
-                        </span>
-                        <span>
-                          <strong>{node.label}</strong>
-                          <small>
-                            {direction === "incoming" ? "From" : "To"} ·{" "}
-                            {edge.relation.replaceAll("-", " ")}
-                          </small>
-                        </span>
-                        <Icon name="caret-right" size={13} />
-                      </button>
-                    ))}
-                  </div>
+                  ))}
                 </section>
-              ) : null}
 
-              {selected.causalContext?.length ? (
-                <section className={styles.causalBlock}>
+                <section className={styles.evidenceBlock}>
                   <div className={styles.sectionTitle}>
-                    <span>Why it matters</span>
-                    <small>causal context</small>
+                    <span>Correlated evidence</span>
+                    <small>{selected.evidence.length} signals</small>
                   </div>
-                  <div className={styles.causalFlow}>
-                    {selected.causalContext.map((step, index) => (
-                      <span key={`${step.label}-${step.value}`}>
-                        <i>{index + 1}</i>
-                        <b>{step.label}</b>
-                        <small>{step.value}</small>
+                  {selected.evidence.map((item) => (
+                    <div className={styles.evidenceRow} key={item.label}>
+                      <span>
+                        <i className={styles[item.tone]} /> {item.label}
                       </span>
-                    ))}
-                  </div>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
                 </section>
-              ) : null}
+
+                {selectedConnections.length ? (
+                  <section className={styles.connectionBlock}>
+                    <div className={styles.sectionTitle}>
+                      <span>Connected topology</span>
+                      <small>{selectedConnections.length} relations</small>
+                    </div>
+                    <div className={styles.connectionList}>
+                      {selectedConnections.map(({ direction, edge, node }) => (
+                        <button
+                          key={edge.id}
+                          onClick={() => openNode(node)}
+                          type="button"
+                        >
+                          <span className={styles.connectionIcon}>
+                            <Icon name={nodeIcons[node.kind]} size={14} />
+                          </span>
+                          <span>
+                            <strong>{node.label}</strong>
+                            <small>
+                              {direction === "incoming" ? "From" : "To"} ·{" "}
+                              {edge.relation.replaceAll("-", " ")}
+                            </small>
+                          </span>
+                          <Icon name="caret-right" size={13} />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                {selected.causalContext?.length ? (
+                  <section className={styles.causalBlock}>
+                    <div className={styles.sectionTitle}>
+                      <span>Why it matters</span>
+                      <small>causal context</small>
+                    </div>
+                    <div className={styles.causalFlow}>
+                      {selected.causalContext.map((step, index) => (
+                        <span key={`${step.label}-${step.value}`}>
+                          <i>{index + 1}</i>
+                          <b>{step.label}</b>
+                          <small>{step.value}</small>
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+              </div>
 
               {selected.traces?.length || selected.incidentId ? (
                 <div className={styles.inspectorActions}>
@@ -836,7 +904,11 @@ export function SystemGraphWorkspace({
       ) : null}
 
       {toast ? (
-        <div className={styles.toast} role="status">
+        <div
+          className={styles.toast}
+          data-motion-state={toastState}
+          role="status"
+        >
           <Icon name="check-circle" size={17} /> {toast}
         </div>
       ) : null}

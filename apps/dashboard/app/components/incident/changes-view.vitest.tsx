@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
@@ -72,6 +72,11 @@ describe("ChangesView remediation boundary", () => {
     expect(
       remediationController.approveAndCreatePullRequest,
     ).not.toHaveBeenCalled()
+    const timeline = screen.getByRole("region", {
+      name: "Incident to pull request progress",
+    })
+    expect(within(timeline).getByText("Decision required")).toBeVisible()
+    expect(within(timeline).getByText("Created after approval")).toBeVisible()
 
     await user.click(
       screen.getByRole("button", { name: "Approve & create PR" }),
@@ -84,6 +89,8 @@ describe("ChangesView remediation boundary", () => {
       remediationId: "rem_inc_042",
     })
     expect(await screen.findByText("PR #1842 created")).toBeVisible()
+    expect(within(timeline).getByText("Approved")).toBeVisible()
+    expect(within(timeline).getByText("PR #1842")).toBeVisible()
   })
 
   it("fails closed when the controller rejects approval", async () => {

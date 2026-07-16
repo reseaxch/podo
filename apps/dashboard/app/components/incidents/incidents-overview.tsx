@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 
 import { useToast } from "../../hooks/use-toast"
@@ -39,11 +40,12 @@ export function IncidentsOverview({
 }: {
   overview: IncidentOverviewViewModel
 }) {
+  const router = useRouter()
   const [filter, setFilter] = useState<ViewFilter>("Active")
   const [service, setService] = useState("All services")
   const [query, setQuery] = useState("")
   const [page, setPage] = useState(1)
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
 
   const services = useMemo(
     () => [
@@ -78,13 +80,10 @@ export function IncidentsOverview({
   ).length
 
   function openIncident(incident: IncidentSummary) {
-    if (incident.hasWorkspace) {
-      window.location.assign(
-        incidentWorkspaceHref({ incidentId: incident.id, tab: "evidence" }),
-      )
-      return
-    }
-    showToast(`${incident.id} detail is waiting for backend data`)
+    if (!incident.hasWorkspace) return
+    router.push(
+      incidentWorkspaceHref({ incidentId: incident.id, tab: "evidence" }),
+    )
   }
 
   return (
@@ -192,14 +191,18 @@ export function IncidentsOverview({
             </div>
             {visibleIncidents.map((incident) => (
               <button
-                className="incident-row"
-                key={incident.id}
+                aria-label={
+                  incident.hasWorkspace
+                    ? `Open ${incident.id}: ${incident.title}`
+                    : `${incident.id}: ${incident.title}. Workspace unavailable`
+                }
+                className={`incident-row ${incident.hasWorkspace ? "" : "incident-row-unavailable"}`}
+                disabled={!incident.hasWorkspace}
+                key={`${filter}-${service}-${query}-${page}-${incident.id}`}
                 onClick={() => openIncident(incident)}
+                style={{ viewTransitionName: `incident-${incident.id}` }}
                 type="button"
               >
-                <span className="sr-only">
-                  Open {incident.id}: {incident.title}.{" "}
-                </span>
                 <span className="incident-primary">
                   <i
                     className={`severity severity-${incident.severity.toLowerCase()}`}
@@ -210,6 +213,7 @@ export function IncidentsOverview({
                     <strong>{incident.title}</strong>
                     <small>
                       {incident.id} · {incident.evidenceCount} evidence signals
+                      {!incident.hasWorkspace ? " · summary only" : ""}
                     </small>
                   </span>
                 </span>
@@ -245,7 +249,13 @@ export function IncidentsOverview({
                     <strong>{incident.owner.name}</strong>
                     <small>{incident.updated}</small>
                   </span>
-                  <Icon name="caret-right" size={15} />
+                  {incident.hasWorkspace ? (
+                    <Icon name="caret-right" size={15} />
+                  ) : (
+                    <small className="workspace-unavailable">
+                      Workspace unavailable
+                    </small>
+                  )}
                 </span>
               </button>
             ))}
@@ -313,7 +323,7 @@ export function IncidentsOverview({
         </section>
       </section>
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" data-motion-state={toastState} role="status">
           <Icon name="check-circle" size={18} /> {toast}
         </div>
       ) : null}

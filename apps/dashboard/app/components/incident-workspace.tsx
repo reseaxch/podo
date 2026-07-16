@@ -36,7 +36,7 @@ export function IncidentWorkspace({
   const [query, setQuery] = useState("")
   const compactLayoutRef = useRef<boolean | null>(null)
   const shellRef = useRef<HTMLElement | null>(null)
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
 
   const filteredEvidence = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -75,6 +75,10 @@ export function IncidentWorkspace({
     shellRef.current?.setAttribute("data-ready", "true")
   }, [])
 
+  useEffect(() => {
+    setActiveTab(initialTab)
+  }, [initialTab])
+
   return (
     <main className="app-shell" ref={shellRef}>
       <IconRail />
@@ -108,6 +112,7 @@ export function IncidentWorkspace({
               <button
                 aria-selected={activeTab === "evidence"}
                 onClick={() => setActiveTab("evidence")}
+                onMouseDown={(event) => event.preventDefault()}
                 role="tab"
                 type="button"
               >
@@ -116,6 +121,7 @@ export function IncidentWorkspace({
               <button
                 aria-selected={activeTab === "graph"}
                 onClick={() => setActiveTab("graph")}
+                onMouseDown={(event) => event.preventDefault()}
                 role="tab"
                 type="button"
               >
@@ -124,6 +130,7 @@ export function IncidentWorkspace({
               <button
                 aria-selected={activeTab === "changes"}
                 onClick={() => setActiveTab("changes")}
+                onMouseDown={(event) => event.preventDefault()}
                 role="tab"
                 type="button"
               >
@@ -173,7 +180,7 @@ export function IncidentWorkspace({
         </div>
       </section>
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" data-motion-state={toastState} role="status">
           <Icon name="check-circle" size={18} /> {toast}
         </div>
       ) : null}

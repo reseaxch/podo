@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { IconName } from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
@@ -78,7 +78,14 @@ export function ShellOverlay({
   onModeChange,
 }: ShellOverlayProps) {
   const [query, setQuery] = useState("")
+  const [closing, setClosing] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const closeTimerRef = useRef<number | null>(null)
+  const requestClose = useCallback(() => {
+    if (closing) return
+    setClosing(true)
+    closeTimerRef.current = window.setTimeout(onClose, 150)
+  }, [closing, onClose])
   const normalizedQuery = query.trim().toLowerCase()
   const filteredCommands = useMemo(
     () =>
@@ -92,11 +99,19 @@ export function ShellOverlay({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
+      if (event.key === "Escape") requestClose()
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [onClose])
+  }, [requestClose])
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null)
+        window.clearTimeout(closeTimerRef.current)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (mode === "command") inputRef.current?.focus()
@@ -105,8 +120,9 @@ export function ShellOverlay({
   return (
     <div
       className="shell-overlay-backdrop"
+      data-motion-state={closing ? "exiting" : "visible"}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget) requestClose()
       }}
     >
       <section
@@ -126,7 +142,7 @@ export function ShellOverlay({
             <small>{mode === "command" ? "Quick navigation" : "Help"}</small>
             <h2>{mode === "command" ? "Command line" : "How can we help?"}</h2>
           </div>
-          <button aria-label="Close" onClick={onClose} type="button">
+          <button aria-label="Close" onClick={requestClose} type="button">
             <Icon name="x" size={16} />
           </button>
         </header>
@@ -147,7 +163,11 @@ export function ShellOverlay({
             </label>
             <div className="shell-command-list" role="list">
               {filteredCommands.map((command) => (
-                <Link href={command.href} key={command.href} onClick={onClose}>
+                <Link
+                  href={command.href}
+                  key={command.href}
+                  onClick={requestClose}
+                >
                   <span>
                     <Icon name={command.icon} size={17} />
                   </span>
@@ -182,21 +202,21 @@ export function ShellOverlay({
               </span>
             </div>
             <div className="shell-help-links">
-              <Link href="/incidents" onClick={onClose}>
+              <Link href="/incidents" onClick={requestClose}>
                 <span>
                   <strong>Investigate an incident</strong>
                   <small>Start from prioritized evidence and diagnosis.</small>
                 </span>
                 <Icon name="caret-right" size={15} />
               </Link>
-              <Link href="/system-graph" onClick={onClose}>
+              <Link href="/system-graph" onClick={requestClose}>
                 <span>
                   <strong>Understand the system graph</strong>
                   <small>Follow runtime pressure back to code changes.</small>
                 </span>
                 <Icon name="caret-right" size={15} />
               </Link>
-              <Link href="/safety" onClick={onClose}>
+              <Link href="/safety" onClick={requestClose}>
                 <span>
                   <strong>Review an approval</strong>
                   <small>Check scope, policy, and supporting evidence.</small>

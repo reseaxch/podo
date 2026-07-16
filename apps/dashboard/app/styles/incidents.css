@@ -15,7 +15,7 @@
   justify-content: space-between;
   gap: 24px;
   width: 100%;
-  max-width: 1920px;
+  max-width: var(--page-content-max);
   margin: 0 auto 20px;
 }
 .incidents-heading > div:first-child {
@@ -73,7 +73,7 @@
 
 .incident-inbox {
   width: 100%;
-  max-width: 1920px;
+  max-width: var(--page-content-max);
   margin-right: auto;
   margin-left: auto;
   border: 1px solid var(--border);
@@ -82,7 +82,7 @@
 .operations-cockpit {
   display: grid;
   width: 100%;
-  max-width: 1920px;
+  max-width: var(--page-content-max);
   grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.75fr);
   gap: 12px;
   margin-right: auto;
@@ -359,6 +359,16 @@
   cursor: pointer;
   font-size: 12px;
   font-weight: 650;
+  user-select: none;
+}
+
+.incident-filter-tabs button:active {
+  transform: none;
+}
+
+.incident-filter-tabs button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 -3px color-mix(in srgb, var(--focus) 80%, transparent);
 }
 .incident-filter-tabs button::after {
   position: absolute;
@@ -504,6 +514,29 @@
 .incident-row:hover {
   background: var(--surface-hover);
   box-shadow: inset 3px 0 0 var(--primary);
+}
+.incident-row:disabled,
+.incident-row-unavailable {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.incident-row:disabled:hover {
+  background: var(--surface);
+  box-shadow: none;
+}
+.incident-row-unavailable .incident-primary strong,
+.incident-row-unavailable .incident-diagnosis > strong {
+  color: var(--muted);
+}
+.workspace-unavailable {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--text-subtle);
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
 }
 .incident-primary {
   display: grid;

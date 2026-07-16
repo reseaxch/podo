@@ -9,7 +9,7 @@
 .integrityStrip,
 .workspace {
   width: 100%;
-  max-width: 1920px;
+  max-width: var(--page-content-max);
   margin-right: auto;
   margin-left: auto;
 }
@@ -337,6 +337,32 @@
     var(--surface)
   ) !important;
   box-shadow: inset 3px 0 0 var(--primary);
+}
+
+@keyframes auditRowEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .motionRow {
+    animation: auditRowEnter 260ms var(--motion-ease-standard) both;
+  }
+  .motionRow:nth-child(3) {
+    animation-delay: 35ms;
+  }
+  .motionRow:nth-child(4) {
+    animation-delay: 60ms;
+  }
+  .motionRow:nth-child(n + 5) {
+    animation-delay: 85ms;
+  }
 }
 
 .dateRow th {

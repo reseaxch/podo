@@ -86,7 +86,7 @@ export function SafetyApprovals({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const decisionTriggerRef = useRef<HTMLElement | null>(null)
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
 
   const pending = useMemo(
     () =>
@@ -521,7 +521,7 @@ export function SafetyApprovals({
         />
       ) : null}
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" data-motion-state={toastState} role="status">
           {toast}
         </div>
       ) : null}

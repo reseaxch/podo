@@ -4,46 +4,30 @@ import { useSyncExternalStore } from "react"
 
 export type Theme = "light" | "dark"
 
-const STORAGE_KEY = "podo-theme"
+const STORAGE_KEY = "podo-theme-v2"
 const CHANGE_EVENT = "podo-theme-change"
 
-function systemTheme(): Theme {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light"
-}
-
 function currentTheme(): Theme {
-  if (typeof window === "undefined") return "light"
+  if (typeof window === "undefined") return "dark"
   const preset = document.documentElement.dataset.theme
   if (preset === "light" || preset === "dark") return preset
   const stored = window.localStorage.getItem(STORAGE_KEY)
-  return stored === "light" || stored === "dark" ? stored : systemTheme()
+  return stored === "light" ? "light" : "dark"
 }
 
 export function useTheme() {
   const theme = useSyncExternalStore(
     (onChange) => {
       const followStorage = () => onChange()
-      const followSystem = (event: MediaQueryListEvent) => {
-        if (window.localStorage.getItem(STORAGE_KEY)) return
-        document.documentElement.dataset.theme = event.matches
-          ? "dark"
-          : "light"
-        onChange()
-      }
       window.addEventListener(CHANGE_EVENT, onChange)
       window.addEventListener("storage", followStorage)
-      const query = window.matchMedia("(prefers-color-scheme: dark)")
-      query.addEventListener("change", followSystem)
       return () => {
         window.removeEventListener(CHANGE_EVENT, onChange)
         window.removeEventListener("storage", followStorage)
-        query.removeEventListener("change", followSystem)
       }
     },
     currentTheme,
-    () => "light",
+    () => "dark",
   )
 
   function toggleTheme() {

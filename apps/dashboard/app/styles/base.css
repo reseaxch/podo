@@ -31,79 +31,88 @@
   --grid-dot: #dce1dc;
   --graph-line: #89bfc6;
   --graph-line-muted: #aeb8b0;
+  --graph-node-surface: var(--surface-elevated);
+  --graph-causal: var(--primary);
+  --graph-root-cause: var(--critical);
+  --graph-healthy: var(--verified);
+  --graph-degraded: var(--warning);
+  --graph-critical: var(--critical);
+  --graph-changed: var(--information);
+  --graph-context: var(--graph-line-muted);
   --shadow-color: rgb(29 39 34 / 12%);
   --scrim: rgb(18 26 23 / 34%);
   --rail-width: 76px;
   --topbar-height: 66px;
+  --page-content-max: 1680px;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #0b0f10;
-  --surface: #121716;
-  --surface-elevated: #19201e;
-  --surface-muted: #202825;
-  --surface-subtle: #161c1a;
-  --surface-hover: #1e2824;
-  --surface-glass: rgb(18 23 22 / 94%);
-  --text: #f0f3f1;
-  --muted: #a6afa9;
-  --text-subtle: #8c9790;
-  --border: #35403b;
-  --border-soft: #27302c;
-  --primary: #43a7b4;
-  --primary-hover: #62bbc5;
-  --primary-soft: #18383d;
-  --focus: #67c1cc;
-  --critical: #f07171;
-  --warning: #dda64c;
-  --verified: #69b98a;
-  --information: #82a2eb;
-  --success-surface: #172a20;
-  --success-border: #315c46;
-  --success-text: #85cca3;
-  --warning-surface: #2b2417;
-  --danger-surface: #2d1d1d;
-  --grid-dot: #303834;
-  --graph-line: #64b4bf;
-  --graph-line-muted: #6d7872;
-  --shadow-color: rgb(0 0 0 / 38%);
-  --scrim: rgb(0 0 0 / 58%);
+  --background: #0c0f12;
+  --surface: #13171b;
+  --surface-elevated: #191e23;
+  --surface-muted: #21272d;
+  --surface-subtle: #171b20;
+  --surface-hover: #222a31;
+  --surface-glass: rgb(19 23 27 / 94%);
+  --text: #f1f4f6;
+  --muted: #a5adb5;
+  --text-subtle: #818b95;
+  --border: #343d45;
+  --border-soft: #252d34;
+  --primary: #45aab8;
+  --primary-hover: #62bdc8;
+  --primary-soft: #15343b;
+  --focus: #6ac4cf;
+  --critical: #f17676;
+  --warning: #dfa94f;
+  --verified: #5db784;
+  --information: #86a6ec;
+  --success-surface: #14271d;
+  --success-border: #2d5841;
+  --success-text: #7bc99b;
+  --warning-surface: #292116;
+  --danger-surface: #2c1b20;
+  --grid-dot: #2c343b;
+  --graph-line: #5bb1bc;
+  --graph-line-muted: #64717b;
+  --shadow-color: rgb(0 0 0 / 44%);
+  --scrim: rgb(0 0 0 / 62%);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
-    --background: #0b0f10;
-    --surface: #121716;
-    --surface-elevated: #19201e;
-    --surface-muted: #202825;
-    --surface-subtle: #161c1a;
-    --surface-hover: #1e2824;
-    --surface-glass: rgb(18 23 22 / 94%);
-    --text: #f0f3f1;
-    --muted: #a6afa9;
-    --text-subtle: #8c9790;
-    --border: #35403b;
-    --border-soft: #27302c;
-    --primary: #43a7b4;
-    --primary-hover: #62bbc5;
-    --primary-soft: #18383d;
-    --focus: #67c1cc;
-    --critical: #f07171;
-    --warning: #dda64c;
-    --verified: #69b98a;
-    --information: #82a2eb;
-    --success-surface: #172a20;
-    --success-border: #315c46;
-    --success-text: #85cca3;
-    --warning-surface: #2b2417;
-    --danger-surface: #2d1d1d;
-    --grid-dot: #303834;
-    --graph-line: #64b4bf;
-    --graph-line-muted: #6d7872;
-    --shadow-color: rgb(0 0 0 / 38%);
-    --scrim: rgb(0 0 0 / 58%);
+    --background: #0c0f12;
+    --surface: #13171b;
+    --surface-elevated: #191e23;
+    --surface-muted: #21272d;
+    --surface-subtle: #171b20;
+    --surface-hover: #222a31;
+    --surface-glass: rgb(19 23 27 / 94%);
+    --text: #f1f4f6;
+    --muted: #a5adb5;
+    --text-subtle: #818b95;
+    --border: #343d45;
+    --border-soft: #252d34;
+    --primary: #45aab8;
+    --primary-hover: #62bdc8;
+    --primary-soft: #15343b;
+    --focus: #6ac4cf;
+    --critical: #f17676;
+    --warning: #dfa94f;
+    --verified: #5db784;
+    --information: #86a6ec;
+    --success-surface: #14271d;
+    --success-border: #2d5841;
+    --success-text: #7bc99b;
+    --warning-surface: #292116;
+    --danger-surface: #2c1b20;
+    --grid-dot: #2c343b;
+    --graph-line: #5bb1bc;
+    --graph-line-muted: #64717b;
+    --shadow-color: rgb(0 0 0 / 44%);
+    --scrim: rgb(0 0 0 / 62%);
   }
 }
 
@@ -123,22 +132,12 @@
 }
 
 :root[data-theme="dark"] .evidence-row-button {
-  background: #111513;
+  background: #111519;
 }
 
 :root[data-theme="dark"] .evidence-row-button:hover,
 :root[data-theme="dark"] .evidence-row.is-expanded .evidence-row-button {
   background: var(--surface-hover);
-}
-
-:root[data-theme="dark"] .graph-node {
-  border-color: #405049;
-  background: var(--surface-elevated);
-}
-
-:root[data-theme="dark"] .graph-node.root-cause {
-  border-color: #258b99;
-  background: #167889;
 }
 
 * {
@@ -166,6 +165,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 button,
 input {
   font: inherit;
@@ -184,6 +187,19 @@ input:focus-visible,
 textarea:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:root[data-input-modality="pointer"] button:focus-visible,
+:root[data-input-modality="pointer"] a:focus-visible,
+:root[data-input-modality="pointer"] [role="button"]:focus-visible,
+:root[data-input-modality="pointer"] [role="tab"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .icon {
@@ -229,6 +245,37 @@ textarea:focus-visible {
   color: var(--muted);
   line-height: 1.55;
 }
+.page-state-skeleton {
+  display: grid;
+  width: min(300px, 100%);
+  gap: 7px;
+  margin-top: 4px;
+}
+.page-state-skeleton i {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+.page-state-skeleton i:nth-child(2) {
+  width: 82%;
+}
+.page-state-skeleton i:nth-child(3) {
+  width: 64%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .page-state-skeleton i {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--surface-elevated) 75%, transparent) 48%,
+      transparent 100%
+    );
+    background-size: 220% 100%;
+    animation: page-state-shimmer 1.4s ease-in-out infinite;
+  }
+}
 .page-state-mark {
   width: 28px;
   height: 28px;
@@ -263,6 +310,14 @@ textarea:focus-visible {
 @keyframes page-state-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+@keyframes page-state-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {

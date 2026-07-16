@@ -34,6 +34,13 @@ export function IncidentPageState(props: IncidentPageStateProps) {
         <span aria-hidden="true" className="page-state-mark" />
         <h1>{state.title}</h1>
         <p>{state.description}</p>
+        {props.kind === "loading" ? (
+          <span aria-hidden="true" className="page-state-skeleton">
+            <i />
+            <i />
+            <i />
+          </span>
+        ) : null}
         {props.kind === "error" ? (
           <button
             className="primary-button"
