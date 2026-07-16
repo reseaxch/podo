@@ -12,7 +12,7 @@ type Child = ReturnType<typeof Bun.spawn>
 const children: Child[] = []
 
 function spawn(cwd: string, env?: Record<string, string>): Child {
-  const child = Bun.spawn(["bun", "run", "src/server.ts"], {
+  const child = Bun.spawn([process.execPath, "src/server.ts"], {
     cwd,
     env: env ? { ...process.env, ...env } : process.env,
     stdout: "pipe",
@@ -22,9 +22,13 @@ function spawn(cwd: string, env?: Record<string, string>): Child {
   return child
 }
 
-async function post(url: string, body: object): Promise<Response> {
+async function post(url: string, body: object, child: Child): Promise<Response> {
   let lastError: unknown
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+  for (let attempt = 0; attempt < 1_200; attempt += 1) {
+    if (child.exitCode !== null) {
+      const stderr = child.stderr instanceof ReadableStream ? await new Response(child.stderr).text() : ""
+      throw new Error(`service exited before becoming ready: ${url}${stderr.trim() ? `: ${stderr.trim()}` : ""}`)
+    }
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -42,14 +46,14 @@ async function post(url: string, body: object): Promise<Response> {
 }
 
 try {
-  spawn("demo/services/inventory-service")
-  spawn("demo/services/checkout-service", { INVENTORY_URL: "http://127.0.0.1:8082" })
+  const inventory = spawn("demo/services/inventory-service")
+  const checkout = spawn("demo/services/checkout-service", { INVENTORY_URL: "http://127.0.0.1:8082" })
 
   // 1. inventory-service responds.
   const inventoryResponse = await post("http://127.0.0.1:8082/reserve", {
     sku: "sku-basic",
     quantity: 1,
-  })
+  }, inventory)
   if (!inventoryResponse.ok) throw new Error(`inventory returned ${inventoryResponse.status}`)
   const reservation = (await inventoryResponse.json()) as { reserved: boolean }
   if (!reservation.reserved) throw new Error("inventory did not reserve the demo SKU")
@@ -59,13 +63,13 @@ try {
     orderId: "smoke-order-1",
     sku: "sku-basic",
     quantity: 1,
-  })
+  }, checkout)
   if (!checkoutResponse.ok) throw new Error(`checkout returned ${checkoutResponse.status}`)
   const session = (await checkoutResponse.json()) as { orderId: string }
   if (session.orderId !== "smoke-order-1") throw new Error("checkout returned an unexpected session")
 
   // 3. notification-worker processes one seeded job in finite smoke mode.
-  const worker = Bun.spawn(["bun", "run", "src/worker.ts"], {
+  const worker = Bun.spawn([process.execPath, "src/worker.ts"], {
     cwd: "demo/services/notification-worker",
     env: { ...process.env, DEMO_WORKER_ONCE: "1" },
     stdout: "pipe",
@@ -80,6 +84,8 @@ try {
 
   console.log("demo services smoke check passed")
 } finally {
-  for (const child of children) child.kill()
+  for (const child of children) {
+    if (child.exitCode === null) child.kill()
+  }
   await Promise.all(children.map((child) => child.exited))
 }
