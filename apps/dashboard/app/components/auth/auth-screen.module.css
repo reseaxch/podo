@@ -588,6 +588,19 @@
   letter-spacing: -0.04em;
 }
 
+.demoBadge {
+  padding: 4px 7px;
+  border: 1px solid
+    color-mix(in srgb, var(--auth-accent) 38%, var(--auth-border));
+  border-radius: 999px;
+  color: var(--auth-accent-hover);
+  background: var(--auth-accent-soft);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .brandMark {
   display: grid;
   width: 34px;

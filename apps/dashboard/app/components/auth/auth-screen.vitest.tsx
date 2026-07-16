@@ -37,17 +37,18 @@ describe("AuthScreen", () => {
   it("renders the sign-in flow and links to registration", () => {
     render(<AuthScreen mode="signin" />)
 
-    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeVisible()
+    expect(screen.getByRole("heading", { name: "Explore Podo" })).toBeVisible()
+    expect(screen.getByText("Interactive demo")).toBeVisible()
     expect(
       screen.getByRole("link", { name: "Create account" }),
-    ).toHaveAttribute("href", "/register")
+    ).toHaveAttribute("href", "/demo/register")
     expect(screen.getByLabelText("Work email")).toHaveAttribute(
       "autocomplete",
       "email",
     )
     expect(
       screen
-        .getByRole("button", { name: "Continue with GitHub" })
+        .getByRole("button", { name: "Preview GitHub connection" })
         .querySelector("svg"),
     ).not.toBeNull()
   })
@@ -56,7 +57,7 @@ describe("AuthScreen", () => {
     const user = userEvent.setup()
     render(<AuthScreen mode="signin" />)
 
-    await user.click(screen.getByRole("button", { name: "Continue" }))
+    await user.click(screen.getByRole("button", { name: "Enter demo" }))
 
     expect(screen.getByText("Enter a valid work email.")).toBeVisible()
     expect(
@@ -91,13 +92,18 @@ describe("AuthScreen", () => {
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "evidence-backed" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Create account" }))
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview account setup" }),
+    )
 
     expect(
       screen.getByRole("button", { name: "Creating workspace…" }),
     ).toBeDisabled()
     act(() => vi.advanceTimersByTime(520))
-    expect(screen.getByText("Workspace ready")).toBeVisible()
+    expect(screen.getByText("Demo preview ready")).toBeVisible()
+    expect(
+      screen.getByText("No account, session, or workspace was created."),
+    ).toBeVisible()
     expect(screen.getByRole("link", { name: "Open Podo" })).toHaveAttribute(
       "href",
       "/overview?mode=demo",

@@ -1,6 +1,6 @@
 "use client"
 
-import type { InvestigationApproval, InvestigationEvent } from "@podo/contracts"
+import type { AgentChatEvent, CreateAgentChatResponse } from "@podo/contracts"
 import Link from "next/link"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 
@@ -20,18 +20,11 @@ type StructuredAgentAnswer = {
 type ChatMessage = {
   durationMs?: number
   id: string
-  preview?: boolean
   role: "user" | "assistant"
   structured?: StructuredAgentAnswer
   text: string
   state?: "thinking" | "streaming" | "complete" | "stopped" | "failed"
 }
-
-type AgentStreamPacket =
-  | { type: "session"; investigationId: string }
-  | { type: "progress"; stage: number }
-  | { type: "event"; event: InvestigationEvent }
-  | { type: "error"; message: string }
 
 type AgentPanelProps = {
   onClose: () => void
@@ -135,9 +128,6 @@ function restoreHistory(value: string | null): ChatMessage[] {
           ...(typeof message.durationMs === "number"
             ? { durationMs: message.durationMs }
             : {}),
-          ...(typeof message.preview === "boolean"
-            ? { preview: message.preview }
-            : {}),
           ...(isStructuredAnswer(message.structured)
             ? { structured: message.structured }
             : {}),
@@ -210,11 +200,11 @@ function parseStructuredAnswer(text: string): StructuredAgentAnswer | null {
   }
 }
 
-async function readPackets(
+async function readAgentEvents(
   response: Response,
-  onPacket: (packet: AgentStreamPacket) => void,
+  onEvent: (event: AgentChatEvent) => void,
 ) {
-  if (!response.body) throw new Error("The agent returned an empty stream")
+  if (!response.body) throw new Error("Agent stream unavailable")
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ""
@@ -222,103 +212,26 @@ async function readPackets(
   while (true) {
     const { done, value } = await reader.read()
     buffer += decoder.decode(value, { stream: !done })
-    let boundary = buffer.indexOf("\n")
+    buffer = buffer.replaceAll("\r\n", "\n")
+    let boundary = buffer.indexOf("\n\n")
     while (boundary >= 0) {
-      const line = buffer.slice(0, boundary).trim()
-      buffer = buffer.slice(boundary + 1)
-      if (line) onPacket(JSON.parse(line) as AgentStreamPacket)
-      boundary = buffer.indexOf("\n")
+      const frame = buffer.slice(0, boundary)
+      buffer = buffer.slice(boundary + 2)
+      const data = frame
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n")
+      if (data) {
+        const parsed = JSON.parse(data) as AgentChatEvent | { error?: string }
+        if ("error" in parsed)
+          throw new Error("The Podo agent stream became unavailable")
+        onEvent(parsed as AgentChatEvent)
+      }
+      boundary = buffer.indexOf("\n\n")
     }
     if (done) break
   }
-}
-
-function ApprovalCard({
-  approval,
-  busy,
-  onDecision,
-}: {
-  approval: InvestigationApproval
-  busy: boolean
-  onDecision: (
-    decision: "approve" | "deny",
-    answers?: Record<string, string[]>,
-  ) => void
-}) {
-  const [answers, setAnswers] = useState<Record<string, string[]>>({})
-  const questions = approval.questions ?? []
-  const ready = questions.every((question) => answers[question.id]?.[0]?.trim())
-
-  return (
-    <section className="agent-approval" aria-label="Agent approval request">
-      <header>
-        <span>
-          <Icon name="shield-check" size={16} />
-        </span>
-        <div>
-          <strong>Approval required</strong>
-          <small>{approval.reason ?? "Review this bounded action."}</small>
-        </div>
-      </header>
-      {approval.command ? <code>{approval.command}</code> : null}
-      {questions.map((question) => (
-        <fieldset key={question.id}>
-          <legend>{question.question}</legend>
-          {question.options?.length ? (
-            <div className="agent-approval-options">
-              {question.options.map((option) => (
-                <label key={option.label}>
-                  <input
-                    checked={answers[question.id]?.[0] === option.label}
-                    name={question.id}
-                    onChange={() =>
-                      setAnswers((current) => ({
-                        ...current,
-                        [question.id]: [option.label],
-                      }))
-                    }
-                    type="radio"
-                  />
-                  <span>
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                </label>
-              ))}
-            </div>
-          ) : (
-            <input
-              aria-label={question.header}
-              onChange={(event) =>
-                setAnswers((current) => ({
-                  ...current,
-                  [question.id]: [event.target.value],
-                }))
-              }
-              type="text"
-              value={answers[question.id]?.[0] ?? ""}
-            />
-          )}
-        </fieldset>
-      ))}
-      <div className="agent-approval-actions">
-        <button
-          disabled={busy}
-          onClick={() => onDecision("deny")}
-          type="button"
-        >
-          Deny
-        </button>
-        <button
-          disabled={busy || (questions.length > 0 && !ready)}
-          onClick={() => onDecision("approve", answers)}
-          type="button"
-        >
-          Approve once
-        </button>
-      </div>
-    </section>
-  )
 }
 
 function ThinkingState({
@@ -539,8 +452,6 @@ export function AgentPanel({
   const [draft, setDraft] = useState("")
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null)
   const [thinkingStage, setThinkingStage] = useState(0)
-  const [approval, setApproval] = useState<InvestigationApproval | null>(null)
-  const [approvalBusy, setApprovalBusy] = useState(false)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [collapsedMessageIds, setCollapsedMessageIds] = useState<Set<string>>(
     () => new Set(),
@@ -553,7 +464,8 @@ export function AgentPanel({
   const turnAnchorRef = useRef<HTMLElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const investigationIdRef = useRef<string | null>(null)
+  const chatIdRef = useRef<string | null>(null)
+  const lastSequenceRef = useRef(0)
   const copyTimerRef = useRef<number | null>(null)
   const retryTimerRef = useRef<number | null>(null)
   const historyStorageKey = `podo-agent-history-v${agentHistoryVersion}:${projectLabel}`
@@ -569,38 +481,34 @@ export function AgentPanel({
     [],
   )
 
-  const cancelInvestigation = useCallback(() => {
+  const cancelAgentTurn = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
-    const investigationId = investigationIdRef.current
-    investigationIdRef.current = null
-    if (investigationId)
-      void fetch(`/api/podo/agent/${encodeURIComponent(investigationId)}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "cancel" }),
+    const chatId = chatIdRef.current
+    if (chatId)
+      void fetch(`/api/podo/agent/chats/${encodeURIComponent(chatId)}/turn`, {
+        method: "DELETE",
         keepalive: true,
       })
   }, [])
 
   const stopActive = useCallback(() => {
     if (!activeMessageId) return
-    cancelInvestigation()
+    cancelAgentTurn()
     updateMessage(activeMessageId, (message) => ({
       ...message,
       text: message.text || "Stopped before the agent finished.",
       state: "stopped",
     }))
-    setApproval(null)
     setActiveMessageId(null)
-  }, [activeMessageId, cancelInvestigation, updateMessage])
+  }, [activeMessageId, cancelAgentTurn, updateMessage])
 
   useEffect(() => {
     inputRef.current?.focus()
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault()
-        cancelInvestigation()
+        cancelAgentTurn()
         onClose()
       }
     }
@@ -611,9 +519,10 @@ export function AgentPanel({
         window.clearTimeout(copyTimerRef.current)
       if (retryTimerRef.current !== null)
         window.clearTimeout(retryTimerRef.current)
-      cancelInvestigation()
+      abortRef.current?.abort()
+      abortRef.current = null
     }
-  }, [cancelInvestigation, onClose])
+  }, [cancelAgentTurn, onClose])
 
   useEffect(() => {
     const restored = restoreHistory(
@@ -662,17 +571,7 @@ export function AgentPanel({
     return () => window.cancelAnimationFrame(frame)
   }, [turnAnchorId])
 
-  useEffect(() => {
-    if (!approval) return
-    const conversation = conversationRef.current
-    if (!conversation) return
-    conversation.scrollTo({
-      top: conversation.scrollHeight,
-      behavior: "smooth",
-    })
-  }, [approval])
-
-  async function sendMessage(value: string, preview = false) {
+  async function sendMessage(value: string) {
     const prompt = value.trim()
     if (!prompt || activeMessageId) return
 
@@ -684,19 +583,13 @@ export function AgentPanel({
     }
     const assistantMessage: ChatMessage = {
       id: messageId("assistant"),
-      preview,
       role: "assistant",
       text: "",
       state: "thinking",
     }
-    const history = messages
-      .filter((message) => message.text)
-      .slice(-8)
-      .map(({ role, text }) => ({ role, text }))
 
     setMessages((current) => [...current, userMessage, assistantMessage])
     setDraft("")
-    setApproval(null)
     setActiveMessageId(assistantMessage.id)
     setThinkingStage(0)
     setTurnAnchorId(userMessage.id)
@@ -704,59 +597,90 @@ export function AgentPanel({
     const controller = new AbortController()
     abortRef.current = controller
     let receivedText = false
+    let outputDeltaCount = 0
     const startedAt = performance.now()
 
     try {
-      const response = await fetch("/api/podo/agent", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          preview,
-          context: { label: projectLabel, path: projectScope },
-          history,
-        }),
-        signal: controller.signal,
-      })
-      if (!response.ok) {
-        const error = (await response.json().catch(() => null)) as {
-          message?: string
-        } | null
-        throw new Error(
-          error?.message ?? `Agent request failed (${response.status})`,
-        )
+      let chatId = chatIdRef.current
+      if (!chatId) {
+        const readiness = await fetch("/api/podo/agent/readiness", {
+          signal: controller.signal,
+        })
+        if (!readiness.ok)
+          throw new Error("Podo Agent is available only in the demo workspace.")
+        const readinessBody = (await readiness.json()) as {
+          chat?: { available?: boolean }
+        }
+        if (!readinessBody.chat?.available)
+          throw new Error("Podo Agent is not ready. Check the Core runtime.")
+
+        const created = await fetch("/api/podo/agent/chats", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+          signal: controller.signal,
+        })
+        if (!created.ok) throw new Error("Podo Agent could not start a chat.")
+        const result = (await created.json()) as CreateAgentChatResponse
+        chatId = result.chat.id
+        chatIdRef.current = chatId
+        lastSequenceRef.current = result.chat.lastSequence
       }
 
-      await readPackets(response, (packet) => {
-        if (packet.type === "session") {
-          investigationIdRef.current = packet.investigationId
-          return
-        }
-        if (packet.type === "progress") {
-          setThinkingStage(
-            Math.min(Math.max(packet.stage, 0), thinkingSteps.length - 1),
-          )
-          return
-        }
-        if (packet.type === "error") throw new Error(packet.message)
-        const event = packet.event
-        if (event.kind === "output.delta") {
+      const accepted = await fetch(
+        `/api/podo/agent/chats/${encodeURIComponent(chatId)}/messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            content: prompt,
+            clientRequestId: userMessage.id,
+          }),
+          signal: controller.signal,
+        },
+      )
+      if (!accepted.ok)
+        throw new Error("Podo Agent could not accept this message.")
+      setThinkingStage(1)
+
+      const response = await fetch(
+        `/api/podo/agent/chats/${encodeURIComponent(chatId)}/events?after=${lastSequenceRef.current}`,
+        {
+          headers: { accept: "text/event-stream" },
+          signal: controller.signal,
+        },
+      )
+      if (!response.ok) throw new Error("Podo Agent stream unavailable.")
+
+      await readAgentEvents(response, (event) => {
+        lastSequenceRef.current = Math.max(
+          lastSequenceRef.current,
+          event.sequence,
+        )
+        if (event.kind === "message.accepted") {
+          setThinkingStage(1)
+        } else if (event.kind === "output.delta") {
+          outputDeltaCount += 1
+          setThinkingStage(outputDeltaCount === 1 ? 2 : 3)
           receivedText = true
           updateMessage(assistantMessage.id, (message) => ({
             ...message,
             text: message.text + event.payload.text,
             state: "streaming",
           }))
-        } else if (event.kind === "approval.requested") {
-          setApproval(event.payload.approval)
-        } else if (event.kind === "approval.resolved") {
-          setApproval(null)
-        } else if (event.kind === "investigation.failed") {
-          throw new Error(event.payload.error)
-        } else if (event.kind === "investigation.cancelled") {
+        } else if (event.kind === "message.completed") {
+          receivedText = true
           updateMessage(assistantMessage.id, (message) => ({
             ...message,
-            text: message.text || "The investigation was cancelled.",
+            text: event.payload.message.content,
+            state: "streaming",
+          }))
+        } else if (event.kind === "chat.failed") {
+          throw new Error(event.payload.error.message)
+        } else if (event.kind === "turn.cancelled") {
+          updateMessage(assistantMessage.id, (message) => ({
+            ...message,
+            text: message.text || "The agent turn was cancelled.",
             state: "stopped",
           }))
         }
@@ -791,38 +715,8 @@ export function AgentPanel({
     } finally {
       if (!controller.signal.aborted) {
         abortRef.current = null
-        investigationIdRef.current = null
         setActiveMessageId(null)
-        setApproval(null)
       }
-    }
-  }
-
-  async function resolveApproval(
-    decision: "approve" | "deny",
-    answers?: Record<string, string[]>,
-  ) {
-    const investigationId = investigationIdRef.current
-    if (!investigationId || !approval) return
-    setApprovalBusy(true)
-    try {
-      const response = await fetch(
-        `/api/podo/agent/${encodeURIComponent(investigationId)}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "decide",
-            approvalId: approval.id,
-            decision,
-            ...(decision === "approve" ? { answers } : {}),
-          }),
-        },
-      )
-      if (!response.ok) throw new Error("Approval decision failed")
-      setApproval(null)
-    } finally {
-      setApprovalBusy(false)
     }
   }
 
@@ -861,12 +755,14 @@ export function AgentPanel({
     retryTimerRef.current = window.setTimeout(() => {
       retryTimerRef.current = null
       setRetryingMessageId(null)
-      void sendMessage(previousMessage.text, message.preview)
+      void sendMessage(previousMessage.text)
     }, 320)
   }
 
   function clearChat() {
-    cancelInvestigation()
+    cancelAgentTurn()
+    chatIdRef.current = null
+    lastSequenceRef.current = 0
     if (copyTimerRef.current !== null) {
       window.clearTimeout(copyTimerRef.current)
       copyTimerRef.current = null
@@ -876,7 +772,6 @@ export function AgentPanel({
       retryTimerRef.current = null
     }
     setActiveMessageId(null)
-    setApproval(null)
     setMessages([])
     setDraft("")
     setCollapsedMessageIds(new Set())
@@ -898,7 +793,7 @@ export function AgentPanel({
         aria-label="Close Podo Agent"
         className="agent-panel-scrim"
         onClick={() => {
-          cancelInvestigation()
+          cancelAgentTurn()
           onClose()
         }}
         type="button"
@@ -930,7 +825,7 @@ export function AgentPanel({
             aria-label="Close agent"
             className="agent-close-button"
             onClick={() => {
-              cancelInvestigation()
+              cancelAgentTurn()
               onClose()
             }}
             type="button"
@@ -962,12 +857,12 @@ export function AgentPanel({
               </p>
               <div className="agent-suggestions">
                 <div className="agent-preview-label">
-                  <Icon name="robot" size={13} /> Preview the agent flow
+                  <Icon name="robot" size={13} /> Suggested demo prompts
                 </div>
                 {suggestions.map((suggestion) => (
                   <button
                     key={suggestion}
-                    onClick={() => void sendMessage(suggestion, true)}
+                    onClick={() => void sendMessage(suggestion)}
                     type="button"
                   >
                     <span>{suggestion}</span>
@@ -1035,15 +930,6 @@ export function AgentPanel({
               )
             })
           )}
-          {approval ? (
-            <ApprovalCard
-              approval={approval}
-              busy={approvalBusy}
-              onDecision={(decision, answers) =>
-                void resolveApproval(decision, answers)
-              }
-            />
-          ) : null}
         </div>
 
         <form className="agent-composer" onSubmit={submit}>
@@ -1082,8 +968,7 @@ export function AgentPanel({
             </button>
           </div>
           <small>
-            Podo can inspect and explain. Changes still require explicit
-            approval.
+            Demo-only and read-only. Podo cannot approve or perform changes.
           </small>
         </form>
       </aside>

@@ -429,31 +429,32 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
             <Icon name="cube" size={20} />
           </span>
           <strong>Podo</strong>
+          <span className={styles.demoBadge}>Interactive demo</span>
         </header>
 
         <nav aria-label="Authentication mode" className={styles.modeTabs}>
           <Link
             aria-current={!isRegister ? "page" : undefined}
             className={!isRegister ? styles.activeTab : undefined}
-            href="/login"
+            href="/demo/login"
           >
             Sign in
           </Link>
           <Link
             aria-current={isRegister ? "page" : undefined}
             className={isRegister ? styles.activeTab : undefined}
-            href="/register"
+            href="/demo/register"
           >
             Create account
           </Link>
         </nav>
 
         <section className={styles.heading}>
-          <h1>{isRegister ? "Create your workspace" : "Welcome back"}</h1>
+          <h1>{isRegister ? "Build a demo workspace" : "Explore Podo"}</h1>
           <p>
             {isRegister
-              ? "Start with evidence, stay in control"
-              : "Continue your investigation"}
+              ? "Preview the onboarding flow — no account is created"
+              : "Try the investigation experience — no sign-in required"}
           </p>
         </section>
 
@@ -500,7 +501,7 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
             <span className={styles.passwordLabel}>
               Password
               {!isRegister ? (
-                <Link href="/login?reset=true">Forgot password?</Link>
+                <Link href="/demo/login?reset=true">Forgot password?</Link>
               ) : null}
             </span>
             <span className={styles.passwordField}>
@@ -546,8 +547,8 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
                 ? "Creating workspace…"
                 : "Signing in…"
               : isRegister
-                ? "Create account"
-                : "Continue"}
+                ? "Preview account setup"
+                : "Enter demo"}
           </button>
 
           <div className={styles.divider}>
@@ -560,7 +561,7 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
             type="button"
           >
             <GitHubMark />
-            Continue with GitHub
+            Preview GitHub connection
           </button>
         </form>
 
@@ -570,19 +571,15 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
               <Icon name="check-circle" size={17} />
             </span>
             <p>
-              <strong>
-                {isRegister ? "Workspace ready" : "Authentication ready"}
-              </strong>
-              <small>
-                This prototype is ready to connect to the auth service.
-              </small>
+              <strong>Demo preview ready</strong>
+              <small>No account, session, or workspace was created.</small>
             </p>
             <Link href="/overview?mode=demo">Open Podo</Link>
           </div>
         ) : (
           <p className={styles.switchPrompt}>
             {isRegister ? "Already have an account?" : "New to Podo?"}{" "}
-            <Link href={isRegister ? "/login" : "/register"}>
+            <Link href={isRegister ? "/demo/login" : "/demo/register"}>
               {isRegister ? "Sign in" : "Create an account"}
             </Link>
           </p>
