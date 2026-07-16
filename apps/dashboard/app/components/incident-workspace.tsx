@@ -57,10 +57,13 @@ export function IncidentWorkspace({
     )
   }, [incident.evidence, query])
 
-  const openEvidence = useCallback((id: string) => {
-    setActiveTab("evidence")
-    setExpandedId(id)
-  }, [setActiveTab])
+  const openEvidence = useCallback(
+    (id: string) => {
+      setActiveTab("evidence")
+      setExpandedId(id)
+    },
+    [setActiveTab],
+  )
   const closeDiagnosis = useCallback(() => setDiagnosisOpen(false), [])
   const openDiagnosis = useCallback(() => {
     setDiagnosisOpen(true)
