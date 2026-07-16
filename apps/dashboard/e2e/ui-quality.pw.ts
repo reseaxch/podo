@@ -50,7 +50,7 @@ test("keyboard focus stays visible across controls in both themes", async ({
     await tabTo(page, button)
     await expect(button).not.toHaveCSS("box-shadow", "none")
 
-    await page.goto("/demo")
+    await page.goto("/incidents")
     const link = page.getByRole("link", { name: "Overview" })
     await tabTo(page, link)
     await expect(link).not.toHaveCSS("box-shadow", "none")
@@ -61,7 +61,7 @@ test("keyboard focus stays visible across controls in both themes", async ({
     await expect(tab).not.toHaveCSS("box-shadow", "none")
 
     await page.goto("/settings")
-    const input = page.locator("input:not([type='hidden'])").first()
+    const input = page.getByRole("textbox", { name: "Workspace name" })
     await tabTo(page, input)
     const colors = await input.evaluate((element) => {
       const root = getComputedStyle(document.documentElement)
