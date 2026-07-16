@@ -48,6 +48,16 @@ The Dashboard and Core stay attached to the terminal. Press Ctrl-C once to stop
 both. The runner owns and removes its temporary git checkout and remediation
 worktrees, so a later run starts from canonical fixtures again.
 
+For a finite CI or judge preflight, use:
+
+```sh
+bun run demo:verify
+```
+
+It runs the same readiness checks, prints the canonical incident URL, then
+stops its Core and Dashboard children before exiting. Any unknown argument is
+rejected before the runner starts a child process.
+
 If the dashboard port is occupied, choose another one:
 
 ```sh
