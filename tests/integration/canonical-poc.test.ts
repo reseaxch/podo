@@ -1,14 +1,8 @@
 import { afterEach, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { readdir, realpath } from "node:fs/promises"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import type {
-  CodexRuntime,
-  CodexRuntimeEvent,
-  StartCodexThreadInput,
-} from "../../packages/codex-app-server-client/src/index"
 import type {
   DetectedIncident,
   IncidentCausalPath,
@@ -25,10 +19,16 @@ import {
 
 import { createCoreHandler } from "../../apps/core/src/app"
 import { CodexRemediationPatchProducer } from "../../apps/core/src/modules/remediation/codex-remediation-patch-producer"
-import {
-  LocalWorktreeRemediationExecutor,
-} from "../../apps/core/src/modules/remediation/local-worktree-remediation-executor"
+import { LocalWorktreeRemediationExecutor } from "../../apps/core/src/modules/remediation/local-worktree-remediation-executor"
 import { loadProductionIncidentGraph } from "../../apps/core/src/runtime/production-incident-graph"
+import {
+  CACHE_IMPLEMENTATION_PATH,
+  CACHE_REGRESSION_PATH,
+  CanonicalDiagnosisRuntime,
+  CanonicalRemediationRuntime,
+  createCanonicalRemediationRepository as createScenarioRepository,
+  type CanonicalRemediationRepository,
+} from "../../demo/canonical-runtime"
 
 const EXPECTED_CORRELATION = {
   deploymentId: "deploy-1042",
@@ -36,12 +36,12 @@ const EXPECTED_CORRELATION = {
   commitSha: "d34db33fd34db33fd34db33fd34db33fd34db33f",
 } as const
 
-const CACHE_IMPLEMENTATION_PATH = "demo/services/checkout-service/src/cache.ts"
-const CACHE_REGRESSION_PATH = "demo/services/checkout-service/src/cache.test.ts"
-const temporaryRoots: string[] = []
+const temporaryRepositories: CanonicalRemediationRepository[] = []
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })))
+  await Promise.all(
+    temporaryRepositories.splice(0).map((repository) => repository.dispose()),
+  )
 })
 
 interface CanonicalExpectedOutcome {
@@ -63,8 +63,12 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
   })
   expect(proof.schedulerWaits.length).toBeGreaterThan(0)
   expect(proof.schedulerWaits.every((delay) => delay >= 0)).toBe(true)
-  expect(proof.observedCreatesIncident).toBe(proof.canonicalExpected.createsIncident)
-  expect(proof.detectedIncident.affectedService).toBe(proof.canonicalExpected.affectedService)
+  expect(proof.observedCreatesIncident).toBe(
+    proof.canonicalExpected.createsIncident,
+  )
+  expect(proof.detectedIncident.affectedService).toBe(
+    proof.canonicalExpected.affectedService,
+  )
 
   expect(proof.cacheFile).toMatchObject({
     kind: "file",
@@ -126,10 +130,12 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
     schemaVersion: "podo.diagnosis.v1",
     summary: "Checkout heap growth is caused by the unbounded cache",
     affectedService: proof.canonicalExpected.affectedService,
-    probableRootCause: "CheckoutCache retains entries without eviction after the trusted deployment",
+    probableRootCause:
+      "CheckoutCache retains entries without eviction after the trusted deployment",
     confidence: { value: 9300, scale: "basis_points" },
     evidenceIds: proof.detectedIncident.evidence.map(({ id }) => id),
-    recommendedAction: "Bound CheckoutCache and verify the cache-growth regression",
+    recommendedAction:
+      "Bound CheckoutCache and verify the cache-growth regression",
     safeToAttemptFix: proof.canonicalExpected.safeToAttemptFix,
   })
   expect(proof.runtime.emittedDiagnosisCount).toBe(1)
@@ -168,34 +174,49 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
     },
   })
   expect(artifact).toBeDefined()
-  if (!artifact) throw new Error("Canonical remediation did not expose its verified artifact")
+  if (!artifact)
+    throw new Error(
+      "Canonical remediation did not expose its verified artifact",
+    )
   expect(proof.producerPhases).toEqual(["regression", "fix"])
   expect(proof.remediationRuntime.starts).toHaveLength(1)
   expect(proof.remediationRuntime.resumes).toHaveLength(1)
   const remediationThread = proof.remediationRuntime.starts[0]
   const remediationResume = proof.remediationRuntime.resumes[0]
   if (!remediationThread || !remediationResume) {
-    throw new Error("Canonical remediation did not start and resume one Codex thread")
+    throw new Error(
+      "Canonical remediation did not start and resume one Codex thread",
+    )
   }
   expect(remediationThread.input.sandbox).toBe("workspace-write")
-  expect(remediationThread.input.developerInstructions).toContain("human-approved Podo remediation")
-  expect(remediationThread.input.cwd.startsWith(
-    `${await realpath(proof.fixture.scratchParent)}/podo-remediation-`,
-  )).toBe(true)
+  expect(remediationThread.input.developerInstructions).toContain(
+    "human-approved Podo remediation",
+  )
+  expect(
+    remediationThread.input.cwd.startsWith(
+      `${await realpath(proof.fixture.scratchParent)}/podo-remediation-`,
+    ),
+  ).toBe(true)
   expect(remediationThread.input.cwd).not.toBe(proof.fixture.repositoryRoot)
   expect(remediationResume).toEqual({
     threadId: proof.remediationRuntime.privateThreadId,
     input: remediationThread.input,
   })
-  expect(proof.remediationRuntime.turns.map(({ threadId }) => threadId)).toEqual([
+  expect(
+    proof.remediationRuntime.turns.map(({ threadId }) => threadId),
+  ).toEqual([
     proof.remediationRuntime.privateThreadId,
     proof.remediationRuntime.privateThreadId,
   ])
   expect(proof.remediationRuntime.turns.map(({ turnId }) => turnId)).toEqual(
     proof.remediationRuntime.privateTurnIds,
   )
-  expect(proof.remediationRuntime.turns[0]?.prompt).toContain("PHASE 1 OF 2: WRITE THE REGRESSION")
-  expect(proof.remediationRuntime.turns[1]?.prompt).toContain("PHASE 2 OF 2: APPLY THE FIX")
+  expect(proof.remediationRuntime.turns[0]?.prompt).toContain(
+    "PHASE 1 OF 2: WRITE THE REGRESSION",
+  )
+  expect(proof.remediationRuntime.turns[1]?.prompt).toContain(
+    "PHASE 2 OF 2: APPLY THE FIX",
+  )
   expect(proof.remediationRuntime.approvalResolutionAttempts).toBe(0)
   expect(proof.remediationRuntime.interrupts).toEqual([])
   expect(proof.remediationRuntime.listeners.size).toBe(0)
@@ -215,8 +236,12 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
   expect(artifact.patch.unifiedDiff).toContain(
     `diff --git a/${CACHE_IMPLEMENTATION_PATH} b/${CACHE_IMPLEMENTATION_PATH}`,
   )
-  expect(artifact.patch.unifiedDiff).toContain("evicts oldest entries beyond the configured maximum")
-  expect(artifact.patch.unifiedDiff).toContain("constructor(private readonly maxEntries = 1_000)")
+  expect(artifact.patch.unifiedDiff).toContain(
+    "evicts oldest entries beyond the configured maximum",
+  )
+  expect(artifact.patch.unifiedDiff).toContain(
+    "constructor(private readonly maxEntries = 1_000)",
+  )
   expect(artifact.regression).toEqual({
     test: "incident regression",
     prePatch: "failed",
@@ -230,13 +255,18 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
     createHash("sha256").update(artifact.patch.unifiedDiff).digest("hex"),
   )
   expect(artifact.pullRequestPreview).toMatchObject({
-    title: "fix(checkout-service): Bound CheckoutCache and verify the cache-growth regression",
+    title:
+      "fix(checkout-service): Bound CheckoutCache and verify the cache-growth regression",
     baseBranch: "main",
     headBranch: proof.expectedHeadBranch,
   })
   expect(artifact.pullRequestPreview.id).toMatch(/^pr_preview_[a-f0-9]{24}$/)
-  expect(artifact.pullRequestPreview.body).toContain(`- ${CACHE_REGRESSION_PATH}`)
-  expect(artifact.pullRequestPreview.body).toContain(`- ${CACHE_IMPLEMENTATION_PATH}`)
+  expect(artifact.pullRequestPreview.body).toContain(
+    `- ${CACHE_REGRESSION_PATH}`,
+  )
+  expect(artifact.pullRequestPreview.body).toContain(
+    `- ${CACHE_IMPLEMENTATION_PATH}`,
+  )
   expect(artifact.pullRequestPreview.id).toBe(expectedPreviewId(artifact))
   expect(proof.completedRemediationReadback).toEqual(proof.completedRemediation)
 
@@ -245,8 +275,12 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
   expect(await worktreePaths(proof.fixture.repositoryRoot)).toEqual([
     await realpath(proof.fixture.repositoryRoot),
   ])
-  expect(await Bun.file(CACHE_IMPLEMENTATION_PATH).text()).toBe(proof.fixture.sourceCache)
-  expect(await Bun.file(CACHE_REGRESSION_PATH).text()).toBe(proof.fixture.sourceRegression)
+  expect(await Bun.file(CACHE_IMPLEMENTATION_PATH).text()).toBe(
+    proof.fixture.sourceCache,
+  )
+  expect(await Bun.file(CACHE_REGRESSION_PATH).text()).toBe(
+    proof.fixture.sourceRegression,
+  )
 
   const publicJson = proof.publicResponseBodies.join("\n")
   for (const forbidden of [
@@ -284,14 +318,14 @@ async function runCanonicalPocProof(): Promise<{
   selectedObservedAt: string
   beforeCompletion: DetectedIncident
   validatedIncident: DetectedIncident
-  runtime: DeterministicDiagnosisRuntime
+  runtime: CanonicalDiagnosisRuntime
   automaticRemediationProbeStatus: number
   requestLogBeforeRemediation: string[]
   pendingRemediation: IncidentRemediation
   pendingRemediationReadback: IncidentRemediation
   completedRemediation: IncidentRemediation
   completedRemediationReadback: IncidentRemediation
-  remediationRuntime: DeterministicRemediationRuntime
+  remediationRuntime: CanonicalRemediationRuntime
   producerPhasesBeforeApproval: string[]
   producerPhases: string[]
   scratchEntriesBeforeApproval: string[]
@@ -303,19 +337,30 @@ async function runCanonicalPocProof(): Promise<{
   publicResponseBodies: string[]
 }> {
   const [rawScenario, rawTelemetry, incidentGraph] = await Promise.all([
-    Bun.file(new URL("../../scenarios/cache-growth/scenario.json", import.meta.url)).json(),
-    Bun.file(new URL("../../scenarios/cache-growth/fixtures/telemetry.json", import.meta.url)).json(),
+    Bun.file(
+      new URL("../../scenarios/cache-growth/scenario.json", import.meta.url),
+    ).json(),
+    Bun.file(
+      new URL(
+        "../../scenarios/cache-growth/fixtures/telemetry.json",
+        import.meta.url,
+      ),
+    ).json(),
     loadProductionIncidentGraph({
       PODO_INCIDENT_GRAPH_ENABLED: "true",
-      PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH: fileURLToPath(new URL(
-        "../../scenarios/cache-growth/graph-bootstrap.json",
-        import.meta.url,
-      )),
+      PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH: fileURLToPath(
+        new URL(
+          "../../scenarios/cache-growth/graph-bootstrap.json",
+          import.meta.url,
+        ),
+      ),
     }),
   ])
   const canonicalExpected = parseCanonicalExpectedOutcome(rawScenario)
-  if (!Array.isArray(rawTelemetry)) throw new Error("Canonical telemetry fixture must be an array")
-  if (!incidentGraph) throw new Error("Canonical incident graph bootstrap is disabled")
+  if (!Array.isArray(rawTelemetry))
+    throw new Error("Canonical telemetry fixture must be an array")
+  if (!incidentGraph)
+    throw new Error("Canonical incident graph bootstrap is disabled")
   const cacheFile = exactlyOne(
     incidentGraph.codeGraph,
     (node) => node.kind === "file" && node.label === "cache.ts",
@@ -327,16 +372,18 @@ async function runCanonicalPocProof(): Promise<{
     "CheckoutCache function",
   )
 
-  const runtime = new DeterministicDiagnosisRuntime()
+  const runtime = new CanonicalDiagnosisRuntime()
   const fixture = await createCanonicalRemediationRepository()
-  const remediationRuntime = new DeterministicRemediationRuntime()
+  const remediationRuntime = new CanonicalRemediationRuntime()
   const remediationExecutor = new LocalWorktreeRemediationExecutor({
     repositoryRoot: fixture.repositoryRoot,
     trustedBaseRef: "main",
     pullRequestBaseBranch: "main",
     scratchParent: fixture.scratchParent,
     regressionCommand: [process.execPath, "test", CACHE_REGRESSION_PATH],
-    validationCommands: [[process.execPath, "test", "./demo/services/checkout-service"]],
+    validationCommands: [
+      [process.execPath, "test", "./demo/services/checkout-service"],
+    ],
     commandTimeoutMs: 30_000,
     maxOutputBytes: 256 * 1024,
     producer: new CodexRemediationPatchProducer({
@@ -383,10 +430,13 @@ async function runCanonicalPocProof(): Promise<{
     )
   }
   if (listed.incidents.length !== 1) {
-    throw new Error(`Expected one canonical incident, received ${listed.incidents.length}`)
+    throw new Error(
+      `Expected one canonical incident, received ${listed.incidents.length}`,
+    )
   }
   const detectedIncident = listed.incidents[0]!
-  if (detectedIncident.evidence.length === 0) throw new Error("Canonical incident has no evidence")
+  if (detectedIncident.evidence.length === 0)
+    throw new Error("Canonical incident has no evidence")
   const selectedEvidence = detectedIncident.evidence[0]!
 
   const { causalPath } = await client.getIncidentCausalPath(
@@ -398,38 +448,43 @@ async function runCanonicalPocProof(): Promise<{
   const started = await client.startIncidentInvestigation(detectedIncident.id, {
     cwd: process.cwd(),
   })
-  const beforeCompletion = (await client.getIncident(detectedIncident.id)).incident
+  const beforeCompletion = (await client.getIncident(detectedIncident.id))
+    .incident
   runtime.completeValidDiagnosis({
     evidenceIds: started.incident.evidence.map(({ id }) => id),
     affectedService: canonicalExpected.affectedService,
     safeToAttemptFix: canonicalExpected.safeToAttemptFix,
   })
-  const validatedIncident = (await client.getIncident(detectedIncident.id)).incident
-  const automaticRemediationProbe = await handler(new Request(
-    `http://podo.integration.test/api/incidents/${encodeURIComponent(detectedIncident.id)}/remediation`,
-  ))
+  const validatedIncident = (await client.getIncident(detectedIncident.id))
+    .incident
+  const automaticRemediationProbe = await handler(
+    new Request(
+      `http://podo.integration.test/api/incidents/${encodeURIComponent(detectedIncident.id)}/remediation`,
+    ),
+  )
   const requestLogBeforeRemediation = [...requestLog]
 
   await client.updateSettings({ autonomyMode: "act_with_approval" })
-  const { remediation: pendingRemediation } = await client.startIncidentRemediation(
-    detectedIncident.id,
-  )
-  const { remediation: pendingRemediationReadback } = await client.getIncidentRemediation(
-    detectedIncident.id,
-  )
+  const { remediation: pendingRemediation } =
+    await client.startIncidentRemediation(detectedIncident.id)
+  const { remediation: pendingRemediationReadback } =
+    await client.getIncidentRemediation(detectedIncident.id)
   const producerPhasesBeforeApproval = [...remediationRuntime.phases]
   const scratchEntriesBeforeApproval = await readdir(fixture.scratchParent)
-  const baseStateBeforeApproval = await repositoryBaseState(fixture.repositoryRoot)
-  const { remediation: completedRemediation } = await client.approveIncidentRemediation(
-    detectedIncident.id,
-    pendingRemediation.approval.id,
+  const baseStateBeforeApproval = await repositoryBaseState(
+    fixture.repositoryRoot,
   )
-  const { remediation: completedRemediationReadback } = await client.getIncidentRemediation(
-    detectedIncident.id,
-  )
+  const { remediation: completedRemediation } =
+    await client.approveIncidentRemediation(
+      detectedIncident.id,
+      pendingRemediation.approval.id,
+    )
+  const { remediation: completedRemediationReadback } =
+    await client.getIncidentRemediation(detectedIncident.id)
   const finalBaseState = await repositoryBaseState(fixture.repositoryRoot)
   const unifiedDiff = completedRemediation.artifact?.patch.unifiedDiff
-  if (!unifiedDiff) throw new Error("Canonical remediation did not complete with a diff")
+  if (!unifiedDiff)
+    throw new Error("Canonical remediation did not complete with a diff")
   const expectedHeadBranch = `podo/remediation-${createHash("sha256")
     .update(fixture.baseCommit)
     .update("\0")
@@ -481,212 +536,61 @@ interface RepositoryBaseState {
   regression: string
 }
 
-interface CanonicalRemediationFixture {
-  parent: string
-  repositoryRoot: string
-  scratchParent: string
-  baseCommit: string
+interface CanonicalRemediationFixture extends CanonicalRemediationRepository {
   sourceCache: string
   sourceRegression: string
   initialBaseState: RepositoryBaseState
 }
 
 async function createCanonicalRemediationRepository(): Promise<CanonicalRemediationFixture> {
-  const parent = await mkdtemp(join(tmpdir(), "podo-canonical-remediation-"))
-  temporaryRoots.push(parent)
-  const repositoryRoot = join(parent, "repository")
-  const scratchParent = join(parent, "scratch")
-  const serviceRoot = join(repositoryRoot, "demo/services/checkout-service")
-  await mkdir(join(serviceRoot, "src"), { recursive: true })
-  await mkdir(scratchParent)
-
-  const sourceCache = await Bun.file(join(process.cwd(), CACHE_IMPLEMENTATION_PATH)).text()
-  const sourceRegression = await Bun.file(join(process.cwd(), CACHE_REGRESSION_PATH)).text()
-  const sourcePackage = await Bun.file(
-    join(process.cwd(), "demo/services/checkout-service/package.json"),
-  ).text()
-  await Bun.write(join(repositoryRoot, CACHE_IMPLEMENTATION_PATH), sourceCache)
-  await Bun.write(join(repositoryRoot, CACHE_REGRESSION_PATH), sourceRegression)
-  await Bun.write(join(serviceRoot, "package.json"), sourcePackage)
-
-  await git(repositoryRoot, ["init", "-b", "main"])
-  await git(repositoryRoot, ["config", "user.email", "podo@example.invalid"])
-  await git(repositoryRoot, ["config", "user.name", "Podo canonical POC"])
-  await git(repositoryRoot, [
-    "add",
-    "--",
-    CACHE_IMPLEMENTATION_PATH,
-    CACHE_REGRESSION_PATH,
-    "demo/services/checkout-service/package.json",
-  ])
-  await git(repositoryRoot, ["commit", "-m", "canonical cache-growth fixture"])
-  const baseCommit = await git(repositoryRoot, ["rev-parse", "HEAD"])
-  const initialBaseState = await repositoryBaseState(repositoryRoot)
+  const repository = await createScenarioRepository(process.cwd())
+  temporaryRepositories.push(repository)
+  const sourceCache = await Bun.file(CACHE_IMPLEMENTATION_PATH).text()
+  const sourceRegression = await Bun.file(CACHE_REGRESSION_PATH).text()
+  const initialBaseState = await repositoryBaseState(repository.repositoryRoot)
   return {
-    parent,
-    repositoryRoot,
-    scratchParent,
-    baseCommit,
+    ...repository,
     sourceCache,
     sourceRegression,
     initialBaseState,
   }
 }
 
-class DeterministicRemediationRuntime implements CodexRuntime {
-  readonly privateThreadId = "private-remediation-thread-poc"
-  readonly privateTurnIds = [
-    "private-remediation-turn-regression-poc",
-    "private-remediation-turn-fix-poc",
-  ]
-  readonly starts: Array<{ threadId: string; input: StartCodexThreadInput }> = []
-  readonly resumes: Array<{ threadId: string; input: StartCodexThreadInput }> = []
-  readonly turns: Array<{ threadId: string; turnId: string; prompt: string }> = []
-  readonly phases: string[] = []
-  readonly interrupts: Array<{ threadId: string; turnId: string }> = []
-  readonly listeners = new Set<(event: CodexRuntimeEvent) => void>()
-  approvalResolutionAttempts = 0
-
-  async startThread(input: StartCodexThreadInput) {
-    this.starts.push({ threadId: this.privateThreadId, input: structuredClone(input) })
-    return { threadId: this.privateThreadId }
-  }
-
-  async resumeThread(threadId: string, input: StartCodexThreadInput) {
-    this.resumes.push({ threadId, input: structuredClone(input) })
-    return { threadId }
-  }
-
-  async startTurn(threadId: string, prompt: string) {
-    if (threadId !== this.privateThreadId) throw new Error("Unexpected remediation thread")
-    const threadInput = this.starts[0]?.input
-    const turnId = this.privateTurnIds[this.turns.length]
-    if (!threadInput || !turnId) throw new Error("Unexpected remediation turn")
-
-    if (prompt.includes("PHASE 1 OF 2: WRITE THE REGRESSION")) {
-      this.phases.push("regression")
-      await writeCanonicalRegression(threadInput.cwd)
-    } else if (prompt.includes("PHASE 2 OF 2: APPLY THE FIX")) {
-      this.phases.push("fix")
-      await applyCanonicalFix(threadInput.cwd)
-    } else {
-      throw new Error("Unexpected remediation phase prompt")
-    }
-
-    this.turns.push({ threadId, turnId, prompt })
-    queueMicrotask(() => this.emit({
-      kind: "turn.completed",
-      threadId,
-      turnId,
-      status: "completed",
-    }))
-    return { turnId }
-  }
-
-  async steerTurn() {
-    throw new Error("The canonical remediation runtime does not steer turns")
-  }
-
-  async interruptTurn(threadId: string, turnId: string) {
-    this.interrupts.push({ threadId, turnId })
-  }
-
-  async resolveApproval() {
-    this.approvalResolutionAttempts += 1
-    throw new Error("The canonical remediation runtime must not request approval")
-  }
-
-  onEvent(listener: (event: CodexRuntimeEvent) => void) {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
-
-  async close() {}
-
-  private emit(event: CodexRuntimeEvent): void {
-    for (const listener of this.listeners) listener(event)
-  }
-}
-
-async function writeCanonicalRegression(worktreePath: string): Promise<void> {
-  await Bun.write(join(worktreePath, CACHE_REGRESSION_PATH), [
-    'import { describe, expect, test } from "bun:test"',
-    'import { CheckoutCache } from "./cache"',
-    "",
-    'describe("CheckoutCache bounded retention", () => {',
-    '  test("evicts oldest entries beyond the configured maximum", () => {',
-    "    const cache = new CheckoutCache<number>(3)",
-    '    cache.set("order-1", 1)',
-    '    cache.set("order-2", 2)',
-    '    cache.set("order-3", 3)',
-    '    cache.set("order-4", 4)',
-    "",
-    "    expect(cache.size).toBe(3)",
-    '    expect(cache.get("order-1")).toBeUndefined()',
-    '    expect(cache.get("order-4")).toBe(4)',
-    "  })",
-    "})",
-    "",
-  ].join("\n"))
-}
-
-async function applyCanonicalFix(worktreePath: string): Promise<void> {
-  const cachePath = join(worktreePath, CACHE_IMPLEMENTATION_PATH)
-  const current = await Bun.file(cachePath).text()
-  const withConstructor = current.replace(
-    "export class CheckoutCache<T> {\n  private readonly entries = new Map<string, CacheEntry<T>>()",
-    [
-      "export class CheckoutCache<T> {",
-      "  private readonly entries = new Map<string, CacheEntry<T>>()",
-      "",
-      "  constructor(private readonly maxEntries = 1_000) {",
-      "    if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {",
-      '      throw new Error("maxEntries must be a positive safe integer")',
-      "    }",
-      "  }",
-    ].join("\n"),
-  )
-  const fixed = withConstructor.replace(
-    "    // No eviction, no TTL, no size cap — this is the defect under investigation.\n    this.entries.set(key, { value, storedAt: Date.now() })",
-    [
-      "    if (this.entries.has(key)) this.entries.delete(key)",
-      "    this.entries.set(key, { value, storedAt: Date.now() })",
-      "    while (this.entries.size > this.maxEntries) {",
-      "      const oldestKey = this.entries.keys().next().value",
-      "      if (oldestKey === undefined) break",
-      "      this.entries.delete(oldestKey)",
-      "    }",
-    ].join("\n"),
-  )
-  if (fixed === current
-    || !fixed.includes("constructor(private readonly maxEntries = 1_000)")
-    || fixed.includes("No eviction, no TTL, no size cap")) {
-    throw new Error("Canonical cache fixture no longer matches the deterministic patch")
-  }
-  await Bun.write(cachePath, fixed)
-}
-
-async function repositoryBaseState(repositoryRoot: string): Promise<RepositoryBaseState> {
+async function repositoryBaseState(
+  repositoryRoot: string,
+): Promise<RepositoryBaseState> {
   return {
     branch: await git(repositoryRoot, ["branch", "--show-current"]),
     head: await git(repositoryRoot, ["rev-parse", "HEAD"]),
-    status: await git(repositoryRoot, ["status", "--porcelain=v1", "--untracked-files=all"]),
-    cache: await Bun.file(join(repositoryRoot, CACHE_IMPLEMENTATION_PATH)).text(),
-    regression: await Bun.file(join(repositoryRoot, CACHE_REGRESSION_PATH)).text(),
+    status: await git(repositoryRoot, [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+    ]),
+    cache: await Bun.file(
+      join(repositoryRoot, CACHE_IMPLEMENTATION_PATH),
+    ).text(),
+    regression: await Bun.file(
+      join(repositoryRoot, CACHE_REGRESSION_PATH),
+    ).text(),
   }
 }
 
-function expectedPreviewId(artifact: NonNullable<IncidentRemediation["artifact"]>): string {
+function expectedPreviewId(
+  artifact: NonNullable<IncidentRemediation["artifact"]>,
+): string {
   const { id: _id, ...preview } = artifact.pullRequestPreview
   return `pr_preview_${createHash("sha256")
-    .update(JSON.stringify({
-      provenance: artifact.provenance,
-      evidenceIds: artifact.evidenceIds,
-      patch: artifact.patch,
-      regression: artifact.regression,
-      validation: artifact.validation,
-      preview,
-    }))
+    .update(
+      JSON.stringify({
+        provenance: artifact.provenance,
+        evidenceIds: artifact.evidenceIds,
+        patch: artifact.patch,
+        regression: artifact.regression,
+        validation: artifact.validation,
+        preview,
+      }),
+    )
     .digest("hex")
     .slice(0, 24)}`
 }
@@ -708,7 +612,8 @@ async function git(cwd: string, args: string[]): Promise<string> {
     new Response(process.stdout).text(),
     new Response(process.stderr).text(),
   ])
-  if (exitCode !== 0) throw new Error(`Canonical git fixture failed: ${stderr.trim()}`)
+  if (exitCode !== 0)
+    throw new Error(`Canonical git fixture failed: ${stderr.trim()}`)
   return stdout.trim()
 }
 
@@ -720,98 +625,18 @@ async function worktreePaths(repositoryRoot: string): Promise<string[]> {
     .map((line) => line.slice("worktree ".length))
 }
 
-class DeterministicDiagnosisRuntime implements CodexRuntime {
-  readonly privateThreadId = "private-codex-thread-poc"
-  readonly privateTurnId = "private-codex-turn-poc"
-  readonly listeners = new Set<(event: CodexRuntimeEvent) => void>()
-  threadInput: StartCodexThreadInput | null = null
-  diagnosisEvidenceIds: string[] = []
-  rawDiagnosis = ""
-  emittedDiagnosisCount = 0
-  approvalResolutionAttempts = 0
-
-  async startThread(input: StartCodexThreadInput) {
-    this.threadInput = structuredClone(input)
-    return { threadId: this.privateThreadId }
-  }
-
-  async resumeThread() {
-    throw new Error("The POC runtime does not resume threads")
-  }
-
-  async startTurn(threadId: string) {
-    if (threadId !== this.privateThreadId) throw new Error("Unexpected private thread identity")
-    return { turnId: this.privateTurnId }
-  }
-
-  async steerTurn() {
-    throw new Error("The POC runtime does not steer turns")
-  }
-
-  async interruptTurn() {}
-
-  async resolveApproval() {
-    this.approvalResolutionAttempts += 1
-    throw new Error("The read-only POC diagnosis must not request approval")
-  }
-
-  onEvent(listener: (event: CodexRuntimeEvent) => void) {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
-
-  async close() {}
-
-  completeValidDiagnosis(input: {
-    evidenceIds: string[]
-    affectedService: string
-    safeToAttemptFix: boolean
-  }): void {
-    const { evidenceIds } = input
-    if (evidenceIds.length === 0 || new Set(evidenceIds).size !== evidenceIds.length) {
-      throw new Error("Diagnosis requires unique actual incident evidence IDs")
-    }
-    this.diagnosisEvidenceIds = [...evidenceIds]
-    this.rawDiagnosis = JSON.stringify({
-      schemaVersion: "podo.diagnosis.v1",
-      summary: "Checkout heap growth is caused by the unbounded cache",
-      affectedService: input.affectedService,
-      probableRootCause: "CheckoutCache retains entries without eviction after the trusted deployment",
-      confidence: { value: 9300, scale: "basis_points" },
-      evidenceIds,
-      recommendedAction: "Bound CheckoutCache and verify the cache-growth regression",
-      safeToAttemptFix: input.safeToAttemptFix,
-    })
-    this.emittedDiagnosisCount += 1
-    this.emit({
-      kind: "output.delta",
-      threadId: this.privateThreadId,
-      turnId: this.privateTurnId,
-      text: this.rawDiagnosis,
-    })
-    this.emit({
-      kind: "turn.completed",
-      threadId: this.privateThreadId,
-      turnId: this.privateTurnId,
-      status: "completed",
-    })
-  }
-
-  private emit(event: CodexRuntimeEvent): void {
-    for (const listener of this.listeners) listener(event)
-  }
-}
-
-function parseCanonicalExpectedOutcome(value: unknown): CanonicalExpectedOutcome {
+function parseCanonicalExpectedOutcome(
+  value: unknown,
+): CanonicalExpectedOutcome {
   if (!isPlainObject(value) || !isPlainObject(value.expected)) {
     throw new Error("Canonical scenario must define an expected outcome")
   }
   const expected = value.expected
   if (
-    typeof expected.createsIncident !== "boolean"
-    || typeof expected.affectedService !== "string"
-    || expected.affectedService.trim().length === 0
-    || typeof expected.safeToAttemptFix !== "boolean"
+    typeof expected.createsIncident !== "boolean" ||
+    typeof expected.affectedService !== "string" ||
+    expected.affectedService.trim().length === 0 ||
+    typeof expected.safeToAttemptFix !== "boolean"
   ) {
     throw new Error("Canonical scenario expected outcome is invalid")
   }
@@ -832,6 +657,7 @@ function exactlyOne(
   label: string,
 ): NormalizedCodeGraphNode {
   const matches = snapshot.nodes.filter(predicate)
-  if (matches.length !== 1) throw new Error(`Expected one ${label}, received ${matches.length}`)
+  if (matches.length !== 1)
+    throw new Error(`Expected one ${label}, received ${matches.length}`)
   return matches[0]!
 }

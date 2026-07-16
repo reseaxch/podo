@@ -1,6 +1,7 @@
-import type { PodoClient } from "@podo/client"
+import type { PodoClient, PodoIncidentClient } from "@podo/client"
 import type {
   DetectedIncident,
+  IncidentCausalPath,
   IncidentDelivery,
   IncidentIssueDelivery,
   IncidentRemediation,
@@ -65,4 +66,16 @@ export async function getIncidentWorkflow(
     delivery: delivery?.delivery ?? null,
     issueDelivery: issueDelivery?.issueDelivery ?? null,
   }
+}
+
+export async function getIncidentCausalPath(
+  incident: DetectedIncident,
+  client: PodoIncidentClient = createDashboardClient(),
+): Promise<IncidentCausalPath | null> {
+  const evidence = incident.evidence[0]
+  if (!evidence) return null
+  const result = await optional(() =>
+    client.getIncidentCausalPath(incident.id, evidence.id),
+  )
+  return result?.causalPath ?? null
 }
