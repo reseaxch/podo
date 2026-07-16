@@ -17,6 +17,7 @@ export interface PullRequestDeliveryInput {
   authorization: {
     kind: "core.pull_request_delivery.v1"
     approvalId: string
+    approvedBy: string
     approvedAt: string
   }
   artifact: IncidentRemediationArtifact
@@ -28,6 +29,7 @@ export interface PullRequestDeliveryPort {
 
 export interface PullRequestDeliveryConfig {
   expectedRepository: string
+  operatorIdentity: string
   port: PullRequestDeliveryPort
 }
 
@@ -63,6 +65,9 @@ export class IncidentDeliveryService {
   ) {
     if (config && !isRepositoryIdentity(config.expectedRepository)) {
       throw new Error("invalid_pull_request_delivery_repository")
+    }
+    if (config && !isSafeIdentity(config.operatorIdentity)) {
+      throw new Error("invalid_pull_request_delivery_operator_identity")
     }
   }
 
@@ -144,11 +149,14 @@ export class IncidentDeliveryService {
       return { ok: true, delivery: copy(record.delivery) }
     }
 
+    const config = this.config
+    if (!config) throw new Error("pull_request_delivery_config_missing")
     record.delivery.approval.status = "approved"
     record.delivery.status = "delivering"
     record.authorization = {
       kind: "core.pull_request_delivery.v1",
       approvalId,
+      approvedBy: config.operatorIdentity,
       approvedAt: record.delivery.updatedAt,
     }
     this.auditDecision(record, approvalId, decision)
@@ -199,7 +207,13 @@ export class IncidentDeliveryService {
       return
     }
 
-    const result = parseDeliveryResult(raw, record.artifact, this.config.expectedRepository)
+    const result = parseDeliveryResult(
+      raw,
+      record.artifact,
+      this.config.expectedRepository,
+      record.delivery.id,
+      record.authorization,
+    )
     if (!result) {
       this.fail(record, "invalid_delivery_result", "Pull request delivery returned an invalid result")
       return
@@ -242,6 +256,8 @@ function parseDeliveryResult(
   value: unknown,
   artifact: IncidentRemediationArtifact,
   expectedRepository: string,
+  deliveryId: string,
+  authorization: PullRequestDeliveryInput["authorization"],
 ): NonNullable<IncidentDelivery["pullRequest"]> | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
     "provider",
@@ -251,7 +267,9 @@ function parseDeliveryResult(
     "baseCommit",
     "baseBranch",
     "headBranch",
+    "headSha",
     "artifactId",
+    "proof",
   ])) return null
   if (value.provider !== "github"
     || typeof value.repository !== "string"
@@ -263,7 +281,31 @@ function parseDeliveryResult(
     || value.baseCommit !== artifact.provenance.baseCommit
     || value.baseBranch !== artifact.pullRequestPreview.baseBranch
     || value.headBranch !== artifact.pullRequestPreview.headBranch
-    || value.artifactId !== artifact.pullRequestPreview.id) return null
+    || typeof value.headSha !== "string"
+    || !/^[a-f0-9]{40,64}$/.test(value.headSha)
+    || value.artifactId !== artifact.pullRequestPreview.id
+    || !isPlainObject(value.proof)
+    || !hasExactKeys(value.proof, [
+      "providerStatus",
+      "idempotencyKey",
+      "resultTreeOid",
+      "patchSha256",
+      "validationChecks",
+      "evidenceIds",
+      "authorization",
+    ])
+    || (value.proof.providerStatus !== "created" && value.proof.providerStatus !== "existing")
+    || value.proof.idempotencyKey !== deliveryId
+    || value.proof.resultTreeOid !== artifact.provenance.resultTreeOid
+    || value.proof.patchSha256 !== artifact.patch.sha256
+    || !equalStrings(value.proof.validationChecks, artifact.validation.checks)
+    || !equalStrings(value.proof.evidenceIds, artifact.evidenceIds)
+    || !isPlainObject(value.proof.authorization)
+    || !hasExactKeys(value.proof.authorization, ["approvalId", "approvedBy", "approvedAt"])
+    || value.proof.authorization.approvalId !== authorization.approvalId
+    || value.proof.authorization.approvedBy !== authorization.approvedBy
+    || value.proof.authorization.approvedAt !== authorization.approvedAt
+    || !isSafeIdentity(value.proof.authorization.approvedBy)) return null
 
   return {
     provider: "github",
@@ -273,8 +315,36 @@ function parseDeliveryResult(
     baseCommit: value.baseCommit,
     baseBranch: value.baseBranch,
     headBranch: value.headBranch,
+    headSha: value.headSha,
     artifactId: value.artifactId,
+    proof: {
+      providerStatus: value.proof.providerStatus,
+      idempotencyKey: value.proof.idempotencyKey,
+      resultTreeOid: value.proof.resultTreeOid,
+      patchSha256: value.proof.patchSha256,
+      validationChecks: [...value.proof.validationChecks],
+      evidenceIds: [...value.proof.evidenceIds],
+      authorization: {
+        approvalId: value.proof.authorization.approvalId,
+        approvedBy: value.proof.authorization.approvedBy,
+        approvedAt: value.proof.authorization.approvedAt,
+      },
+    },
   }
+}
+
+function equalStrings(value: unknown, expected: readonly string[]): value is string[] {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((item, index) => typeof item === "string" && item === expected[index])
+}
+
+function isSafeIdentity(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 320
+    && value === value.trim()
+    && !/[\u0000-\u001f\u007f]/.test(value)
 }
 
 function isRepositoryIdentity(value: string): boolean {

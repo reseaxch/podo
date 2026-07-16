@@ -2,10 +2,16 @@ import type {
   AgentChatEvent,
   AgentReadinessResponse,
   ApprovalDecisionResponse,
+  BuildIncidentRetryDecisionRequest,
+  BuildIncidentRetryDecisionResponse,
   CancelAgentChatTurnResponse,
   CancelInvestigationResponse,
   CreateAgentChatResponse,
   GetAgentChatResponse,
+  GetBuildIncidentAuditResponse,
+  GetBuildIncidentResponse,
+  GetBuildIncidentRetryResponse,
+  GetBuildRemediationVerificationResponse,
   GetInvestigationResponse,
   GetIncidentCausalPathResponse,
   GetIncidentResponse,
@@ -20,6 +26,7 @@ import type {
   IncidentRemediationDecisionResponse,
   IncidentDeliveryDecisionResponse,
   InvestigationEvent,
+  ListBuildIncidentsResponse,
   ListIncidentsResponse,
   SendAgentChatMessageRequest,
   SendAgentChatMessageResponse,
@@ -28,6 +35,8 @@ import type {
   StartIncidentIssueResponse,
   StartIncidentRemediationResponse,
   StartIncidentDeliveryResponse,
+  StartBuildIncidentRetryResponse,
+  StartBuildRemediationVerificationResponse,
   StartInvestigationRequest,
   StartInvestigationResponse,
   SystemStatusResponse,
@@ -83,6 +92,21 @@ export interface PodoIncidentAuditClient {
   getIncidentAudit(id: string): Promise<GetIncidentAuditResponse>
 }
 
+export interface PodoBuildIncidentClient {
+  listBuildIncidents(): Promise<ListBuildIncidentsResponse>
+  getBuildIncident(id: string): Promise<GetBuildIncidentResponse>
+  getBuildIncidentAudit(id: string): Promise<GetBuildIncidentAuditResponse>
+  startBuildIncidentRetry(id: string): Promise<StartBuildIncidentRetryResponse>
+  getBuildIncidentRetry(id: string): Promise<GetBuildIncidentRetryResponse>
+  decideBuildIncidentRetry(
+    id: string,
+    approvalId: string,
+    input: BuildIncidentRetryDecisionRequest,
+  ): Promise<BuildIncidentRetryDecisionResponse>
+  startBuildRemediationVerification(id: string): Promise<StartBuildRemediationVerificationResponse>
+  getBuildRemediationVerification(id: string): Promise<GetBuildRemediationVerificationResponse>
+}
+
 export interface PodoIncidentIssueClient {
   startIncidentIssue(id: string): Promise<StartIncidentIssueResponse>
   getIncidentIssue(id: string): Promise<GetIncidentIssueResponse>
@@ -108,11 +132,18 @@ async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
 
-export function createPodoClient(options: PodoClientOptions = {}): PodoClient & PodoAgentChatClient & PodoIncidentClient & PodoIncidentAuditClient & PodoIncidentIssueClient & PodoRemediationClient {
+export function createPodoClient(options: PodoClientOptions = {}): PodoClient
+  & PodoAgentChatClient
+  & PodoIncidentClient
+  & PodoIncidentAuditClient
+  & PodoIncidentIssueClient
+  & PodoRemediationClient
+  & PodoBuildIncidentClient {
   const baseUrl = (options.baseUrl ?? "http://127.0.0.1:4100").replace(/\/$/, "")
   const request = options.fetch ?? globalThis.fetch
   const investigationUrl = (id: string) => `${baseUrl}/api/investigations/${encodeURIComponent(id)}`
   const agentChatUrl = (id: string) => `${baseUrl}/api/agent/chats/${encodeURIComponent(id)}`
+  const buildIncidentUrl = (id: string) => `${baseUrl}/api/build-incidents/${encodeURIComponent(id)}`
   const command = async <T>(url: string, method: string, body?: unknown) => readJson<T>(await request(url, {
     method,
     ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
@@ -135,6 +166,24 @@ export function createPodoClient(options: PodoClientOptions = {}): PodoClient & 
     listIncidents: async () => readJson<ListIncidentsResponse>(await request(`${baseUrl}/api/incidents`)),
     getIncident: async (id) => readJson<GetIncidentResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}`)),
     getIncidentAudit: async (id) => readJson<GetIncidentAuditResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/audit`)),
+    listBuildIncidents: async () => readJson<ListBuildIncidentsResponse>(await request(`${baseUrl}/api/build-incidents`)),
+    getBuildIncident: async (id) => readJson<GetBuildIncidentResponse>(await request(buildIncidentUrl(id))),
+    getBuildIncidentAudit: async (id) => readJson<GetBuildIncidentAuditResponse>(await request(`${buildIncidentUrl(id)}/audit`)),
+    startBuildIncidentRetry: (id) => command<StartBuildIncidentRetryResponse>(`${buildIncidentUrl(id)}/retry`, "POST", {}),
+    getBuildIncidentRetry: async (id) => readJson<GetBuildIncidentRetryResponse>(await request(`${buildIncidentUrl(id)}/retry`)),
+    decideBuildIncidentRetry: (id, approvalId, input) => command<BuildIncidentRetryDecisionResponse>(
+      `${buildIncidentUrl(id)}/retry/approvals/${encodeURIComponent(approvalId)}`,
+      "POST",
+      input,
+    ),
+    startBuildRemediationVerification: (id) => command<StartBuildRemediationVerificationResponse>(
+      `${buildIncidentUrl(id)}/remediation/verification`,
+      "POST",
+      {},
+    ),
+    getBuildRemediationVerification: async (id) => readJson<GetBuildRemediationVerificationResponse>(
+      await request(`${buildIncidentUrl(id)}/remediation/verification`),
+    ),
     startIncidentIssue: (id) => command<StartIncidentIssueResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/issue`, "POST", {}),
     getIncidentIssue: async (id) => readJson<GetIncidentIssueResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/issue`)),
     getIncidentCausalPath: async (id, evidenceId) => readJson<GetIncidentCausalPathResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/causal-path?evidenceId=${encodeURIComponent(evidenceId)}`)),

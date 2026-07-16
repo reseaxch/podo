@@ -3,6 +3,7 @@ import type {
   AgentChatEvent,
   AgentReadinessResponse,
   ApprovalDecisionRequest,
+  GitHubActionsWorkflowRunSignal,
   HealthResponse,
   IncidentRemediationDecisionRequest,
   IngestTelemetryRequest,
@@ -11,13 +12,28 @@ import type {
   StartInvestigationRequest,
   SystemStatusResponse,
 } from "@podo/contracts"
+import type {
+  GitHubActionsRetryRequest,
+  GitHubActionsRunBinding,
+  GitHubActionsWebhookInput,
+  GitHubActionsWorkflowRunListRequest,
+} from "@podo/plugin-github"
 import { AgentChatService, type AgentChatConfig } from "./agent-chat"
 import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
+import { BuildIncidentRegistry } from "./modules/incidents/build-incident-registry"
+import {
+  BuildIncidentActionService,
+  type BuildIncidentActionsPort,
+} from "./modules/incidents/build-incident-actions"
 import { IncidentCausalPathService, type IncidentGraphConfig } from "./modules/graph/incident-causal-path"
 import { IncidentInvestigationCoordinator } from "./modules/investigation/incident-investigation"
 import { IncidentAuditStore } from "./modules/audit/incident-audit"
-import { IncidentRemediationService, type IncidentRemediationExecutor } from "./modules/remediation/incident-remediation"
+import {
+  IncidentRemediationService,
+  type IncidentRemediationExecutor,
+  type IncidentRemediationSource,
+} from "./modules/remediation/incident-remediation"
 import { IncidentDeliveryService, type PullRequestDeliveryConfig } from "./modules/remediation/incident-delivery"
 import { IncidentIssueService, type IssueDeliveryConfig } from "./modules/remediation/incident-issue"
 import { SettingsStore } from "./settings"
@@ -35,6 +51,19 @@ export interface CoreHandlerOptions {
   issueDelivery?: IssueDeliveryConfig
   agentChat?: AgentChatConfig
   sseHeartbeatMs?: number
+  githubActions?: CoreGitHubActionsConfig
+}
+
+export interface CoreGitHubActionsConfig extends BuildIncidentActionsPort {
+  repository: { owner: string; name: string }
+  repositoryCwd: string
+  operatorIdentity: string
+  verificationTimeoutMs?: number
+  decodeWebhook(input: GitHubActionsWebhookInput): unknown
+  captureFailedRun(signal: GitHubActionsWorkflowRunSignal): Promise<unknown>
+  getCurrentRun(input: GitHubActionsRunBinding): Promise<unknown>
+  listRunsForHead(input: GitHubActionsWorkflowRunListRequest): Promise<unknown>
+  retryFailedJobs(input: GitHubActionsRetryRequest): Promise<unknown>
 }
 
 const serviceVersion = "0.0.0"
@@ -60,10 +89,41 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   const incidentMonitor = options.incidentMonitor ?? new IncidentMonitor()
   const incidentAudit = new IncidentAuditStore()
   const incidentInvestigations = new IncidentInvestigationCoordinator(incidentMonitor, investigations, settings, incidentAudit)
+  const buildIncidents = options.githubActions
+    ? new BuildIncidentRegistry({
+      repositoryCwd: options.githubActions.repositoryCwd,
+      capturePort: { captureFailedRun: (signal) => options.githubActions!.captureFailedRun(signal) },
+    }, investigations, settings, incidentAudit)
+    : null
   const incidentCausalPaths = new IncidentCausalPathService(incidentMonitor, options.incidentGraph)
   const remediationExecutor = options.remediationExecutor
     ?? options.remediationExecutorFactory?.(() => investigations.acquireRuntime())
-  const incidentRemediations = new IncidentRemediationService(incidentMonitor, incidentInvestigations, settings, remediationExecutor)
+  const remediationSource: IncidentRemediationSource = {
+    getRemediationContext(incidentId) {
+      const incident = incidentMonitor.getIncident(incidentId)
+      if (incident) {
+        const diagnosis = incidentInvestigations.publicIncident(incident).diagnosis
+        return {
+          id: incident.id,
+          affectedService: incident.affectedService,
+          deploymentId: incident.deploymentId,
+          evidenceIds: incident.evidence.map(({ id }) => id),
+          ...(diagnosis ? { diagnosis } : {}),
+        }
+      }
+      const buildIncident = buildIncidents?.get(incidentId)
+      if (!buildIncident) return null
+      return {
+        id: buildIncident.id,
+        affectedService: buildIncident.affectedService,
+        deploymentId: `github-actions:${buildIncident.repository}:${buildIncident.sourceRun.id}:${buildIncident.sourceRun.attempt}`,
+        evidenceIds: buildIncident.evidence.map(({ id }) => id),
+        ...(buildIncident.diagnosis ? { diagnosis: buildIncident.diagnosis } : {}),
+        expectedBaseCommit: buildIncident.sourceRun.headSha,
+      }
+    },
+  }
+  const incidentRemediations = new IncidentRemediationService(remediationSource, settings, remediationExecutor)
   const incidentDeliveries = new IncidentDeliveryService(incidentRemediations, settings, options.pullRequestDelivery)
   const incidentIssues = new IncidentIssueService(
     incidentMonitor,
@@ -73,6 +133,16 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
     incidentAudit,
     options.issueDelivery,
   )
+  const buildActions = options.githubActions && buildIncidents
+    ? new BuildIncidentActionService({
+      repository: options.githubActions.repository,
+      operatorIdentity: options.githubActions.operatorIdentity,
+      ...(options.githubActions.verificationTimeoutMs === undefined
+        ? {}
+        : { verificationTimeoutMs: options.githubActions.verificationTimeoutMs }),
+      actions: options.githubActions,
+    }, buildIncidents, settings, incidentAudit, incidentRemediations, incidentDeliveries)
+    : null
   const remediationStatus = { configured: remediationExecutor !== undefined }
 
   return async function handleRequest(request: Request): Promise<Response> {
@@ -209,6 +279,123 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         : json({ error: "method_not_allowed" }, 405)
     }
 
+    if (url.pathname === "/api/github/actions/workflow-runs") {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      if (!options.githubActions || !buildIncidents || !buildActions) {
+        return json({ error: "github_actions_not_configured" }, 503)
+      }
+      if ([...url.searchParams.keys()].length > 0
+        || !request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+        return json({ error: "invalid_webhook", message: "GitHub Actions webhook was invalid" }, 400)
+      }
+      const webhookInput: GitHubActionsWebhookInput = {
+        eventType: request.headers.get("x-github-event") ?? "",
+        deliveryId: request.headers.get("x-github-delivery") ?? "",
+        signatureSha256: request.headers.get("x-hub-signature-256") ?? "",
+        body: await request.text(),
+      }
+      let signal: unknown
+      try {
+        signal = options.githubActions.decodeWebhook(webhookInput)
+      } catch (error) {
+        const code = safeErrorCode(error)
+        const status = code === "webhook_signature_required" || code === "invalid_webhook_signature" ? 401 : 422
+        return json({ error: "invalid_webhook", message: "GitHub Actions webhook was invalid" }, status)
+      }
+      const result = await buildIncidents.captureFailure(signal)
+      return result.ok
+        ? json({ created: result.created, incident: buildActions.get(result.incident.id) }, result.created ? 201 : 200)
+        : json({ error: result.error, message: result.message }, result.status)
+    }
+
+    if (url.pathname === "/api/build-incidents") {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      if (!buildActions) return json({ error: "github_actions_not_configured" }, 503)
+      return json({ incidents: buildActions.list() })
+    }
+
+    const buildIncidentAuditMatch = url.pathname.match(/^\/api\/build-incidents\/([^/]+)\/audit$/)
+    if (buildIncidentAuditMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      const incidentId = decodeURIComponent(buildIncidentAuditMatch[1])
+      if (!buildIncidents?.get(incidentId)) return json({ error: "not_found" }, 404)
+      return json({ events: incidentAudit.getBuild(incidentId) })
+    }
+
+    const buildIncidentRetryApprovalMatch = url.pathname.match(
+      /^\/api\/build-incidents\/([^/]+)\/retry\/approvals\/([^/]+)$/,
+    )
+    if (buildIncidentRetryApprovalMatch?.[1] && buildIncidentRetryApprovalMatch[2]) {
+      if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
+      if (!buildActions) return json({ error: "github_actions_not_configured" }, 503)
+      const input = await readBody(request)
+      if (!isBuildRetryDecision(input)) return json({ error: "invalid_request" }, 400)
+      const result = await buildActions.decideRetry(
+        decodeURIComponent(buildIncidentRetryApprovalMatch[1]),
+        decodeURIComponent(buildIncidentRetryApprovalMatch[2]),
+        input.decision,
+      )
+      return result.ok
+        ? json({ incident: result.incident, retry: result.retry })
+        : json({ error: result.error, message: result.message }, result.status)
+    }
+
+    const buildIncidentRetryMatch = url.pathname.match(/^\/api\/build-incidents\/([^/]+)\/retry$/)
+    if (buildIncidentRetryMatch?.[1]) {
+      if (!buildActions) return json({ error: "github_actions_not_configured" }, 503)
+      const incidentId = decodeURIComponent(buildIncidentRetryMatch[1])
+      if (request.method === "GET") {
+        const result = await buildActions.getRetry(incidentId)
+        return result.ok
+          ? json({ incident: result.incident, retry: result.retry })
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      if (request.method === "POST") {
+        const input = await readBody(request)
+        if (!isEmptyObject(input)) {
+          return json({ error: "invalid_request", message: "No caller-authored retry input is accepted" }, 400)
+        }
+        const result = buildActions.startRetry(incidentId)
+        return result.ok
+          ? json({ incident: result.incident, retry: result.retry }, result.created ? 201 : 200)
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      return json({ error: "method_not_allowed" }, 405)
+    }
+
+    const buildRemediationVerificationMatch = url.pathname.match(
+      /^\/api\/build-incidents\/([^/]+)\/remediation\/verification$/,
+    )
+    if (buildRemediationVerificationMatch?.[1]) {
+      if (!buildActions) return json({ error: "github_actions_not_configured" }, 503)
+      const incidentId = decodeURIComponent(buildRemediationVerificationMatch[1])
+      if (request.method === "GET") {
+        const result = await buildActions.getRemediationVerification(incidentId)
+        return result.ok
+          ? json({ incident: result.incident, verification: result.verification })
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      if (request.method === "POST") {
+        const input = await readBody(request)
+        if (!isEmptyObject(input)) {
+          return json({ error: "invalid_request", message: "No caller-authored verification input is accepted" }, 400)
+        }
+        const result = await buildActions.startRemediationVerification(incidentId)
+        return result.ok
+          ? json({ incident: result.incident, verification: result.verification }, result.created ? 201 : 200)
+          : json({ error: result.error, message: result.message }, result.status)
+      }
+      return json({ error: "method_not_allowed" }, 405)
+    }
+
+    const buildIncidentMatch = url.pathname.match(/^\/api\/build-incidents\/([^/]+)$/)
+    if (buildIncidentMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      if (!buildActions) return json({ error: "github_actions_not_configured" }, 503)
+      const incident = buildActions.get(decodeURIComponent(buildIncidentMatch[1]))
+      return incident ? json({ incident }) : json({ error: "not_found" }, 404)
+    }
+
     const incidentAuditMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/audit$/)
     if (incidentAuditMatch?.[1]) {
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
@@ -266,14 +453,14 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         : json({ error: result.error, message: result.message }, result.status)
     }
 
-    const incidentRemediationAuditMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/audit$/)
+    const incidentRemediationAuditMatch = url.pathname.match(/^\/api\/(?:incidents|build-incidents)\/([^/]+)\/remediation\/audit$/)
     if (incidentRemediationAuditMatch?.[1]) {
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
       const result = incidentRemediations.audit(decodeURIComponent(incidentRemediationAuditMatch[1]))
       return result.ok ? json({ events: result.events }) : json({ error: "not_found" }, 404)
     }
 
-    const incidentDeliveryMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/delivery$/)
+    const incidentDeliveryMatch = url.pathname.match(/^\/api\/(?:incidents|build-incidents)\/([^/]+)\/remediation\/delivery$/)
     if (incidentDeliveryMatch?.[1]) {
       const incidentId = decodeURIComponent(incidentDeliveryMatch[1])
       if (request.method === "GET") {
@@ -286,6 +473,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         const input = await readBody(request)
         if (!isEmptyObject(input)) return json({ error: "invalid_request", message: "No caller-authored delivery input is accepted" }, 400)
         const result = incidentDeliveries.start(incidentId)
+        if (result.ok) buildActions?.syncRemediation(incidentId)
         return result.ok
           ? json({ delivery: result.delivery }, result.created ? 201 : 200)
           : json({ error: result.error, message: result.message }, result.status)
@@ -293,7 +481,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       return json({ error: "method_not_allowed" }, 405)
     }
 
-    const incidentDeliveryApprovalMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/delivery\/approvals\/([^/]+)$/)
+    const incidentDeliveryApprovalMatch = url.pathname.match(/^\/api\/(?:incidents|build-incidents)\/([^/]+)\/remediation\/delivery\/approvals\/([^/]+)$/)
     if (incidentDeliveryApprovalMatch?.[1] && incidentDeliveryApprovalMatch[2]) {
       if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
       const input = await readBody(request)
@@ -303,12 +491,13 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         decodeURIComponent(incidentDeliveryApprovalMatch[2]),
         input.decision,
       )
+      if (result.ok) buildActions?.syncRemediation(decodeURIComponent(incidentDeliveryApprovalMatch[1]))
       return result.ok
         ? json({ delivery: result.delivery })
         : json({ error: result.error, message: result.message }, result.status)
     }
 
-    const incidentRemediationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation$/)
+    const incidentRemediationMatch = url.pathname.match(/^\/api\/(?:incidents|build-incidents)\/([^/]+)\/remediation$/)
     if (incidentRemediationMatch?.[1]) {
       const incidentId = decodeURIComponent(incidentRemediationMatch[1])
       if (request.method === "GET") {
@@ -320,7 +509,17 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (request.method === "POST") {
         const input = await readBody(request)
         if (!isEmptyObject(input)) return json({ error: "invalid_request", message: "No caller-authored remediation input is accepted" }, 400)
+        const buildIncident = buildIncidents?.get(incidentId)
+        const existingRemediation = incidentRemediations.get(incidentId)
+        if (buildIncident
+          && !existingRemediation.ok
+          && buildIncident.status !== "awaiting_action"
+          && buildIncident.status !== "denied"
+          && buildIncident.status !== "failed") {
+          return json({ error: "resolution_in_progress", message: "Build incident already has an active resolution branch" }, 409)
+        }
         const result = incidentRemediations.start(incidentId)
+        if (result.ok) buildActions?.syncRemediation(incidentId)
         return result.ok
           ? json({ remediation: result.remediation }, result.created ? 201 : 200)
           : json({ error: result.error, message: result.message }, result.status)
@@ -328,7 +527,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       return json({ error: "method_not_allowed" }, 405)
     }
 
-    const incidentRemediationApprovalMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/remediation\/approvals\/([^/]+)$/)
+    const incidentRemediationApprovalMatch = url.pathname.match(/^\/api\/(?:incidents|build-incidents)\/([^/]+)\/remediation\/approvals\/([^/]+)$/)
     if (incidentRemediationApprovalMatch?.[1] && incidentRemediationApprovalMatch[2]) {
       if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405)
       const input = await readBody(request)
@@ -338,6 +537,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         decodeURIComponent(incidentRemediationApprovalMatch[2]),
         input.decision,
       )
+      if (result.ok) buildActions?.syncRemediation(decodeURIComponent(incidentRemediationApprovalMatch[1]))
       return result.ok
         ? json({ remediation: result.remediation })
         : json({ error: result.error, message: result.message }, result.status)
@@ -355,7 +555,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
     if (url.pathname === "/api/investigations" && request.method === "POST") {
       const input = await readBody(request)
       if (!isStartRequest(input)) return json({ error: "invalid_request", message: "prompt, absolute cwd, and sandbox policy are required" }, 400)
-      return json(await investigations.start(input), 201)
+      return json(await investigations.start(input, { turnTimeoutMs: settings.get().turnTimeoutMs }), 201)
     }
 
     const eventsMatch = url.pathname.match(/^\/api\/investigations\/([^/]+)\/events$/)
@@ -515,6 +715,18 @@ function isIncidentRemediationDecision(value: unknown): value is IncidentRemedia
   return isPlainObject(value)
     && Object.keys(value).length === 1
     && (value.decision === "approve" || value.decision === "deny")
+}
+
+function isBuildRetryDecision(value: unknown): value is { decision: "approve" | "deny" } {
+  return isPlainObject(value)
+    && Object.keys(value).length === 1
+    && (value.decision === "approve" || value.decision === "deny")
+}
+
+function safeErrorCode(value: unknown): string | null {
+  return isPlainObject(value) && typeof value.code === "string" && value.code.length <= 128
+    ? value.code
+    : null
 }
 
 function isEmptyObject(value: unknown): value is Record<string, never> {

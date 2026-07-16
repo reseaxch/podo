@@ -1,8 +1,41 @@
 import { createHash } from "node:crypto"
 import type { PluginManifest } from "@podo/plugin-sdk"
 import type { GitCliBranchPublisher, PublishedVerifiedBranch } from "./git-branch-publisher"
+import {
+  DEFAULT_GITHUB_REQUEST_TIMEOUT_MS,
+  fetchWithGitHubTimeout,
+  isGitHubRequestTimeout,
+  type GitHubFetchLike,
+} from "./request-timeout"
 
 export { GitCliBranchPublisher, GitCliBranchPublisherError } from "./git-branch-publisher"
+export {
+  GitHubActionsError,
+  GitHubActionsReadAdapter,
+  GitHubActionsRetryAdapter,
+  GitHubActionsWebhookDecoder,
+} from "./actions"
+export type {
+  GitHubActionsConclusion,
+  GitHubActionsErrorCode,
+  GitHubActionsFailureSnapshot,
+  GitHubActionsJobSnapshot,
+  GitHubActionsReadAdapterConfig,
+  GitHubActionsRepository,
+  GitHubActionsRetryAdapterConfig,
+  GitHubActionsRetryAuthorization,
+  GitHubActionsRetryRequest,
+  GitHubActionsRetryResult,
+  GitHubActionsRunBinding,
+  GitHubActionsRunsForHead,
+  GitHubActionsRunSnapshot,
+  GitHubActionsRunStatus,
+  GitHubActionsStepSnapshot,
+  GitHubActionsWebhookDecoderConfig,
+  GitHubActionsWebhookInput,
+  GitHubActionsWebhookSignal,
+  GitHubActionsWorkflowRunListRequest,
+} from "./actions"
 export type {
   GitCliBranchPublisherConfig,
   GitCliBranchPublisherErrorCode,
@@ -17,7 +50,7 @@ export const githubPluginManifest = {
   id: "podo.github",
   displayName: "GitHub",
   version: "0.0.0",
-  capabilities: ["repository_read", "issue_write", "pull_request_write"],
+  capabilities: ["repository_read", "ci_read", "ci_retry", "issue_write", "pull_request_write"],
 } as const satisfies PluginManifest
 
 export interface GitHubRepositoryTarget {
@@ -178,9 +211,10 @@ export interface GitHubDeliveryAdapterConfig {
   publisher: GitHubBranchPublisher
   fetch?: GitHubFetch
   apiBaseUrl?: string
+  requestTimeoutMs?: number
 }
 
-export type GitHubFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+export type GitHubFetch = GitHubFetchLike
 
 export type GitHubIssueFallbackReason = "remediation_not_safe" | "remediation_denied" | "remediation_failed"
 
@@ -411,6 +445,7 @@ export class GitHubDeliveryAdapter {
   private readonly publisher: GitHubBranchPublisher
   private readonly request: GitHubFetch
   private readonly apiBaseUrl: string
+  private readonly requestTimeoutMs: number
   private readonly pending = new Map<string, Promise<GitHubDeliveryResult>>()
   private readonly artifactHashes = new Map<string, string>()
 
@@ -421,6 +456,7 @@ export class GitHubDeliveryAdapter {
     this.publisher = validated.publisher
     this.request = validated.fetch ?? globalThis.fetch
     this.apiBaseUrl = validated.apiBaseUrl ?? "https://api.github.com"
+    this.requestTimeoutMs = validated.requestTimeoutMs ?? DEFAULT_GITHUB_REQUEST_TIMEOUT_MS
   }
 
   async deliver(request: GitHubDeliveryRequest): Promise<GitHubDeliveryResult> {
@@ -553,15 +589,20 @@ export class GitHubDeliveryAdapter {
 
   private async githubFetch(url: string, init: RequestInit, operation: "read" | "write"): Promise<Response> {
     try {
-      return await this.request(url, {
-        ...init,
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${this.token}`,
-          "x-github-api-version": "2022-11-28",
-          ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+      return await fetchWithGitHubTimeout(
+        this.request,
+        url,
+        {
+          ...init,
+          headers: {
+            accept: "application/vnd.github+json",
+            authorization: `Bearer ${this.token}`,
+            "x-github-api-version": "2022-11-28",
+            ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+          },
         },
-      })
+        this.requestTimeoutMs,
+      )
     } catch {
       throw error(operation === "read" ? "github_read_failed" : "github_write_failed")
     }
@@ -722,12 +763,14 @@ function validateConfig(config: GitHubDeliveryAdapterConfig): GitHubDeliveryAdap
     if (!config.publisher || typeof config.publisher.publish !== "function") throw new Error()
     if (config.fetch !== undefined && typeof config.fetch !== "function") throw new Error()
     if (config.apiBaseUrl !== undefined && config.apiBaseUrl !== "https://api.github.com") throw new Error()
+    if (config.requestTimeoutMs !== undefined && !isGitHubRequestTimeout(config.requestTimeoutMs)) throw new Error()
     const result: GitHubDeliveryAdapterConfig = {
       token: config.token,
       repository: { ...config.repository },
       publisher: config.publisher,
       ...(config.fetch ? { fetch: config.fetch } : {}),
       ...(config.apiBaseUrl ? { apiBaseUrl: config.apiBaseUrl } : {}),
+      ...(config.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: config.requestTimeoutMs }),
     }
     return result
   } catch {

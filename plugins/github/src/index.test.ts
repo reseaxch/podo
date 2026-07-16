@@ -198,6 +198,30 @@ describe("GitHubDeliveryAdapter", () => {
     }
   })
 
+  test("aborts bounded delivery reads and writes with sanitized failures", async () => {
+    let readAborts = 0
+    const readTimeout = adapterWith({
+      publisher: noOpPublisher(),
+      requestTimeoutMs: 5,
+      fetch: async (_input, init) => abortOnlyResponse(init?.signal, () => { readAborts++ }),
+    })
+
+    await expect(readTimeout.deliver(deliveryRequest())).rejects.toMatchObject({ code: "github_read_failed" })
+    expect(readAborts).toBe(1)
+
+    let writeAborts = 0
+    const writeTimeout = adapterWith({
+      publisher: noOpPublisher(),
+      requestTimeoutMs: 5,
+      fetch: async (_input, init) => (init?.method ?? "GET") === "GET"
+        ? Response.json([])
+        : abortOnlyResponse(init?.signal, () => { writeAborts++ }),
+    })
+
+    await expect(writeTimeout.deliver(deliveryRequest())).rejects.toMatchObject({ code: "github_write_failed" })
+    expect(writeAborts).toBe(1)
+  })
+
   test("reconciles a create race after GitHub returns 422 without a second create", async () => {
     const request = deliveryRequest()
     const marker = `<!-- podo-delivery:${request.artifact.idempotencyKey}:${request.artifact.id}:${request.artifact.contentSha256} -->`
@@ -352,6 +376,12 @@ describe("GitHubDeliveryAdapter", () => {
       publisher: noOpPublisher(),
       fetch: async () => Response.json([]),
       apiBaseUrl: "https://attacker.example",
+    })).toThrow("invalid_delivery_config")
+    expect(() => new GitHubDeliveryAdapter({
+      token,
+      repository: { owner: "reseaxch", name: "podo", defaultBranch: "main", trustedBaseRef: "main" },
+      publisher: noOpPublisher(),
+      requestTimeoutMs: 120_001,
     })).toThrow("invalid_delivery_config")
 
     const adapter = adapterWith({ publisher: noOpPublisher(), fetch: async () => Response.json([]) })
@@ -537,7 +567,7 @@ describe("GitHubIssueAdapter", () => {
   })
 })
 
-function adapterWith(input: { fetch: GitHubFetch; publisher: GitHubBranchPublisher }) {
+function adapterWith(input: { fetch: GitHubFetch; publisher: GitHubBranchPublisher; requestTimeoutMs?: number }) {
   return new GitHubDeliveryAdapter({
     token,
     repository: {
@@ -548,6 +578,22 @@ function adapterWith(input: { fetch: GitHubFetch; publisher: GitHubBranchPublish
     },
     fetch: input.fetch,
     publisher: input.publisher,
+    ...(input.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: input.requestTimeoutMs }),
+  })
+}
+
+function abortOnlyResponse(signal: AbortSignal | null | undefined, onAbort: () => void): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    if (!signal) {
+      reject(new Error("missing_abort_signal"))
+      return
+    }
+    const rejectAfterAbort = () => {
+      onAbort()
+      reject(new Error(`provider stayed open with ${token}`))
+    }
+    if (signal.aborted) rejectAfterAbort()
+    else signal.addEventListener("abort", rejectAfterAbort, { once: true })
   })
 }
 

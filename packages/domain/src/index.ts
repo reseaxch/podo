@@ -10,7 +10,17 @@ export type IncidentStatus =
 
 export interface EvidenceReference {
   id: string
-  sourceType: "metric" | "log" | "trace" | "deployment" | "commit" | "code" | "test"
+  sourceType:
+    | "metric"
+    | "log"
+    | "trace"
+    | "deployment"
+    | "commit"
+    | "code"
+    | "test"
+    | "github_actions_workflow_run"
+    | "github_actions_job"
+    | "github_actions_step"
   sourceId: string
 }
 

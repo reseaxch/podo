@@ -10,12 +10,13 @@ export const REACTION_ACTIONS = [
   "write_patch",
   "run_regression_tests",
   "create_pull_request",
+  "retry_ci",
 ] as const
 
 export type ReactionAction = (typeof REACTION_ACTIONS)[number]
 export type ApprovalStatus = "not_requested" | "pending" | "approved" | "denied"
 export type RegressionStatus = "not_run" | "passed" | "failed"
-export type ExecutionTarget = "none" | "isolated_checkout" | "default_branch" | "production"
+export type ExecutionTarget = "none" | "isolated_checkout" | "external_ci" | "default_branch" | "production"
 export type ReactionReason =
   | "allowed"
   | "unknown_action"
@@ -45,7 +46,7 @@ const knownActions = new Set<string>(REACTION_ACTIONS)
 const knownModes = new Set<string>(["observe", "recommend", "act_with_approval"] satisfies readonly AutonomyLevel[])
 const knownApprovals = new Set<string>(["not_requested", "pending", "approved", "denied"] satisfies readonly ApprovalStatus[])
 const knownRegressions = new Set<string>(["not_run", "passed", "failed"] satisfies readonly RegressionStatus[])
-const knownTargets = new Set<string>(["none", "isolated_checkout", "default_branch", "production"] satisfies readonly ExecutionTarget[])
+const knownTargets = new Set<string>(["none", "isolated_checkout", "external_ci", "default_branch", "production"] satisfies readonly ExecutionTarget[])
 const observeActions = new Set<ReactionAction>(["read_evidence", "query_graph"])
 const recommendActions = new Set<ReactionAction>([
   ...observeActions,
@@ -58,6 +59,7 @@ const executionActions = new Set<ReactionAction>([
   "write_patch",
   "run_regression_tests",
   "create_pull_request",
+  "retry_ci",
 ])
 
 function deny(reason: Exclude<ReactionReason, "allowed">, requiresApproval = false): ReactionDecision {
@@ -98,7 +100,8 @@ export function evaluateReaction(request: ReactionRequest): ReactionDecision {
   }
   if (request.approval === "denied") return deny("approval_denied", true)
   if (request.approval !== "approved") return deny("approval_required", true)
-  if (request.target !== "isolated_checkout") return deny("unsafe_target", true)
+  const expectedTarget: ExecutionTarget = request.action === "retry_ci" ? "external_ci" : "isolated_checkout"
+  if (request.target !== expectedTarget) return deny("unsafe_target", true)
   if (request.action === "create_pull_request" && request.regression !== "passed") {
     return deny("regression_not_passed", true)
   }
