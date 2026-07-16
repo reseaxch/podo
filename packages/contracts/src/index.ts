@@ -979,12 +979,24 @@ export interface AgentReadinessResponse {
 
 export type AgentChatStatus = "ready" | "running" | "failed"
 
+export interface AgentChatAnswer {
+  schemaVersion: "podo.agent-answer.v1"
+  finding: string
+  causalPath: string[]
+  evidence: string[]
+  recommendation: string
+  safety: "No changes were made."
+  confidencePercent?: number
+  incidentId?: string
+}
+
 export interface AgentChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
   createdAt: string
   clientRequestId?: string
+  answer?: AgentChatAnswer
 }
 
 export type AgentChatErrorCode =
@@ -993,6 +1005,7 @@ export type AgentChatErrorCode =
   | "turn_failed"
   | "policy_denied"
   | "empty_response"
+  | "invalid_response"
 
 export interface AgentChat {
   id: string
