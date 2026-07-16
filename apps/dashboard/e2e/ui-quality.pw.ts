@@ -51,7 +51,7 @@ test("keyboard focus stays visible across controls in both themes", async ({
     await expect(button).not.toHaveCSS("box-shadow", "none")
 
     await page.goto("/incidents")
-    const link = page.getByRole("link", { name: "Overview" })
+    const link = page.locator("a.overview-toggle")
     await tabTo(page, link)
     await expect(link).not.toHaveCSS("box-shadow", "none")
 
