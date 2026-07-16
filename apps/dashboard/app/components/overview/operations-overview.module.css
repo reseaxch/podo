@@ -273,7 +273,7 @@
 }
 
 .p1 {
-  color: white;
+  color: var(--on-critical-solid);
   background: var(--critical-solid);
 }
 

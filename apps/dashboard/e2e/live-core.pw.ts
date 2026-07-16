@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test"
 
+const corePort = Number(process.env.PODO_DASHBOARD_E2E_CORE_PORT ?? 4101)
+const coreOrigin = `http://127.0.0.1:${corePort}`
+
 test.beforeEach(async ({ request }) => {
-  await request.post("http://127.0.0.1:4101/__reset")
+  await request.post(`${coreOrigin}/__reset`)
 })
 
 test("live Core flow stays approval-gated through pull request delivery", async ({
@@ -41,4 +44,21 @@ test("live Core flow stays approval-gated through pull request delivery", async 
   await expect(
     page.getByRole("link", { name: "Open PR #1842" }),
   ).toHaveAttribute("href", "https://github.com/reseaxch/podo/pull/1842")
+})
+
+test("unsafe remediation creates a Core-owned issue without an extra approval", async ({
+  page,
+}, testInfo) => {
+  const incidentId = `incident_unsafe_${testInfo.project.name}`
+  await page.goto(`/?mode=live&incident=${encodeURIComponent(incidentId)}`)
+
+  await expect(
+    page.getByRole("button", { name: "Create GitHub issue" }),
+  ).toBeVisible()
+  await expect(page.getByRole("button", { name: /approve/i })).toHaveCount(0)
+  await page.getByRole("button", { name: "Create GitHub issue" }).click()
+
+  await expect(
+    page.getByRole("link", { name: "Open issue #91" }),
+  ).toHaveAttribute("href", "https://github.com/reseaxch/podo/issues/91")
 })

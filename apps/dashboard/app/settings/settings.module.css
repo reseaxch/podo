@@ -816,7 +816,7 @@
 }
 .saveBar button:last-child {
   border-color: var(--primary);
-  color: white;
+  color: var(--on-primary-solid);
   background: var(--primary-solid);
 }
 .saveBar button:disabled {
@@ -933,7 +933,7 @@
 }
 .dialogFooter .primaryDialogAction {
   border-color: var(--primary);
-  color: #fff;
+  color: var(--on-primary-solid);
   background: var(--primary-solid);
 }
 .planOverview {

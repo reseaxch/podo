@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": "./src/library.ts",
   "dependencies": {
     "@podo/codex-app-server-client": "workspace:*",
     "@podo/contracts": "workspace:*",

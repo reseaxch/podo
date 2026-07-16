@@ -1,3 +1,4 @@
+import type { createPodoClient } from "@podo/client"
 import type { IncidentDelivery, IncidentRemediation } from "@podo/contracts"
 
 import { incidentOverviewMock } from "../mocks/incidents"
@@ -7,6 +8,8 @@ import type {
   IncidentOverviewViewModel,
   IncidentSummary,
 } from "./incident-overview-types"
+
+type DashboardClient = ReturnType<typeof createPodoClient>
 
 async function optional<T>(operation: () => Promise<T>): Promise<T | null> {
   try {
@@ -25,7 +28,8 @@ function workflowStatus(
   if (delivery?.status === "delivered") return "Resolved"
   if (
     remediation?.status === "pending_approval" ||
-    delivery?.status === "pending_approval"
+    delivery?.status === "pending_approval" ||
+    investigationStatus === "waiting_for_approval"
   )
     return "Awaiting approval"
   if (remediation?.status === "completed") return "Monitoring"
@@ -33,10 +37,12 @@ function workflowStatus(
   return "Investigating"
 }
 
-export async function getIncidentOverview(): Promise<IncidentOverviewViewModel> {
+export async function getIncidentOverview(
+  options: { client?: DashboardClient } = {},
+): Promise<IncidentOverviewViewModel> {
   if (isDemoDashboard()) return structuredClone(incidentOverviewMock)
 
-  const client = createDashboardClient()
+  const client = options.client ?? createDashboardClient()
   const { incidents } = await client.listIncidents()
   const summaries: IncidentSummary[] = await Promise.all(
     incidents.map(async (incident) => {
@@ -55,8 +61,8 @@ export async function getIncidentOverview(): Promise<IncidentOverviewViewModel> 
         incident.diagnosis?.status === "validated" ? incident.diagnosis : null
       return {
         id: incident.id,
-        title: `Cache growth detected in ${incident.affectedService}`,
-        severity: "P1",
+        title: `${incident.affectedService} ${incident.detector.replaceAll("_", " ")} incident`,
+        severity: "Unclassified",
         status,
         service: incident.affectedService,
         diagnosis:
@@ -70,11 +76,11 @@ export async function getIncidentOverview(): Promise<IncidentOverviewViewModel> 
           dateStyle: "medium",
           timeStyle: "short",
         }).format(new Date(incident.updatedAt)),
-        owner: { name: "Podo Core", initials: "PC" },
+        owner: { name: "Unassigned", initials: "—" },
         hasWorkspace: true,
         ...(status === "Awaiting approval"
           ? { attentionReason: "Needs approval" as const }
-          : { attentionReason: "SLO breached" as const }),
+          : { attentionReason: "Unowned" as const }),
       }
     }),
   )

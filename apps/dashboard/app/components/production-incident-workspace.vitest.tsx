@@ -1,6 +1,8 @@
 import type {
   DetectedIncident,
   IncidentDelivery,
+  IncidentCausalPath,
+  IncidentIssueDelivery,
   IncidentRemediation,
 } from "@podo/contracts"
 import { render, screen } from "@testing-library/react"
@@ -36,11 +38,52 @@ const incident: DetectedIncident = {
   ],
 }
 
+const causalPath: IncidentCausalPath = {
+  schemaVersion: "podo.causal-path.v1",
+  id: "path-live",
+  incident: { id: incident.id },
+  evidence: { id: incident.evidence[0]!.id },
+  telemetryEvent: {
+    id: incident.evidence[0]!.sourceEventId,
+    occurredAt: incident.evidence[0]!.observedAt,
+  },
+  container: { id: "checkout-service-7b9c" },
+  deployment: { id: "deploy-1042" },
+  commit: { id: "commit-live", sha: "d34db33f" },
+  file: {
+    id: "file-live",
+    kind: "file",
+    externalId: "file:cache",
+    label: "cache.ts",
+  },
+  function: {
+    id: "function-live",
+    kind: "function",
+    externalId: "function:cache",
+    label: "CheckoutCache",
+  },
+}
+
 function withIncident(overrides: Partial<DetectedIncident>): DetectedIncident {
   return { ...incident, ...overrides }
 }
 
 describe("ProductionIncidentWorkspace", () => {
+  it("renders the Core-owned evidence-to-code causal path", () => {
+    render(
+      <ProductionIncidentWorkspace
+        incident={incident}
+        causalPath={causalPath}
+      />,
+    )
+
+    expect(
+      screen.getByRole("heading", { name: "Evidence to code" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("cache.ts")).toBeInTheDocument()
+    expect(screen.getByText("CheckoutCache")).toBeInTheDocument()
+  })
+
   it("renders only core-backed detection and evidence state", () => {
     render(<ProductionIncidentWorkspace incident={incident} />)
 
@@ -261,7 +304,7 @@ describe("ProductionIncidentWorkspace", () => {
     )
   })
 
-  it("offers an issue fallback only after remediation failure", () => {
+  it("routes remediation failure through the Core-owned issue fallback", () => {
     const remediation: IncidentRemediation = {
       id: "remediation_live",
       incidentId: incident.id,
@@ -282,15 +325,47 @@ describe("ProductionIncidentWorkspace", () => {
       />,
     )
 
-    const issue = screen.getByRole("link", {
-      name: "Open prefilled GitHub issue",
-    })
-    expect(issue).toHaveAttribute(
-      "href",
-      expect.stringContaining("github.com/reseaxch/podo/issues/new"),
-    )
+    expect(
+      screen.getByRole("button", { name: "Create GitHub issue" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: /issue/i }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: /create pr/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it("opens only the exact issue URL returned by Core", () => {
+    const issueDelivery: IncidentIssueDelivery = {
+      id: "issue_delivery_live",
+      incidentId: incident.id,
+      reason: "remediation_failed",
+      status: "created",
+      createdAt: incident.createdAt,
+      updatedAt: incident.updatedAt,
+      issue: {
+        provider: "github",
+        repository: "reseaxch/podo",
+        number: 91,
+        url: "https://github.com/reseaxch/podo/issues/91",
+        state: "open",
+        providerStatus: "created",
+        draftId: "issue_draft_live",
+        idempotencyKey: "issue_delivery_live",
+        contentSha256: "abc123",
+      },
+    }
+
+    render(
+      <ProductionIncidentWorkspace
+        incident={incident}
+        issueDelivery={issueDelivery}
+      />,
+    )
+
+    expect(
+      screen.getByRole("link", { name: "Open issue #91" }),
+    ).toHaveAttribute("href", issueDelivery.issue?.url)
   })
 })

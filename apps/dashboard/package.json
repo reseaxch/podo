@@ -12,7 +12,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:core": "playwright test --config playwright.core.config.ts"
   },
   "dependencies": {
     "@podo/client": "workspace:*",

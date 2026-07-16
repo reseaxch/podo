@@ -1,0 +1,32 @@
+{
+  "action": "completed",
+  "repository": {
+    "id": 7713001,
+    "full_name": "reseaxch/podo",
+    "name": "podo",
+    "owner": { "login": "reseaxch" },
+    "html_url": "https://github.com/reseaxch/podo"
+  },
+  "workflow": {
+    "id": 3001,
+    "name": "Workspace",
+    "path": ".github/workflows/ci.yml"
+  },
+  "workflow_run": {
+    "id": 91377001,
+    "run_number": 77,
+    "run_attempt": 1,
+    "name": "Workspace",
+    "event": "push",
+    "head_branch": "main",
+    "head_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "status": "completed",
+    "conclusion": "failure",
+    "html_url": "https://github.com/reseaxch/podo/actions/runs/91377001",
+    "created_at": "2026-07-16T08:00:00Z",
+    "updated_at": "2026-07-16T08:04:00Z"
+  },
+  "sender": {
+    "login": "github-actions[bot]"
+  }
+}

@@ -673,7 +673,7 @@
 
 .dialog footer > .confirmDenyButton {
   border-color: var(--critical);
-  color: #fff8f8;
+  color: var(--on-critical-solid);
   background: color-mix(in srgb, var(--critical) 88%, #6e2020);
 }
 

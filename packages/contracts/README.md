@@ -30,6 +30,16 @@ are not transport fields.
 
 Contracts should describe Podo concepts, not transport-library internals or raw Codex JSON-RPC. Keep them serializable and explicit about version-sensitive behavior.
 
+## Agent chat
+
+The additive agent-chat contract exposes readiness, an opaque chat identity,
+typed user/assistant history, bounded ordered SSE events, cancellation, and
+stable public failure codes. Creation accepts no configuration, and a message
+contains only `content` plus `clientRequestId`. Repository paths, policy,
+sandbox, approvals, Codex thread/turn IDs, commands, and protocol messages are
+intentionally absent. A failed turn never retains partial output in chat
+history; live deltas remain bounded turn events.
+
 ## Normalized code graph
 
 `NormalizedCodeGraphSnapshot` is the boundary between a source adapter and the

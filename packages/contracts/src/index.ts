@@ -116,6 +116,424 @@ export interface FailedIncidentDiagnosis {
 
 export type IncidentDiagnosis = ValidatedIncidentDiagnosis | FailedIncidentDiagnosis
 
+export type BuildIncidentEvidenceSourceType =
+  | "github_actions_workflow_run"
+  | "github_actions_job"
+  | "github_actions_step"
+
+export interface BuildIncidentEvidence {
+  id: string
+  sourceId: string
+  sourceType: BuildIncidentEvidenceSourceType
+  observedAt: string
+  repository: string
+  runId: number
+  runAttempt: number
+  headSha: string
+  summary: string
+}
+
+export interface GitHubActionsWorkflowRunEvidence extends BuildIncidentEvidence {
+  sourceType: "github_actions_workflow_run"
+  workflowId: number
+  workflowName: string
+  status: "completed"
+  conclusion: "failure"
+  url: string
+}
+
+export interface GitHubActionsJobEvidence extends BuildIncidentEvidence {
+  sourceType: "github_actions_job"
+  jobId: number
+  jobName: string
+  status: "completed"
+  conclusion: BuildCiConclusion
+  url?: string
+}
+
+export interface GitHubActionsStepEvidence extends BuildIncidentEvidence {
+  sourceType: "github_actions_step"
+  jobId: number
+  jobName: string
+  stepNumber: number
+  stepName: string
+  status: BuildCiRunStatus
+  conclusion: BuildCiConclusion | null
+}
+
+export type GitHubActionsBuildIncidentEvidence =
+  | GitHubActionsWorkflowRunEvidence
+  | GitHubActionsJobEvidence
+  | GitHubActionsStepEvidence
+
+export interface GitHubActionsWorkflowRunSignal {
+  provider: "github"
+  event: "workflow_run"
+  action: "completed"
+  deliveryId: string
+  repository: {
+    owner: string
+    name: string
+  }
+  run: {
+    id: number
+    attempt: number
+    headSha: string
+  }
+}
+
+export type BuildCiRunStatus =
+  | "requested"
+  | "queued"
+  | "pending"
+  | "waiting"
+  | "in_progress"
+  | "completed"
+
+export type BuildCiConclusion =
+  | "action_required"
+  | "cancelled"
+  | "failure"
+  | "neutral"
+  | "skipped"
+  | "stale"
+  | "success"
+  | "timed_out"
+
+export interface BuildWorkflowRun {
+  id: number
+  workflowId: number
+  workflowName: string
+  workflowPath: string
+  runNumber: number
+  attempt: number
+  event: string
+  headBranch: string | null
+  headSha: string
+  status: BuildCiRunStatus
+  conclusion: BuildCiConclusion | null
+  createdAt: string
+  updatedAt: string
+  url: string
+}
+
+interface VerifiedBuildCiResultBase {
+  provider: "github_actions"
+  repository: string
+  workflowId: number
+  runId: number
+  runAttempt: number
+  headSha: string
+  status: "completed"
+  conclusion: "success"
+  url: string
+  verifiedAt: string
+}
+
+export type VerifiedBuildCiResult =
+  | VerifiedBuildCiResultBase & { mode: "retry"; artifactId?: never }
+  | VerifiedBuildCiResultBase & { mode: "remediation"; artifactId: string }
+
+export type BuildIncidentRetryErrorCode =
+  | "policy_denied"
+  | "retry_unavailable"
+  | "retry_failed"
+  | "invalid_retry_result"
+  | "ci_result_mismatch"
+  | "ci_failed"
+  | "verification_timeout"
+
+export interface BuildIncidentRetry {
+  id: string
+  status: "pending_approval" | "dispatching" | "awaiting_ci_result" | "verified" | "denied" | "failed"
+  approval: {
+    id: string
+    status: "pending" | "approved" | "denied"
+  }
+  sourceRun: {
+    id: number
+    attempt: number
+    headSha: string
+  }
+  createdAt: string
+  updatedAt: string
+  result?: VerifiedBuildCiResult & { mode: "retry" }
+  error?: { code: BuildIncidentRetryErrorCode; message: string }
+}
+
+export type BuildRemediationVerificationErrorCode =
+  | "remediation_not_verified"
+  | "delivery_not_verified"
+  | "ci_result_mismatch"
+  | "ci_failed"
+  | "verification_timeout"
+
+export interface BuildRemediationVerification {
+  id: string
+  status: "awaiting_ci_result" | "verified" | "failed"
+  repository: string
+  workflowId: number
+  remediationId: string
+  artifactId: string
+  resultTreeOid: string
+  headBranch: string
+  headSha: string
+  createdAt: string
+  updatedAt: string
+  result?: VerifiedBuildCiResult & { mode: "remediation"; artifactId: string }
+  error?: { code: BuildRemediationVerificationErrorCode; message: string }
+}
+
+export type BuildIncidentStatus =
+  | "investigating"
+  | "awaiting_action"
+  | "retry_pending_approval"
+  | "retrying"
+  | "awaiting_ci_result"
+  | "remediating"
+  | "verified"
+  | "denied"
+  | "failed"
+
+export interface BuildIncident {
+  id: string
+  status: BuildIncidentStatus
+  detector: "github_actions_failure"
+  provider: "github_actions"
+  repository: string
+  affectedService: string
+  workflow: {
+    id: number
+    name: string
+    path: string
+  }
+  sourceRun: BuildWorkflowRun & { status: "completed"; conclusion: "failure" }
+  evidence: GitHubActionsBuildIncidentEvidence[]
+  createdAt: string
+  updatedAt: string
+  investigation?: IncidentInvestigationLink
+  diagnosis?: IncidentDiagnosis
+  retry?: BuildIncidentRetry
+  remediationVerification?: BuildRemediationVerification
+  ciResult?: VerifiedBuildCiResult
+}
+
+export interface ListBuildIncidentsResponse {
+  incidents: BuildIncident[]
+}
+
+export interface GetBuildIncidentResponse {
+  incident: BuildIncident
+}
+
+export interface IngestBuildIncidentResponse {
+  created: boolean
+  incident: BuildIncident
+}
+
+export interface StartBuildIncidentRetryResponse {
+  incident: BuildIncident
+  retry: BuildIncidentRetry
+}
+
+export interface GetBuildIncidentRetryResponse {
+  incident: BuildIncident
+  retry: BuildIncidentRetry
+}
+
+export interface BuildIncidentRetryDecisionRequest {
+  decision: "approve" | "deny"
+}
+
+export interface BuildIncidentRetryDecisionResponse {
+  incident: BuildIncident
+  retry: BuildIncidentRetry
+}
+
+export interface StartBuildRemediationVerificationResponse {
+  incident: BuildIncident
+  verification: BuildRemediationVerification
+}
+
+export interface GetBuildRemediationVerificationResponse {
+  incident: BuildIncident
+  verification: BuildRemediationVerification
+}
+
+interface BuildIncidentAuditEventBase {
+  sequence: number
+  occurredAt: string
+  incidentId: string
+}
+
+export type BuildIncidentAuditEvent =
+  | BuildIncidentAuditEventBase & {
+    kind: "build.signal_received"
+    deliveryId: string
+    runId: number
+    runAttempt: number
+    headSha: string
+  }
+  | BuildIncidentAuditEventBase & { kind: "build.evidence_captured"; evidenceIds: string[] }
+  | BuildIncidentAuditEventBase & { kind: "build.incident_created" }
+  | BuildIncidentAuditEventBase & { kind: "investigation.requested" }
+  | BuildIncidentAuditEventBase & { kind: "investigation.started"; investigationId: string }
+  | BuildIncidentAuditEventBase & {
+    kind: "investigation.approval_denied"
+    investigationId: string
+    approvalKind: InvestigationApproval["kind"]
+  }
+  | BuildIncidentAuditEventBase & { kind: "investigation.completed"; investigationId: string }
+  | BuildIncidentAuditEventBase & { kind: "investigation.failed"; investigationId: string }
+  | BuildIncidentAuditEventBase & { kind: "investigation.cancelled"; investigationId: string }
+  | BuildIncidentAuditEventBase & {
+    kind: "investigation.diagnosis_validated"
+    investigationId: string
+    evidenceIds: string[]
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "investigation.diagnosis_rejected"
+    investigationId: string
+    code: IncidentDiagnosisErrorCode
+  }
+  | BuildIncidentAuditEventBase & { kind: "build.retry_requested"; retryId: string; approvalId: string }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.retry_approval_decided"
+    retryId: string
+    approvalId: string
+    decision: "approve" | "deny"
+    decidedBy: string
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.retry_dispatch_attempted"
+    retryId: string
+    approvalId: string
+    approvedBy: string
+    approvedAt: string
+    repository: string
+    idempotencyKey: string
+    runId: number
+    headSha: string
+    previousAttempt: number
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.retry_dispatched"
+    retryId: string
+    approvalId: string
+    approvedBy: string
+    approvedAt: string
+    providerStatus: "accepted" | "existing"
+    repository: string
+    idempotencyKey: string
+    runId: number
+    headSha: string
+    previousAttempt: number
+    expectedRunAttempt: number
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.retry_ci_result_observed"
+    retryId: string
+    runId: number
+    runAttempt: number
+    headSha: string
+    status: BuildCiRunStatus
+    conclusion: BuildCiConclusion | null
+  }
+  | BuildIncidentAuditEventBase & { kind: "build.retry_verified"; retryId: string; runId: number; runAttempt: number }
+  | BuildIncidentAuditEventBase & { kind: "build.retry_failed"; retryId: string; code: BuildIncidentRetryErrorCode }
+  | BuildIncidentAuditEventBase & { kind: "build.remediation_requested"; remediationId: string }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.remediation_approval_decided"
+    remediationId: string
+    approvalId: string
+    decision: "approve" | "deny"
+    decidedBy: string
+  }
+  | BuildIncidentAuditEventBase & { kind: "build.remediation_tested"; remediationId: string; artifactId: string }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.remediation_failed"
+    remediationId: string
+    code: NonNullable<IncidentRemediation["error"]>["code"]
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.delivery_requested"
+    deliveryId: string
+    remediationId: string
+    artifactId: string
+    approvalId: string
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.delivery_approval_decided"
+    deliveryId: string
+    approvalId: string
+    decision: "approve" | "deny"
+    decidedBy: string
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.delivery_failed"
+    deliveryId: string
+    code: IncidentDeliveryErrorCode
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.remediation_delivered"
+    deliveryId: string
+    remediationId: string
+    artifactId: string
+    approvalId: string
+    approvedBy: string
+    approvedAt: string
+    provider: "github"
+    repository: string
+    pullRequestNumber: number
+    pullRequestUrl: string
+    providerStatus: "created" | "existing"
+    idempotencyKey: string
+    baseCommit: string
+    baseBranch: string
+    headBranch: string
+    headSha: string
+    resultTreeOid: string
+    patchSha256: string
+    validationChecks: string[]
+    evidenceIds: string[]
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.remediation_ci_verification_started"
+    verificationId: string
+    remediationId: string
+    artifactId: string
+    resultTreeOid: string
+    headBranch: string
+    headSha: string
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.remediation_ci_result_observed"
+    verificationId: string
+    runId: number
+    runAttempt: number
+    headSha: string
+    status: BuildCiRunStatus
+    conclusion: BuildCiConclusion | null
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.remediation_verified"
+    verificationId: string
+    remediationId: string
+    artifactId: string
+    runId: number
+    runAttempt: number
+    headSha: string
+  }
+  | BuildIncidentAuditEventBase & {
+    kind: "build.remediation_ci_failed"
+    verificationId: string
+    code: BuildRemediationVerificationErrorCode
+  }
+
+export interface GetBuildIncidentAuditResponse {
+  events: BuildIncidentAuditEvent[]
+}
+
 export interface DetectedIncident {
   id: string
   status: "detected"
@@ -420,7 +838,21 @@ export interface IncidentDelivery {
     baseCommit: string
     baseBranch: string
     headBranch: string
+    headSha?: string
     artifactId: string
+    proof?: {
+      providerStatus: "created" | "existing"
+      idempotencyKey: string
+      resultTreeOid: string
+      patchSha256: string
+      validationChecks: string[]
+      evidenceIds: string[]
+      authorization: {
+        approvalId: string
+        approvedBy: string
+        approvedAt: string
+      }
+    }
   }
   error?: {
     code: IncidentDeliveryErrorCode
@@ -532,6 +964,74 @@ export type InvestigationEvent = {
   sequence: number
   timestamp: string
 } & InvestigationEventData
+
+export interface AgentReadinessResponse {
+  service: "podo-core"
+  status: "ready" | "degraded"
+  version: string
+  chat: {
+    configured: boolean
+    available: boolean
+    sandbox: "read-only"
+    reason?: "not_configured" | "codex_unavailable" | "version_mismatch" | "runtime_failed"
+  }
+}
+
+export type AgentChatStatus = "ready" | "running" | "failed"
+
+export interface AgentChatMessage {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  createdAt: string
+  clientRequestId?: string
+}
+
+export type AgentChatErrorCode =
+  | "runtime_unavailable"
+  | "turn_timeout"
+  | "turn_failed"
+  | "policy_denied"
+  | "empty_response"
+
+export interface AgentChat {
+  id: string
+  status: AgentChatStatus
+  createdAt: string
+  updatedAt: string
+  lastSequence: number
+  messages: AgentChatMessage[]
+  error?: { code: AgentChatErrorCode; message: string }
+}
+
+export interface CreateAgentChatResponse { chat: AgentChat }
+export interface GetAgentChatResponse { chat: AgentChat }
+
+export interface SendAgentChatMessageRequest {
+  content: string
+  clientRequestId: string
+}
+
+export interface SendAgentChatMessageResponse {
+  chat: AgentChat
+  accepted: boolean
+}
+
+export interface CancelAgentChatTurnResponse { chat: AgentChat }
+
+type AgentChatEventData =
+  | { kind: "chat.started"; payload: { status: "ready" } }
+  | { kind: "message.accepted"; payload: { message: AgentChatMessage } }
+  | { kind: "output.delta"; payload: { text: string } }
+  | { kind: "message.completed"; payload: { message: AgentChatMessage } }
+  | { kind: "turn.cancelled"; payload: { status: "ready" } }
+  | { kind: "chat.failed"; payload: { status: "failed"; error: NonNullable<AgentChat["error"]> } }
+
+export type AgentChatEvent = {
+  chatId: string
+  sequence: number
+  timestamp: string
+} & AgentChatEventData
 
 export const PODO_CODE_GRAPH_SCHEMA_VERSION = "podo.code-graph.v1" as const
 

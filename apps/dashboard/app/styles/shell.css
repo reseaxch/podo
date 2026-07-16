@@ -139,13 +139,6 @@
   text-decoration: none;
 }
 
-.icon-rail nav a:focus-visible,
-.icon-rail nav button:focus-visible,
-.rail-bottom button:focus-visible,
-.brand-mark:focus-visible {
-  box-shadow: none;
-}
-
 .icon-rail:hover nav a,
 .icon-rail:hover nav button,
 .icon-rail:hover .rail-bottom button,
@@ -600,7 +593,7 @@
   gap: 8px;
   border: 1px solid var(--primary-solid);
   border-radius: 8px;
-  color: white;
+  color: var(--on-primary-solid);
   background: var(--primary-solid);
   cursor: pointer;
   font-weight: 680;
@@ -913,7 +906,7 @@
 .incident-meta .severity {
   padding: 3px 8px;
   border-radius: 5px;
-  color: white;
+  color: var(--on-critical-solid);
   background: var(--critical-solid);
   font-weight: 750;
 }

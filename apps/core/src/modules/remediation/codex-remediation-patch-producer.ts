@@ -273,6 +273,7 @@ function trustedContext(input: ValidatedInput): string {
     incidentId: incident.id,
     affectedService: incident.affectedService,
     deploymentId: incident.deploymentId,
+    expectedBaseCommit: incident.expectedBaseCommit,
     evidenceIds: incident.evidenceIds,
     diagnosis: incident.diagnosis,
     target,

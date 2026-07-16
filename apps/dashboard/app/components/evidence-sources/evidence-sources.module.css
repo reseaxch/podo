@@ -1058,8 +1058,8 @@
 
 .dangerButton {
   border-color: var(--critical) !important;
-  color: #fff !important;
-  background: var(--critical) !important;
+  color: var(--on-critical-solid) !important;
+  background: var(--critical-solid) !important;
 }
 
 .dangerButton:hover:not(:disabled) {

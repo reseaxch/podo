@@ -1144,7 +1144,7 @@
   gap: 7px;
   border: 1px solid var(--primary);
   border-radius: 7px;
-  color: white;
+  color: var(--on-primary-solid);
   background: var(--primary-solid);
   font-size: 10px;
   font-weight: 700;
@@ -1419,7 +1419,7 @@
   border: 1px solid var(--primary-solid);
   border-radius: 7px;
   text-decoration: none;
-  color: white;
+  color: var(--on-primary-solid);
   background: var(--primary-solid);
   font-size: 10px;
   font-weight: 700;

@@ -36,4 +36,60 @@ describe("IncidentAuditStore", () => {
     expect(store.get("incident-owned")).toEqual([])
     expect(store.get("incident-attacker")).toEqual([])
   })
+
+  test("keeps one immutable monotonic audit for Build Incident evidence and CI verification", () => {
+    const store = new IncidentAuditStore()
+    const evidenceIds = ["build_evidence_a", "build_evidence_b"]
+
+    store.append("build-incident", {
+      kind: "build.signal_received",
+      deliveryId: "delivery-1",
+      runId: 91377001,
+      runAttempt: 1,
+      headSha: "c".repeat(40),
+    })
+    store.append("build-incident", { kind: "build.evidence_captured", evidenceIds })
+    store.append("build-incident", { kind: "build.incident_created" })
+    store.append("build-incident", {
+      kind: "build.retry_ci_result_observed",
+      retryId: "retry-1",
+      runId: 91377001,
+      runAttempt: 2,
+      headSha: "c".repeat(40),
+      status: "completed",
+      conclusion: "success",
+    })
+    store.append("build-incident", {
+      kind: "build.retry_verified",
+      retryId: "retry-1",
+      runId: 91377001,
+      runAttempt: 2,
+    })
+    evidenceIds[0] = "mutated"
+
+    const events = store.getBuild("build-incident")
+    expect(events.map(({ sequence, kind }) => ({ sequence, kind }))).toEqual([
+      { sequence: 1, kind: "build.signal_received" },
+      { sequence: 2, kind: "build.evidence_captured" },
+      { sequence: 3, kind: "build.incident_created" },
+      { sequence: 4, kind: "build.retry_ci_result_observed" },
+      { sequence: 5, kind: "build.retry_verified" },
+    ])
+    expect(events[1]).toMatchObject({ evidenceIds: ["build_evidence_a", "build_evidence_b"] })
+  })
+
+  test("rejects malformed Build Incident audit values without leaking them into the log", () => {
+    const store = new IncidentAuditStore()
+
+    expect(() => store.append("build-incident", {
+      kind: "build.retry_ci_result_observed",
+      retryId: "retry-1",
+      runId: 91377001,
+      runAttempt: 2,
+      headSha: "foreign-provider-output",
+      status: "completed",
+      conclusion: "success",
+    } as never)).toThrow("invalid_incident_audit_event")
+    expect(store.getBuild("build-incident")).toEqual([])
+  })
 })

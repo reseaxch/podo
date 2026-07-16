@@ -589,8 +589,12 @@
   font-weight: 750;
 }
 .severity-p1 {
-  color: white;
+  color: var(--on-critical-solid);
   background: var(--critical-solid);
+}
+.severity-unclassified {
+  color: var(--muted);
+  background: var(--surface-muted);
 }
 .severity-p2 {
   color: var(--warning);

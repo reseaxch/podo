@@ -350,8 +350,8 @@
   padding: 0 16px;
   border: 0;
   border-radius: 6px;
-  color: white;
-  background: var(--primary);
+  color: var(--on-primary-solid);
+  background: var(--primary-solid);
   cursor: pointer;
   font-weight: 750;
 }

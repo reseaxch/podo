@@ -19,8 +19,13 @@ interface InternalApproval {
 interface InternalInvestigation {
   public: Investigation
   prompt: string
+  runtime?: CodexRuntime
   threadId?: string
   turnId?: string
+  turnStarting?: boolean
+  interruptTurnWhenStarted?: boolean
+  turnTimeout?: unknown
+  bufferedTurnEvents: CodexRuntimeEvent[]
   events: InvestigationEvent[]
   outputDeltas: string[]
   approval?: InternalApproval
@@ -34,6 +39,20 @@ export interface InvestigationServiceOptions {
   runtime?: CodexRuntime
   createRuntime?: () => Promise<CodexRuntime>
   eventLogLimit?: number
+  timer?: InvestigationTimer
+}
+
+export interface InvestigationTimer {
+  schedule(callback: () => void, delayMs: number): unknown
+  clear(handle: unknown): void
+}
+
+export interface InvestigationStartOptions {
+  approvalPolicy?: "interactive" | "deny_all"
+  developerInstructions?: string
+  turnTimeoutMs?: number
+  onEvent?: (event: InvestigationEvent) => void
+  onApprovalDenied?: (investigationId: string, approvalKind: InvestigationApproval["kind"]) => void
 }
 
 export class InvestigationService {
@@ -44,9 +63,14 @@ export class InvestigationService {
   private currentRuntime: CodexRuntime | null = null
   private runtimeUnsubscribe: (() => void) | null = null
   private runtimeErrorMessage: string | null = null
+  private readonly timer: InvestigationTimer
 
   constructor(private readonly options: InvestigationServiceOptions = {}) {
     this.eventLogLimit = Math.max(1, options.eventLogLimit ?? 256)
+    this.timer = options.timer ?? systemInvestigationTimer
+    if (typeof this.timer.schedule !== "function" || typeof this.timer.clear !== "function") {
+      throw new Error("invalid_investigation_timer")
+    }
     if (options.runtime) {
       this.runtimePromise = Promise.resolve(options.runtime)
       this.bindRuntime(options.runtime)
@@ -63,13 +87,9 @@ export class InvestigationService {
 
   async start(
     input: StartInvestigationRequest,
-    options: {
-      approvalPolicy?: "interactive" | "deny_all"
-      developerInstructions?: string
-      onEvent?: (event: InvestigationEvent) => void
-      onApprovalDenied?: (investigationId: string, approvalKind: InvestigationApproval["kind"]) => void
-    } = {},
+    options: InvestigationStartOptions = {},
   ): Promise<StartInvestigationResponse> {
+    const turnTimeoutMs = validateTurnTimeout(options.turnTimeoutMs)
     const now = new Date().toISOString()
     const investigation: InternalInvestigation = {
       public: {
@@ -83,6 +103,7 @@ export class InvestigationService {
         pendingApproval: null,
       },
       prompt: input.prompt,
+      bufferedTurnEvents: [],
       events: [],
       outputDeltas: [],
       listeners: new Set(),
@@ -94,6 +115,7 @@ export class InvestigationService {
     this.append(investigation, { kind: "investigation.started", payload: { status: "starting" } })
     try {
       const runtime = await this.getRuntime()
+      investigation.runtime = runtime
       const thread = await runtime.startThread({
         cwd: input.cwd,
         sandbox: input.sandbox,
@@ -103,13 +125,26 @@ export class InvestigationService {
       })
       investigation.threadId = thread.threadId
       this.byThread.set(thread.threadId, investigation.public.id)
+      investigation.turnStarting = true
       const turn = await runtime.startTurn(thread.threadId, input.prompt)
       investigation.turnId = turn.turnId
+      delete investigation.turnStarting
+      if (investigation.interruptTurnWhenStarted) {
+        delete investigation.interruptTurnWhenStarted
+        try { void runtime.interruptTurn(thread.threadId, turn.turnId).catch(() => undefined) } catch {}
+      }
+      const bufferedTurnEvents = investigation.bufferedTurnEvents.splice(0)
+      for (const event of bufferedTurnEvents) this.handleRuntimeEvent(event)
       if (investigation.public.status === "starting") {
         investigation.public.status = "running"
         this.append(investigation, { kind: "investigation.running", payload: { status: "running" } })
       }
+      if (!isTerminal(investigation.public.status) && turnTimeoutMs !== undefined) {
+        this.armTurnTimeout(investigation, turnTimeoutMs)
+      }
     } catch (error) {
+      delete investigation.turnStarting
+      investigation.bufferedTurnEvents.length = 0
       this.fail(investigation, errorMessage(error))
     }
     return { investigation: snapshot(investigation.public) }
@@ -131,14 +166,14 @@ export class InvestigationService {
     const investigation = this.investigations.get(id)
     if (!investigation) return null
     if (isTerminal(investigation.public.status)) return { investigation: snapshot(investigation.public) }
+    this.clearTurnTimeout(investigation)
     try {
+      const runtime = investigation.runtime ?? await this.getRuntime()
       if (investigation.approval?.public.status === "pending") {
-        const runtime = await this.getRuntime()
         await runtime.resolveApproval(investigation.approval.runtimeRequestId, "deny")
         investigation.approval.public.status = "denied"
       }
       if (investigation.threadId && investigation.turnId) {
-        const runtime = await this.getRuntime()
         await runtime.interruptTurn(investigation.threadId, investigation.turnId)
       }
       if (!isTerminal(investigation.public.status)) {
@@ -227,6 +262,16 @@ export class InvestigationService {
     const id = this.byThread.get(event.threadId)
     const investigation = id ? this.investigations.get(id) : undefined
     if (!investigation) return
+    if (investigation.turnStarting && isTurnEvent(event) && !isTerminal(investigation.public.status)) {
+      if (investigation.bufferedTurnEvents.length >= this.eventLogLimit) {
+        investigation.bufferedTurnEvents.length = 0
+        investigation.interruptTurnWhenStarted = true
+        this.fail(investigation, "Investigation turn event buffer exceeded configured limit")
+        return
+      }
+      investigation.bufferedTurnEvents.push(structuredClone(event))
+      return
+    }
     if (isTerminal(investigation.public.status)) {
       if (event.kind === "approval.requested" && investigation.approvalPolicy === "deny_all") {
         this.denyRuntimeApproval(investigation, event.requestId)
@@ -240,6 +285,7 @@ export class InvestigationService {
         this.append(investigation, { kind: "output.delta", payload: { text: event.text } })
         break
       case "approval.requested": {
+        if (event.turnId !== investigation.turnId) return
         if (investigation.approvalPolicy === "deny_all") {
           investigation.onApprovalDenied?.(investigation.public.id, event.approvalKind)
           this.denyRuntimeApproval(investigation, event.requestId)
@@ -273,9 +319,11 @@ export class InvestigationService {
           delete investigation.approval
         }
         if (event.status === "completed") {
+          this.clearTurnTimeout(investigation)
           investigation.public.status = "completed"
           this.append(investigation, { kind: "investigation.completed", payload: { status: "completed" } })
         } else if (event.status === "interrupted") {
+          this.clearTurnTimeout(investigation)
           investigation.public.status = "cancelled"
           this.append(investigation, { kind: "investigation.cancelled", payload: { status: "cancelled" } })
         } else {
@@ -324,6 +372,7 @@ export class InvestigationService {
 
   private fail(investigation: InternalInvestigation, message: string): void {
     if (isTerminal(investigation.public.status)) return
+    this.clearTurnTimeout(investigation)
     investigation.public.status = "failed"
     investigation.outputDeltas.length = 0
     investigation.public.error = message
@@ -331,6 +380,50 @@ export class InvestigationService {
     delete investigation.approval
     this.append(investigation, { kind: "investigation.failed", payload: { status: "failed", error: message } })
   }
+
+  private armTurnTimeout(investigation: InternalInvestigation, turnTimeoutMs: number): void {
+    this.clearTurnTimeout(investigation)
+    investigation.turnTimeout = this.timer.schedule(() => {
+      if (isTerminal(investigation.public.status)) return
+      const runtime = investigation.runtime
+      const threadId = investigation.threadId
+      const turnId = investigation.turnId
+      const pendingApprovalRequestId = investigation.approval?.runtimeRequestId
+      this.fail(investigation, "Investigation exceeded the configured turn timeout")
+      if (runtime && threadId && turnId) {
+        if (pendingApprovalRequestId !== undefined) {
+          try { void runtime.resolveApproval(pendingApprovalRequestId, "deny").catch(() => undefined) } catch {}
+        }
+        try { void runtime.interruptTurn(threadId, turnId).catch(() => undefined) } catch {}
+      }
+    }, turnTimeoutMs)
+  }
+
+  private clearTurnTimeout(investigation: InternalInvestigation): void {
+    if (investigation.turnTimeout === undefined) return
+    const handle = investigation.turnTimeout
+    delete investigation.turnTimeout
+    this.timer.clear(handle)
+  }
+}
+
+const systemInvestigationTimer: InvestigationTimer = {
+  schedule(callback, delayMs) {
+    const handle = setTimeout(callback, delayMs)
+    handle.unref()
+    return handle
+  },
+  clear(handle) {
+    clearTimeout(handle as ReturnType<typeof setTimeout>)
+  },
+}
+
+function validateTurnTimeout(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  if (!Number.isSafeInteger(value) || value < 1_000 || value > 3_600_000) {
+    throw new Error("invalid_investigation_turn_timeout")
+  }
+  return value
 }
 
 function snapshot(investigation: Investigation): Investigation {
@@ -343,6 +436,12 @@ function errorMessage(error: unknown): string {
 
 function isTerminal(status: Investigation["status"]): boolean {
   return status === "completed" || status === "cancelled" || status === "failed"
+}
+
+function isTurnEvent(event: CodexRuntimeEvent): event is Extract<CodexRuntimeEvent, {
+  kind: "output.delta" | "approval.requested" | "turn.completed"
+}> {
+  return event.kind === "output.delta" || event.kind === "approval.requested" || event.kind === "turn.completed"
 }
 
 function sanitizeQuestions(value: unknown[]): NonNullable<InvestigationApproval["questions"]> {

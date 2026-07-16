@@ -64,6 +64,18 @@ test("production composition keeps the incident graph disabled by default", asyn
   expect(receivedIncidentGraph).toBeUndefined()
 })
 
+test("production composition injects the opt-in read-only agent chat", async () => {
+  let receivedAgentChat: unknown
+  await createProductionCoreHandler({ PODO_AGENT_CHAT_ENABLED: "true", PODO_AGENT_CHAT_CWD: "/configured/repository" }, {
+    agentChat: { async resolveDirectory() { return "/canonical/repository" } },
+    createHandler(options) {
+      receivedAgentChat = options.agentChat
+      return async () => new Response()
+    },
+  })
+  expect(receivedAgentChat).toEqual({ cwd: "/canonical/repository" })
+})
+
 test("production composition injects the opt-in GitHub issue fallback", async () => {
   let receivedIssueDelivery: unknown
   await createProductionCoreHandler({
@@ -89,6 +101,34 @@ test("production composition injects the opt-in GitHub issue fallback", async ()
   expect(receivedIssueDelivery).toMatchObject({
     expectedRepository: "owner/repository",
     port: { create: expect.any(Function) },
+  })
+})
+
+test("production composition injects the opt-in GitHub Actions boundary", async () => {
+  let receivedGitHubActions: unknown
+  await createProductionCoreHandler({
+    PODO_GITHUB_ACTIONS_ENABLED: "true",
+    PODO_GITHUB_TOKEN: "github-actions-token",
+    PODO_GITHUB_REPOSITORY: "owner/repository",
+    PODO_GITHUB_ACTIONS_WEBHOOK_SECRET: "github-actions-webhook-secret",
+    PODO_GITHUB_ACTIONS_REPOSITORY_CWD: "/configured/repository",
+    PODO_GITHUB_OPERATOR_IDENTITY: "local-operator",
+  }, {
+    createHandler(options) {
+      receivedGitHubActions = options.githubActions
+      return async () => new Response()
+    },
+  })
+
+  expect(receivedGitHubActions).toMatchObject({
+    repository: { owner: "owner", name: "repository" },
+    repositoryCwd: "/configured/repository",
+    operatorIdentity: "local-operator",
+    decodeWebhook: expect.any(Function),
+    captureFailedRun: expect.any(Function),
+    getCurrentRun: expect.any(Function),
+    listRunsForHead: expect.any(Function),
+    retryFailedJobs: expect.any(Function),
   })
 })
 

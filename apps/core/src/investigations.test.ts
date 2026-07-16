@@ -7,18 +7,67 @@ import { InvestigationService } from "./investigations"
 class FakeRuntime implements CodexRuntime {
   listeners = new Set<(event: CodexRuntimeEvent) => void>()
   decisions: Array<{ requestId: string | number; decision: string }> = []
+  interrupts: Array<{ threadId: string; turnId: string }> = []
   starts = 0
   turns = 0
   resumes = 0
+  completeBeforeStartTurnReturns = false
+  completionTurnIdBeforeStartTurnReturns?: string
+  outputEventsBeforeStartTurnReturns = 0
+  approvalResolution?: Promise<void>
   async startThread(_input: StartCodexThreadInput) { this.starts += 1; return { threadId: `internal-thread-${this.starts}` } }
   async resumeThread() { this.resumes += 1; return { threadId: "internal-thread-resumed" } }
-  async startTurn() { this.turns += 1; return { turnId: `internal-turn-${this.turns}` } }
+  async startTurn() {
+    this.turns += 1
+    const turnId = `internal-turn-${this.turns}`
+    if (this.completeBeforeStartTurnReturns) {
+      this.emit({
+        kind: "turn.completed",
+        threadId: `internal-thread-${this.starts}`,
+        turnId: this.completionTurnIdBeforeStartTurnReturns ?? turnId,
+        status: "completed",
+      })
+    }
+    for (let index = 0; index < this.outputEventsBeforeStartTurnReturns; index += 1) {
+      this.emit({ kind: "output.delta", threadId: `internal-thread-${this.starts}`, turnId, text: String(index) })
+    }
+    return { turnId }
+  }
   async steerTurn() { return { turnId: "internal-turn" } }
-  async interruptTurn() {}
-  async resolveApproval(requestId: string | number, decision: "approve" | "deny") { this.decisions.push({ requestId, decision }) }
+  async interruptTurn(threadId: string, turnId: string) { this.interrupts.push({ threadId, turnId }) }
+  async resolveApproval(requestId: string | number, decision: "approve" | "deny") {
+    this.decisions.push({ requestId, decision })
+    await this.approvalResolution
+  }
   onEvent(listener: (event: CodexRuntimeEvent) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener) }
   emit(event: CodexRuntimeEvent) { for (const listener of this.listeners) listener(event) }
   async close() {}
+}
+
+class ManualInvestigationTimer {
+  private nextId = 1
+  private readonly callbacks = new Map<number, () => void>()
+  readonly delays: number[] = []
+  readonly cleared: number[] = []
+
+  schedule(callback: () => void, delayMs: number): number {
+    const id = this.nextId++
+    this.callbacks.set(id, callback)
+    this.delays.push(delayMs)
+    return id
+  }
+
+  clear(handle: unknown): void {
+    if (typeof handle !== "number") return
+    this.cleared.push(handle)
+    this.callbacks.delete(handle)
+  }
+
+  fire(handle = this.nextId - 1): void {
+    const callback = this.callbacks.get(handle)
+    if (!callback) throw new Error("investigation timer was not scheduled")
+    callback()
+  }
 }
 
 async function start(handler: ReturnType<typeof createCoreHandler>) {
@@ -163,6 +212,172 @@ describe("investigation orchestration", () => {
     runtime.emit({ kind: "runtime.error", message: "app-server EOF" })
     const response = await handler(new Request(`http://podo.test/api/investigations/${id}`))
     expect(await response.json()).toMatchObject({ investigation: { status: "failed", error: "app-server EOF" } })
+  })
+
+  test("fails and best-effort interrupts a never-completing turn at the configured deadline", async () => {
+    const runtime = new FakeRuntime()
+    const timer = new ManualInvestigationTimer()
+    const service = new InvestigationService({ runtime, timer })
+    const started = await service.start(
+      { prompt: "investigate", cwd: "/repo", sandbox: "read-only" },
+      { turnTimeoutMs: 60_000 },
+    )
+    const id = started.investigation.id
+
+    expect(service.get(id)?.investigation.status).toBe("running")
+    expect(timer.delays).toEqual([60_000])
+
+    timer.fire()
+    await Promise.resolve()
+
+    expect(service.get(id)?.investigation).toMatchObject({
+      status: "failed",
+      error: "Investigation exceeded the configured turn timeout",
+    })
+    expect(service.replay(id, 0)?.at(-1)?.kind).toBe("investigation.failed")
+    expect(runtime.interrupts).toEqual([{
+      threadId: "internal-thread-1",
+      turnId: "internal-turn-1",
+    }])
+    expect(timer.cleared).toEqual([1])
+
+    const terminalSequence = service.get(id)?.investigation.lastSequence
+    runtime.emit({
+      kind: "turn.completed",
+      threadId: "internal-thread-1",
+      turnId: "internal-turn-1",
+      status: "completed",
+    })
+    expect(service.get(id)?.investigation.lastSequence).toBe(terminalSequence)
+    expect(service.getCompletedOutput(id)).toBeNull()
+  })
+
+  test("does not arm a timeout after a terminal event races the startTurn response", async () => {
+    const runtime = new FakeRuntime()
+    runtime.completeBeforeStartTurnReturns = true
+    const timer = new ManualInvestigationTimer()
+    const service = new InvestigationService({ runtime, timer })
+
+    const started = await service.start(
+      { prompt: "fast investigation", cwd: "/repo", sandbox: "read-only" },
+      { turnTimeoutMs: 60_000 },
+    )
+
+    expect(started.investigation.status).toBe("completed")
+    expect(service.getCompletedOutput(started.investigation.id)).toBe("")
+    expect(timer.delays).toEqual([])
+    expect(timer.cleared).toEqual([])
+  })
+
+  test("does not correlate a buffered terminal event from a different turn", async () => {
+    const runtime = new FakeRuntime()
+    runtime.completeBeforeStartTurnReturns = true
+    runtime.completionTurnIdBeforeStartTurnReturns = "foreign-turn"
+    const timer = new ManualInvestigationTimer()
+    const service = new InvestigationService({ runtime, timer })
+
+    const started = await service.start(
+      { prompt: "investigate current turn", cwd: "/repo", sandbox: "read-only" },
+      { turnTimeoutMs: 60_000 },
+    )
+
+    expect(started.investigation.status).toBe("running")
+    expect(service.getCompletedOutput(started.investigation.id)).toBeNull()
+    expect(timer.delays).toEqual([60_000])
+  })
+
+  test("interrupts a timed-out turn even when denying its pending approval never settles", async () => {
+    const runtime = new FakeRuntime()
+    runtime.approvalResolution = new Promise(() => {})
+    const timer = new ManualInvestigationTimer()
+    const service = new InvestigationService({ runtime, timer })
+    const started = await service.start(
+      { prompt: "investigate", cwd: "/repo", sandbox: "read-only" },
+      { turnTimeoutMs: 60_000 },
+    )
+    runtime.emit({
+      kind: "approval.requested",
+      requestId: "pending-approval",
+      approvalKind: "user_input",
+      threadId: "internal-thread-1",
+      turnId: "internal-turn-1",
+      itemId: "question",
+      questions: [],
+    })
+
+    timer.fire()
+    await Promise.resolve()
+
+    expect(service.get(started.investigation.id)?.investigation.status).toBe("failed")
+    expect(runtime.decisions).toEqual([{ requestId: "pending-approval", decision: "deny" }])
+    expect(runtime.interrupts).toEqual([{ threadId: "internal-thread-1", turnId: "internal-turn-1" }])
+  })
+
+  test("fails closed when turn events overflow the bounded startTurn race buffer", async () => {
+    const runtime = new FakeRuntime()
+    runtime.outputEventsBeforeStartTurnReturns = 3
+    const timer = new ManualInvestigationTimer()
+    const service = new InvestigationService({ runtime, timer, eventLogLimit: 2 })
+
+    const started = await service.start(
+      { prompt: "fast noisy investigation", cwd: "/repo", sandbox: "read-only" },
+      { turnTimeoutMs: 60_000 },
+    )
+
+    expect(started.investigation).toMatchObject({
+      status: "failed",
+      error: "Investigation turn event buffer exceeded configured limit",
+    })
+    expect(service.replay(started.investigation.id, 0)?.filter(({ kind }) => kind === "investigation.failed")).toHaveLength(1)
+    expect(runtime.interrupts).toEqual([{ threadId: "internal-thread-1", turnId: "internal-turn-1" }])
+    expect(timer.delays).toEqual([])
+  })
+
+  test("clears the supervised deadline on every non-timeout terminal path", async () => {
+    const terminalCases: Array<{
+      name: string
+      finish(runtime: FakeRuntime, service: InvestigationService, id: string): void | Promise<unknown>
+    }> = [
+      {
+        name: "completed",
+        finish(runtime) {
+          runtime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "internal-turn-1", status: "completed" })
+        },
+      },
+      {
+        name: "interrupted",
+        finish(runtime) {
+          runtime.emit({ kind: "turn.completed", threadId: "internal-thread-1", turnId: "internal-turn-1", status: "interrupted" })
+        },
+      },
+      {
+        name: "failed",
+        finish(runtime) {
+          runtime.emit({ kind: "runtime.error", threadId: "internal-thread-1", turnId: "internal-turn-1", message: "runtime failed" })
+        },
+      },
+      {
+        name: "cancelled",
+        finish(_runtime, service, id) {
+          return service.cancel(id)
+        },
+      },
+    ]
+
+    for (const terminalCase of terminalCases) {
+      const runtime = new FakeRuntime()
+      const timer = new ManualInvestigationTimer()
+      const service = new InvestigationService({ runtime, timer })
+      const started = await service.start(
+        { prompt: `investigate ${terminalCase.name}`, cwd: "/repo", sandbox: "read-only" },
+        { turnTimeoutMs: 60_000 },
+      )
+
+      await terminalCase.finish(runtime, service, started.investigation.id)
+
+      expect(service.isTerminal(started.investigation.id)).toBe(true)
+      expect(timer.cleared).toEqual([1])
+    }
   })
 
   test("degrades readiness after crash and lazily creates one fresh runtime for future work", async () => {

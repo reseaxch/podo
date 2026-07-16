@@ -1,6 +1,6 @@
 # Podo dashboard
 
-`@podo/dashboard` is the judge-facing browser UI. It will cover the incident list, causal graph, evidence timeline, diagnosis, approvals, remediation diff and tests, delivery state, and audit history.
+`@podo/dashboard` is the judge-facing browser UI. Its production routes cover incidents, the Core causal path, evidence, diagnosis, approvals, remediation diff and tests, delivery state, and audit history.
 
 The dashboard is a client of core. It must use public Podo contracts and must not access persistence or Codex directly.
 
@@ -15,12 +15,15 @@ incident-linked investigation lifecycle and validated diagnosis returned by
 Core, then exposes only the explicit investigation, remediation, and delivery
 commands available through `@podo/client`. Remediation execution and pull
 request delivery remain separate approval boundaries. Failed or structurally
-incomplete responses never expose unsafe guidance, and failed verification
-offers a prefilled issue handoff instead of pull-request delivery.
+incomplete responses never expose unsafe guidance. Unsafe, denied, or failed
+remediation uses the Core-owned GitHub issue fallback directly; it does not add
+another approval step and never builds issue content in the browser.
 
 Set `PODO_DASHBOARD_MODE=demo` only for isolated visual development and UI
 tests. `?mode=live` can be used by the E2E fake-Core suite to exercise the
 production boundary while the rest of the browser suite remains deterministic.
+Set `PODO_DASHBOARD_E2E_PORT` and `PODO_DASHBOARD_E2E_CORE_PORT` when the
+default test ports are already occupied.
 
 ```sh
 bun run dev:dashboard
@@ -30,4 +33,6 @@ bun run --cwd apps/dashboard build
 
 The production incident-to-PR controls, operational pages, audit, approvals,
 graph, evidence summary, and Core settings are backed by the typed Core client.
-The richer judge fixture remains available only at `/demo`.
+`bun run --cwd apps/dashboard test:e2e:core` runs both the successful PR path
+and the failed-validation-to-issue path against an actual Core HTTP server.
+The visual fixture remains available only at `/demo`.

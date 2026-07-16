@@ -4,7 +4,7 @@ export type IncidentOverviewStatus =
 export type IncidentSummary = {
   id: string
   title: string
-  severity: "P1" | "P2" | "P3"
+  severity: "P1" | "P2" | "P3" | "Unclassified"
   status: IncidentOverviewStatus
   service: string
   diagnosis: string

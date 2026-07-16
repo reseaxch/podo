@@ -1,4 +1,8 @@
-import type { IncidentDelivery, IncidentRemediation } from "@podo/contracts"
+import type {
+  IncidentDelivery,
+  IncidentIssueDelivery,
+  IncidentRemediation,
+} from "@podo/contracts"
 import { NextResponse } from "next/server"
 
 import {
@@ -20,16 +24,19 @@ async function optional<T>(operation: () => Promise<T>): Promise<T | null> {
 export async function GET(_request: Request, context: Context) {
   const { id } = await context.params
   const client = createDashboardClient()
-  const [{ incident }, remediationResult, deliveryResult] = await Promise.all([
-    client.getIncident(id),
-    optional(() => client.getIncidentRemediation(id)),
-    optional(() => client.getIncidentDelivery(id)),
-  ])
+  const [{ incident }, remediationResult, deliveryResult, issueResult] =
+    await Promise.all([
+      client.getIncident(id),
+      optional(() => client.getIncidentRemediation(id)),
+      optional(() => client.getIncidentDelivery(id)),
+      optional(() => client.getIncidentIssue(id)),
+    ])
 
   return NextResponse.json({
     incident,
     remediation: remediationResult?.remediation ?? null,
     delivery: deliveryResult?.delivery ?? null,
+    issueDelivery: issueResult?.issueDelivery ?? null,
   })
 }
 
@@ -42,6 +49,7 @@ type Command =
       decision: "approve" | "deny"
     }
   | { action: "start-delivery" }
+  | { action: "start-issue" }
   | {
       action: "decide-delivery"
       approvalId: string
@@ -71,6 +79,8 @@ export async function POST(request: Request, context: Context) {
     }
     case "start-delivery":
       return NextResponse.json(await client.startIncidentDelivery(id))
+    case "start-issue":
+      return NextResponse.json(await client.startIncidentIssue(id))
     case "decide-delivery": {
       const result =
         command.decision === "approve"
@@ -90,4 +100,5 @@ export type IncidentWorkflowResponse = {
   incident: import("@podo/contracts").DetectedIncident
   remediation: IncidentRemediation | null
   delivery: IncidentDelivery | null
+  issueDelivery: IncidentIssueDelivery | null
 }
