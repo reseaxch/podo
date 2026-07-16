@@ -20,6 +20,7 @@ import { GET as streamEvents } from "./chats/[id]/events/route"
 import { POST as sendMessage } from "./chats/[id]/messages/route"
 import * as turnRoute from "./chats/[id]/turn/route"
 import { GET as readiness } from "./readiness/route"
+import { isAgentChatTransportFailure } from "../../../lib/agent-chat-transport"
 
 const chat: AgentChat = {
   id: "chat-1",
@@ -99,14 +100,14 @@ describe("dashboard agent chat routes", () => {
 
   it("stops consuming a chunked body as soon as the byte limit is exceeded", async () => {
     let pulls = 0
-    let cancelled = false
+    let cancellations = 0
     const body = new ReadableStream<Uint8Array>({
       pull(controller) {
         pulls += 1
         controller.enqueue(new Uint8Array(4_096))
       },
       cancel() {
-        cancelled = true
+        cancellations += 1
       },
     })
 
@@ -118,9 +119,14 @@ describe("dashboard agent chat routes", () => {
       } as RequestInit),
     )
 
+    const pullsAtBoundary = pulls
+    await Promise.resolve()
+    await Promise.resolve()
+
     expect(response.status).toBe(413)
-    expect(cancelled).toBe(true)
-    expect(pulls).toBeLessThanOrEqual(6)
+    expect(cancellations).toBe(1)
+    expect(pullsAtBoundary).toBe(5)
+    expect(pulls).toBe(pullsAtBoundary)
     expect(client.createAgentChat).not.toHaveBeenCalled()
   })
 
@@ -231,7 +237,7 @@ describe("dashboard agent chat routes", () => {
     expect(upstreamSignal?.aborted).toBe(true)
   })
 
-  it("aborts and returns the iterator when the upstream stream fails", async () => {
+  it("returns a typed transport failure when the upstream stream fails", async () => {
     let upstreamSignal: AbortSignal | undefined
     let returned = false
     const iterator: AsyncIterator<AgentChatEvent> = {
@@ -256,12 +262,25 @@ describe("dashboard agent chat routes", () => {
       { params: Promise.resolve({ id: "missing" }) },
     )
     const body = await response.text()
+    const data = body
+      .split("\n")
+      .find((line) => line.startsWith("data:"))
+      ?.slice(5)
+      .trim()
+    const terminal = JSON.parse(data ?? "null") as unknown
 
-    expect(body).toBe("")
-    expect(body).not.toContain("proxy.error")
+    expect(body).toContain("event: transport.failed")
+    expect(isAgentChatTransportFailure(terminal)).toBe(true)
     expect(upstreamSignal?.aborted).toBe(true)
     expect(returned).toBe(true)
     expect(iterator.return).toHaveBeenCalledOnce()
+
+    client.subscribeAgentChatEvents.mockReturnValue(eventStream([]))
+    const normal = await streamEvents(
+      new Request("http://dashboard.test/api/podo/agent/chats/chat-1/events"),
+      context,
+    )
+    expect(await normal.text()).toBe("")
   })
 
   it("forwards bounded failed-turn events without exposing upstream exceptions", async () => {
