@@ -64,6 +64,18 @@ test("production composition keeps the incident graph disabled by default", asyn
   expect(receivedIncidentGraph).toBeUndefined()
 })
 
+test("production composition injects the opt-in read-only agent chat", async () => {
+  let receivedAgentChat: unknown
+  await createProductionCoreHandler({ PODO_AGENT_CHAT_ENABLED: "true", PODO_AGENT_CHAT_CWD: "/configured/repository" }, {
+    agentChat: { async resolveDirectory() { return "/canonical/repository" } },
+    createHandler(options) {
+      receivedAgentChat = options.agentChat
+      return async () => new Response()
+    },
+  })
+  expect(receivedAgentChat).toEqual({ cwd: "/canonical/repository" })
+})
+
 test("production composition injects the opt-in GitHub issue fallback", async () => {
   let receivedIssueDelivery: unknown
   await createProductionCoreHandler({

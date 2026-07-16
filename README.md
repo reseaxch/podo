@@ -141,6 +141,38 @@ curl -N -X POST http://127.0.0.1:4100/api/investigations \
   -d '{"prompt":"Investigate the incident evidence","cwd":"/absolute/path/to/sandbox","sandbox":"workspace-write"}'
 ```
 
+### Read-only agent chat
+
+UI and TUI clients can use the same long-lived App Server runtime for bounded,
+multi-turn operator questions without receiving Codex thread or turn IDs. Core
+owns the repository directory, developer instructions, read-only sandbox, and
+approval policy. Callers can submit only trimmed message text and an idempotency
+key; any command, file-change, permission, or user-input approval is denied and
+the chat fails closed.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/agent/readiness` | Prove configuration, exact pinned Codex compatibility, and a live App Server handshake |
+| `POST` | `/api/agent/chats` | Create a Core-owned read-only chat; accepts only `{}` |
+| `GET` | `/api/agent/chats/:id` | Read the typed public history and state |
+| `POST` | `/api/agent/chats/:id/messages` | Send `{ content, clientRequestId }` |
+| `DELETE` | `/api/agent/chats/:id/turn` | Interrupt the current turn |
+| `GET` | `/api/agent/chats/:id/events` | Stream the bounded current turn over SSE |
+
+Production composition is disabled by default. Enable it only for one trusted
+operator-selected repository:
+
+```sh
+PODO_AGENT_CHAT_ENABLED=true
+PODO_AGENT_CHAT_CWD=/absolute/path/to/repository
+```
+
+This is an operational Podo surface, not a generic autonomous coding chat. Chat
+turns have a Core-owned 90-second deadline, and SSE sends keep-alive comments so
+normal model latency does not look like a disconnected client. Chat state is in
+memory, so restart recovery and authenticated remote actors remain out of scope
+for this local/POC slice.
+
 Do not manually edit generated Codex protocol files. Regenerate them from the pinned Codex version and validate the client against that version.
 
 ## Scenarios, evals, benchmarks, and tests
@@ -159,6 +191,20 @@ The canonical POC is one command:
 ```sh
 bun run poc
 ```
+
+The judge-facing demo experience is also one command:
+
+```sh
+bun run demo
+```
+
+It checks Codex compatibility, builds the production Dashboard, and starts one
+connected deterministic Core-backed flow. The visible incident, causal path,
+diagnosis, approvals, tested diff, delivery state, and audit all come through
+the typed Core API. GitHub delivery is deterministic and performs no external
+writes. See
+[`demo/README.md`](demo/README.md) for prerequisites, expected state, ports, and
+reset behavior.
 
 The command first performs a real handshake with the pinned Codex App Server.
 It then proves the canonical fixture reaches a detected evidence-backed
@@ -237,6 +283,21 @@ bun run codex:generate
 bun run codex:smoke
 bun run check
 ```
+
+## Continuous integration
+
+GitHub Actions runs three required checks for every pull request and every push
+to `main`:
+
+- `Workspace`: frozen Bun install followed by all workspace typechecks, tests,
+  and builds;
+- `Dashboard`: formatting, lint, component tests, and Chromium Playwright flows;
+- `Codex compatibility`: installs Codex CLI `0.144.1`, matching the generated
+  protocol metadata, and performs the live App Server handshake.
+
+Production deployment is intentionally not automated yet. Durable Core state,
+reconciliation, authenticated actor identity, and the production secrets
+perimeter remain explicit prerequisites for CD.
 
 Run the complete canonical POC gate:
 

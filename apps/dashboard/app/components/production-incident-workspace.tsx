@@ -2,6 +2,7 @@
 
 import type {
   DetectedIncident,
+  IncidentCausalPath,
   IncidentDelivery,
   IncidentEvidence,
   IncidentIssueDelivery,
@@ -102,6 +103,36 @@ function IncidentFacts({ incident }: { incident: DetectedIncident }) {
         <dd>{formatInstant(incident.createdAt)} UTC</dd>
       </div>
     </dl>
+  )
+}
+
+function CausalPath({ path }: { path: IncidentCausalPath }) {
+  const nodes = [
+    { label: "Telemetry", value: path.telemetryEvent.id },
+    { label: "Container", value: path.container.id },
+    { label: "Deployment", value: path.deployment.id },
+    { label: "Commit", value: path.commit.sha },
+    { label: "File", value: path.file.location?.path ?? path.file.label },
+    { label: "Function", value: path.function.label },
+  ]
+  return (
+    <section className="production-causal-path" aria-labelledby="causal-title">
+      <header>
+        <div>
+          <p className="production-kicker">Causal graph</p>
+          <h2 id="causal-title">Evidence to code</h2>
+        </div>
+        <span>Core graph</span>
+      </header>
+      <ol>
+        {nodes.map((node) => (
+          <li key={node.label}>
+            <span>{node.label}</span>
+            <strong>{node.value}</strong>
+          </li>
+        ))}
+      </ol>
+    </section>
   )
 }
 
@@ -602,11 +633,13 @@ function ProductionWorkflow({ initial }: { initial: WorkflowState }) {
 
 export function ProductionIncidentWorkspace({
   incident,
+  causalPath = null,
   remediation = null,
   delivery = null,
   issueDelivery = null,
 }: {
   incident: DetectedIncident
+  causalPath?: IncidentCausalPath | null
   remediation?: IncidentRemediation | null
   delivery?: IncidentDelivery | null
   issueDelivery?: IncidentIssueDelivery | null
@@ -664,6 +697,8 @@ export function ProductionIncidentWorkspace({
               ))}
             </div>
           </section>
+
+          {causalPath ? <CausalPath path={causalPath} /> : null}
 
           <ProductionWorkflow
             initial={{ incident, remediation, delivery, issueDelivery }}

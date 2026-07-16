@@ -1,3 +1,4 @@
+import { assertProtocolCompatibility } from "@podo/codex-protocol/compatibility"
 import type { ClientRequest } from "@podo/codex-protocol/generated/ClientRequest.ts"
 import type { InitializeResponse } from "@podo/codex-protocol/generated/InitializeResponse.ts"
 import type { RequestId } from "@podo/codex-protocol/generated/RequestId.ts"
@@ -9,6 +10,7 @@ import type { ThreadStartResponse } from "@podo/codex-protocol/generated/v2/Thre
 import type { TurnInterruptResponse } from "@podo/codex-protocol/generated/v2/TurnInterruptResponse.ts"
 import type { TurnStartResponse } from "@podo/codex-protocol/generated/v2/TurnStartResponse.ts"
 import type { TurnSteerResponse } from "@podo/codex-protocol/generated/v2/TurnSteerResponse.ts"
+import protocolMetadata from "@podo/codex-protocol/metadata"
 
 export interface CodexRuntimeInfo {
   binary: string
@@ -403,6 +405,19 @@ export function parseCodexVersion(output: string): string {
   return match[1]
 }
 
+export function assertCodexRuntimeCompatibility(runtime: CodexRuntimeInfo): string {
+  return assertProtocolCompatibility(runtime.rawVersion, protocolMetadata.upstreamTag)
+}
+
+export function isCodexRuntimeCompatible(runtime: CodexRuntimeInfo): boolean {
+  try {
+    assertCodexRuntimeCompatibility(runtime)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function inspectCodexRuntime(binary = process.env.CODEX_BIN ?? "codex"): Promise<CodexRuntimeInfo> {
   const processHandle = Bun.spawn([binary, "--version"], { stdout: "pipe", stderr: "pipe" })
   const [exitCode, stdout, stderr] = await Promise.all([
@@ -418,6 +433,7 @@ export async function inspectCodexRuntime(binary = process.env.CODEX_BIN ?? "cod
 export async function probeCodexAppServer(options: ProbeCodexOptions = {}): Promise<CodexAppServerHandshake> {
   const binary = options.binary ?? process.env.CODEX_BIN ?? "codex"
   const runtime = await inspectCodexRuntime(binary)
+  assertCodexRuntimeCompatibility(runtime)
   const connection = await AppServerConnection.connect({
     binary,
     ...(options.timeoutMs === undefined ? {} : { initializeTimeoutMs: options.timeoutMs }),

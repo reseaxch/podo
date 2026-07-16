@@ -20,6 +20,42 @@ describe("createPodoClient", () => {
     expect(requestedUrls).toEqual(["http://podo.test/healthz"])
   })
 
+  test("uses the read-only agent readiness and chat contract", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = []
+    const client = createPodoClient({
+      baseUrl: "http://podo.test/",
+      fetch: async (input, init) => {
+        requests.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+        })
+        if (String(input).endsWith("/readiness")) {
+          return Response.json({ service: "podo-core", status: "ready", chat: { available: true } })
+        }
+        return Response.json({ chat: { id: "chat/1" }, accepted: true })
+      },
+    })
+
+    await client.agentReadiness()
+    await client.createAgentChat()
+    await client.getAgentChat("chat/1")
+    await client.sendAgentChatMessage("chat/1", { content: "What changed?", clientRequestId: "request/1" })
+    await client.cancelAgentChatTurn("chat/1")
+
+    expect(requests).toEqual([
+      { url: "http://podo.test/api/agent/readiness", method: "GET" },
+      { url: "http://podo.test/api/agent/chats", method: "POST", body: {} },
+      { url: "http://podo.test/api/agent/chats/chat%2F1", method: "GET" },
+      {
+        url: "http://podo.test/api/agent/chats/chat%2F1/messages",
+        method: "POST",
+        body: { content: "What changed?", clientRequestId: "request/1" },
+      },
+      { url: "http://podo.test/api/agent/chats/chat%2F1/turn", method: "DELETE" },
+    ])
+  })
+
   test("uses the public investigation command contract", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = []
     const client = createPodoClient({

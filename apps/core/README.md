@@ -178,3 +178,20 @@ bun test apps/core
 ```
 
 Core consumes stable Codex behavior from `@podo/codex-app-server-client` and exposes Podo contracts rather than raw Codex JSON-RPC.
+
+## Read-only operator chat
+
+Core also owns an opt-in multi-turn chat for dashboard and TUI questions. It
+reuses the supervised Codex App Server runtime, but keeps its own opaque public
+chat identity and never exports Codex thread/turn IDs. The repository path,
+developer instructions, read-only sandbox, and approval policy are Core-owned;
+message commands accept only `content` and `clientRequestId`. Every Codex
+approval request is denied and the turn fails closed.
+
+Enable production composition with `PODO_AGENT_CHAT_ENABLED=true` and an
+absolute `PODO_AGENT_CHAT_CWD`. Startup resolves that path to an existing
+canonical directory. `GET /api/agent/readiness` then verifies exact pinned
+protocol compatibility and a real App Server connection before returning
+`ready`. Chat state and replay logs are bounded and in memory for the local/POC
+stage. Core interrupts a chat turn after 90 seconds, and both investigation and
+chat SSE streams send comment heartbeats during quiet model work.

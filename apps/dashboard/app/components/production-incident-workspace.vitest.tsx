@@ -1,6 +1,7 @@
 import type {
   DetectedIncident,
   IncidentDelivery,
+  IncidentCausalPath,
   IncidentIssueDelivery,
   IncidentRemediation,
 } from "@podo/contracts"
@@ -37,11 +38,52 @@ const incident: DetectedIncident = {
   ],
 }
 
+const causalPath: IncidentCausalPath = {
+  schemaVersion: "podo.causal-path.v1",
+  id: "path-live",
+  incident: { id: incident.id },
+  evidence: { id: incident.evidence[0]!.id },
+  telemetryEvent: {
+    id: incident.evidence[0]!.sourceEventId,
+    occurredAt: incident.evidence[0]!.observedAt,
+  },
+  container: { id: "checkout-service-7b9c" },
+  deployment: { id: "deploy-1042" },
+  commit: { id: "commit-live", sha: "d34db33f" },
+  file: {
+    id: "file-live",
+    kind: "file",
+    externalId: "file:cache",
+    label: "cache.ts",
+  },
+  function: {
+    id: "function-live",
+    kind: "function",
+    externalId: "function:cache",
+    label: "CheckoutCache",
+  },
+}
+
 function withIncident(overrides: Partial<DetectedIncident>): DetectedIncident {
   return { ...incident, ...overrides }
 }
 
 describe("ProductionIncidentWorkspace", () => {
+  it("renders the Core-owned evidence-to-code causal path", () => {
+    render(
+      <ProductionIncidentWorkspace
+        incident={incident}
+        causalPath={causalPath}
+      />,
+    )
+
+    expect(
+      screen.getByRole("heading", { name: "Evidence to code" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("cache.ts")).toBeInTheDocument()
+    expect(screen.getByText("CheckoutCache")).toBeInTheDocument()
+  })
+
   it("renders only core-backed detection and evidence state", () => {
     render(<ProductionIncidentWorkspace incident={incident} />)
 
