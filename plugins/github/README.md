@@ -1,7 +1,8 @@
 # GitHub plugin
 
 `@podo/plugin-github` owns GitHub-facing capabilities such as repository context,
-commit and diff access, and approved PR or issue delivery.
+GitHub Actions failure evidence and approved retries, and approved PR or issue
+delivery.
 
 All writes must remain downstream of core's human approval and test-result gates. This plugin must never merge a PR, push to a default branch, or reinterpret a failed remediation as successful.
 
@@ -9,6 +10,29 @@ All writes must remain downstream of core's human approval and test-result gates
 bun run --cwd plugins/github typecheck
 bun run --cwd plugins/github build
 ```
+
+## GitHub Actions boundary
+
+The Actions integration is split into three provider-level components:
+
+- `GitHubActionsWebhookDecoder` verifies the exact raw webhook body with the
+  configured HMAC-SHA256 secret using a timing-safe comparison. It accepts only
+  a repository-bound `workflow_run/completed` delivery whose conclusion is
+  `failure`, and returns a small normalized signal without the raw payload.
+- `GitHubActionsReadAdapter` re-reads the exact run from GitHub, binds its run
+  id, head SHA, and attempt to that signal, and captures the jobs and steps from
+  the exact failed attempt. It also reads the current attempt and lists runs for
+  one exact head SHA so Core can verify a later CI outcome.
+- `GitHubActionsRetryAdapter` requires an explicit
+  `core.github_actions_retry.v1` approval, re-checks the exact failed run/head/
+  attempt before writing, and calls only the failed-jobs retry endpoint. It
+  accepts only GitHub's `201` response and deduplicates one idempotency identity
+  in-process.
+
+The REST boundary is pinned to `https://api.github.com`; tokens cannot be
+redirected to alternate origins. Provider response bodies and exceptions are
+never copied into typed errors or results. Tests inject REST fakes, perform no
+network requests, and issue no real GitHub writes.
 
 ## Pull-request delivery boundary
 

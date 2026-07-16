@@ -166,6 +166,7 @@ export class IncidentInvestigationCoordinator {
       prompt,
     }, {
       approvalPolicy: "deny_all",
+      turnTimeoutMs: this.settings.get().turnTimeoutMs,
       developerInstructions,
       onEvent: (event) => this.auditInvestigationEvent(incidentId, event),
       onApprovalDenied: (investigationId, approvalKind) => {

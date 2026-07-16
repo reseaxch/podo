@@ -88,7 +88,8 @@ export function createProductionGitHubPullRequestDelivery(
     const expectedRepository = `${config.owner}/${config.repository}`
     return {
       expectedRepository,
-      port: new ProductionGitHubDeliveryPort(adapter, config.operatorIdentity),
+      operatorIdentity: config.operatorIdentity,
+      port: new ProductionGitHubDeliveryPort(adapter),
     }
   } catch {
     throw invalidConfig()
@@ -96,19 +97,16 @@ export function createProductionGitHubPullRequestDelivery(
 }
 
 class ProductionGitHubDeliveryPort implements PullRequestDeliveryPort {
-  constructor(
-    private readonly adapter: ConcreteAdapter,
-    private readonly operatorIdentity: string,
-  ) {}
+  constructor(private readonly adapter: ConcreteAdapter) {}
 
   async deliver(input: PullRequestDeliveryInput): Promise<unknown> {
-    const request = toGitHubRequest(input, this.operatorIdentity)
+    const request = toGitHubRequest(input)
     const result = await this.adapter.deliver(request)
     return toCoreResult(result)
   }
 }
 
-function toGitHubRequest(input: PullRequestDeliveryInput, operatorIdentity: string): GitHubDeliveryRequest {
+function toGitHubRequest(input: PullRequestDeliveryInput): GitHubDeliveryRequest {
   const artifact = input.artifact
   const content: GitHubDeliveryArtifactContent = {
     patch: {
@@ -133,7 +131,7 @@ function toGitHubRequest(input: PullRequestDeliveryInput, operatorIdentity: stri
     authorization: {
       decision: "approved",
       approvalId: input.authorization.approvalId,
-      approvedBy: operatorIdentity,
+      approvedBy: input.authorization.approvedBy,
       approvedAt: input.authorization.approvedAt,
     },
     artifact: {
@@ -154,7 +152,21 @@ function toCoreResult(result: GitHubDeliveryResult): unknown {
     baseCommit: result.artifact.baseCommit,
     baseBranch: result.pullRequest.baseRef,
     headBranch: result.pullRequest.headRef,
+    headSha: result.pullRequest.headSha,
     artifactId: result.artifact.id,
+    proof: {
+      providerStatus: result.status,
+      idempotencyKey: result.artifact.idempotencyKey,
+      resultTreeOid: result.artifact.resultTreeOid,
+      patchSha256: result.artifact.patchSha256,
+      validationChecks: [...result.artifact.validationChecks],
+      evidenceIds: [...result.artifact.evidenceIds],
+      authorization: {
+        approvalId: result.authorization.approvalId,
+        approvedBy: result.authorization.approvedBy,
+        approvedAt: result.authorization.approvedAt,
+      },
+    },
   }
 }
 

@@ -104,6 +104,7 @@ describe("production GitHub delivery composition", () => {
     })
 
     expect(config?.expectedRepository).toBe("reseaxch/podo")
+    expect(config?.operatorIdentity).toBe("local-lead")
     expect(publisherConfig).toMatchObject({
       repositoryRoot: "/repo",
       scratchParent: "/scratch",
@@ -135,7 +136,21 @@ describe("production GitHub delivery composition", () => {
       baseCommit: "a".repeat(40),
       baseBranch: "main",
       headBranch: "podo/remediation-a1b2c3d4e5f60708",
+      headSha: "d".repeat(40),
       artifactId: "pr_preview_abc",
+      proof: {
+        providerStatus: "created",
+        idempotencyKey: "delivery-1",
+        resultTreeOid: "c".repeat(40),
+        patchSha256: "b".repeat(64),
+        validationChecks: ["core-tests", "typecheck"],
+        evidenceIds: ["ev:1", "ev:2"],
+        authorization: {
+          approvalId: "approval-1",
+          approvedBy: "local-lead",
+          approvedAt: "2026-07-15T10:00:00.000Z",
+        },
+      },
     })
     expect(deliveryRequest).toEqual({
       authorization: {
@@ -186,6 +201,7 @@ function coreInput(): PullRequestDeliveryInput {
     authorization: {
       kind: "core.pull_request_delivery.v1",
       approvalId: "approval-1",
+      approvedBy: "local-lead",
       approvedAt: "2026-07-15T10:00:00.000Z",
     },
     artifact: {
