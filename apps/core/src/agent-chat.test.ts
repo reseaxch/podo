@@ -30,6 +30,17 @@ class RecordingRuntime implements CodexRuntime {
   emit(event: CodexRuntimeEvent) { for (const listener of this.listeners) listener(event) }
 }
 
+const structuredOutput = JSON.stringify({
+  schemaVersion: "podo.agent-answer.v1",
+  finding: "The checkout cache is growing.",
+  causalPath: ["checkout-service", "deploy v1.8.4", "session-cache.ts:47"],
+  evidence: ["Memory reached 91% after the latest deployment."],
+  recommendation: "Review the cited traces in INC-042.",
+  safety: "No changes were made.",
+  confidencePercent: 96,
+  incidentId: "INC-042",
+})
+
 function fixture() {
   const runtime = new RecordingRuntime()
   const handler = createCoreHandler({
@@ -116,10 +127,12 @@ describe("agent chat", () => {
     expect(runtime.threadInputs).toHaveLength(1)
     expect(runtime.threadInputs[0]).toMatchObject({ cwd: "/operator/repository", sandbox: "read-only" })
     expect(runtime.threadInputs[0]?.developerInstructions).toContain("Podo read-only operator chat")
+    expect(runtime.threadInputs[0]?.developerInstructions).toContain("podo.agent-answer.v1")
+    expect(runtime.threadInputs[0]?.developerInstructions).toContain("Do not narrate your work")
 
     await client.sendAgentChatMessage(created.chat.id, { content: "What is unhealthy?", clientRequestId: "request-1" })
-    runtime.emit({ kind: "output.delta", threadId: "private-thread-1", turnId: "private-turn-1", text: "The checkout " })
-    runtime.emit({ kind: "output.delta", threadId: "private-thread-1", turnId: "private-turn-1", text: "cache is growing." })
+    runtime.emit({ kind: "output.delta", threadId: "private-thread-1", turnId: "private-turn-1", text: structuredOutput.slice(0, 80) })
+    runtime.emit({ kind: "output.delta", threadId: "private-thread-1", turnId: "private-turn-1", text: structuredOutput.slice(80) })
     runtime.emit({ kind: "turn.completed", threadId: "private-thread-1", turnId: "private-turn-1", status: "completed" })
 
     const current = await client.getAgentChat(created.chat.id)
@@ -127,7 +140,14 @@ describe("agent chat", () => {
       status: "ready",
       messages: [
         { role: "user", content: "What is unhealthy?", clientRequestId: "request-1" },
-        { role: "assistant", content: "The checkout cache is growing." },
+        {
+          role: "assistant",
+          content: expect.stringContaining("The checkout cache is growing."),
+          answer: expect.objectContaining({
+            schemaVersion: "podo.agent-answer.v1",
+            confidencePercent: 96,
+          }),
+        },
       ],
     })
     expect(JSON.stringify(current)).not.toContain("private-thread")
@@ -201,7 +221,7 @@ describe("agent chat", () => {
       return events
     })()
     await Bun.sleep(0)
-    runtime.emit({ kind: "output.delta", threadId: "private-thread-1", turnId: "private-turn-1", text: "Ready" })
+    runtime.emit({ kind: "output.delta", threadId: "private-thread-1", turnId: "private-turn-1", text: structuredOutput })
     runtime.emit({ kind: "turn.completed", threadId: "private-thread-1", turnId: "private-turn-1", status: "completed" })
     const events = await collected
     expect(events.map((event) => event.kind)).toEqual(["chat.started", "message.accepted", "output.delta", "message.completed"])
@@ -255,6 +275,35 @@ describe("agent chat", () => {
       messages: [{ role: "user", content: "Return a bounded answer" }],
     })
     expect(JSON.stringify(current)).not.toContain("x".repeat(100))
+  })
+
+  test("fails closed when Codex returns an unstructured answer", async () => {
+    const { client, runtime } = fixture()
+    const created = await client.createAgentChat()
+    await client.sendAgentChatMessage(created.chat.id, {
+      content: "Return a structured answer",
+      clientRequestId: "request-invalid-answer",
+    })
+    runtime.emit({
+      kind: "output.delta",
+      threadId: "private-thread-1",
+      turnId: "private-turn-1",
+      text: "I inspected the repository and here is a Markdown summary.",
+    })
+    runtime.emit({
+      kind: "turn.completed",
+      threadId: "private-thread-1",
+      turnId: "private-turn-1",
+      status: "completed",
+    })
+
+    await expect(client.getAgentChat(created.chat.id)).resolves.toMatchObject({
+      chat: {
+        status: "failed",
+        error: { code: "invalid_response" },
+        messages: [{ role: "user" }],
+      },
+    })
   })
 
   test("interrupts a turn that exceeds the Core-owned deadline", async () => {

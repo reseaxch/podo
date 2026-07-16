@@ -1,6 +1,10 @@
 "use client"
 
-import type { AgentChatEvent, CreateAgentChatResponse } from "@podo/contracts"
+import type {
+  AgentChatAnswer,
+  AgentChatEvent,
+  CreateAgentChatResponse,
+} from "@podo/contracts"
 import Link from "next/link"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 
@@ -8,15 +12,7 @@ import { isAgentChatTransportFailure } from "../../lib/agent-chat-transport"
 import { incidentWorkspaceHref } from "../../lib/incident-links"
 import { Icon } from "../ui/pictogram"
 
-type StructuredAgentAnswer = {
-  causalPath: string[]
-  confidence?: string
-  evidence: string[]
-  finding: string
-  incidentId?: string
-  recommendation: string
-  safety: string
-}
+type StructuredAgentAnswer = AgentChatAnswer
 
 type ChatMessage = {
   durationMs?: number
@@ -28,6 +24,7 @@ type ChatMessage = {
 }
 
 type AgentPanelProps = {
+  mode?: "demo" | "live"
   onClose: () => void
   projectLabel: string
   projectScope: string
@@ -58,7 +55,9 @@ const thinkingSteps = [
   },
 ]
 
-const agentHistoryVersion = 1
+const agentHistoryVersion = 2
+const configuredAgentMode =
+  process.env.NEXT_PUBLIC_PODO_AGENT_MODE === "live" ? "live" : "demo"
 
 let messageSequence = 0
 
@@ -87,13 +86,19 @@ function isStructuredAnswer(value: unknown): value is StructuredAgentAnswer {
   if (!value || typeof value !== "object") return false
   const answer = value as Partial<StructuredAgentAnswer>
   return (
+    answer.schemaVersion === "podo.agent-answer.v1" &&
     typeof answer.finding === "string" &&
     typeof answer.recommendation === "string" &&
-    typeof answer.safety === "string" &&
+    answer.safety === "No changes were made." &&
     Array.isArray(answer.causalPath) &&
     answer.causalPath.every((item) => typeof item === "string") &&
     Array.isArray(answer.evidence) &&
-    answer.evidence.every((item) => typeof item === "string")
+    answer.evidence.every((item) => typeof item === "string") &&
+    (answer.confidencePercent === undefined ||
+      (Number.isInteger(answer.confidencePercent) &&
+        answer.confidencePercent >= 0 &&
+        answer.confidencePercent <= 100)) &&
+    (answer.incidentId === undefined || /^INC-\d{1,9}$/.test(answer.incidentId))
   )
 }
 
@@ -155,12 +160,18 @@ function completedHistory(messages: ChatMessage[]): ChatMessage[] {
 }
 
 function parseStructuredAnswer(text: string): StructuredAgentAnswer | null {
+  const normalizedText = text
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(
+      /\*\*(The likely causal chain is:|Evidence checked:|Recommended next step:)\*\*/g,
+      "$1",
+    )
   const causalMarker = "The likely causal chain is:"
   const evidenceMarker = "Evidence checked:"
   const recommendationMarker = "Recommended next step:"
-  const causalIndex = text.indexOf(causalMarker)
-  const evidenceIndex = text.indexOf(evidenceMarker)
-  const recommendationIndex = text.indexOf(recommendationMarker)
+  const causalIndex = normalizedText.indexOf(causalMarker)
+  const evidenceIndex = normalizedText.indexOf(evidenceMarker)
+  const recommendationIndex = normalizedText.indexOf(recommendationMarker)
   if (
     causalIndex < 0 ||
     evidenceIndex < causalIndex ||
@@ -168,37 +179,112 @@ function parseStructuredAnswer(text: string): StructuredAgentAnswer | null {
   )
     return null
 
-  const finding = text.slice(0, causalIndex).trim()
-  const causalPath = text
+  const finding = normalizedText.slice(0, causalIndex).trim()
+  const causalPath = normalizedText
     .slice(causalIndex + causalMarker.length, evidenceIndex)
     .trim()
     .split(/\s*(?:->|→)\s*/)
     .filter(Boolean)
-  const evidence = text
+  const evidence = normalizedText
     .slice(evidenceIndex + evidenceMarker.length, recommendationIndex)
     .split("\n")
     .map((line) => line.trim().replace(/^-\s*/, ""))
     .filter(Boolean)
-  const rawRecommendation = text
+  const rawRecommendation = normalizedText
     .slice(recommendationIndex + recommendationMarker.length)
     .trim()
-  const safetyMatch = rawRecommendation.match(/No changes were made\.?/i)
   const recommendation = rawRecommendation
     .replace(/No changes were made\.?/i, "")
     .trim()
-  const incidentId = text.match(/\bINC-\d+\b/)?.[0]
-  const confidence = text.match(/\b\d+% confidence\b/i)?.[0]
+  const incidentId = normalizedText.match(/\bINC-\d+\b/)?.[0]
+  const confidence = normalizedText.match(/\b(\d+)% confidence\b/i)?.[1]
 
   if (!finding || causalPath.length < 2 || evidence.length === 0) return null
   return {
+    schemaVersion: "podo.agent-answer.v1",
     causalPath,
     evidence,
     finding,
     recommendation,
-    safety: safetyMatch?.[0] ?? "No changes were made.",
-    ...(confidence ? { confidence } : {}),
+    safety: "No changes were made.",
+    ...(confidence ? { confidencePercent: Number(confidence) } : {}),
     ...(incidentId ? { incidentId } : {}),
   }
+}
+
+function demoAnswerFor(
+  prompt: string,
+  projectLabel: string,
+): StructuredAgentAnswer {
+  const normalizedPrompt = prompt.toLowerCase()
+  const base = {
+    schemaVersion: "podo.agent-answer.v1" as const,
+    causalPath: [
+      "checkout-service heap pressure",
+      "deploy v1.8.4",
+      "commit 8f3a2c1",
+      "session-cache.ts:47",
+    ],
+    confidencePercent: 96,
+    evidence: [
+      "Memory reached 91% after the latest deployment.",
+      "Error rate rose to 8.7% while p95 latency reached 1.82s.",
+      "The system graph links the regression to unbounded cache retention with 96% confidence.",
+    ],
+    incidentId: "INC-042",
+    safety: "No changes were made." as const,
+  }
+
+  if (normalizedPrompt.includes("review next"))
+    return {
+      ...base,
+      finding: `The highest-value next review in ${projectLabel} is the checkout-service regression linked to INC-042.`,
+      recommendation:
+        "Open INC-042 and compare the cited traces with deploy v1.8.4 before approving a bounded cache remediation.",
+    }
+  if (normalizedPrompt.includes("summarize"))
+    return {
+      ...base,
+      finding: `The strongest active risk in ${projectLabel} is checkout-service heap pressure introduced after the latest deployment.`,
+      recommendation:
+        "Open INC-042 and review the correlated memory, error-rate, and latency evidence before deciding on remediation.",
+    }
+  return {
+    ...base,
+    finding: `The strongest evidence in ${projectLabel} points from the latest deployment to unbounded session-cache retention.`,
+    recommendation:
+      "Open INC-042 and review the cited traces before approving a bounded cache remediation.",
+  }
+}
+
+function formatStructuredAnswer(answer: StructuredAgentAnswer): string {
+  return [
+    answer.finding,
+    "The likely causal chain is:",
+    answer.causalPath.join(" -> "),
+    "Evidence checked:",
+    ...answer.evidence.map((item) => `- ${item}`),
+    "Recommended next step:",
+    `${answer.recommendation} ${answer.safety}`,
+  ].join("\n")
+}
+
+function waitForDemoStep(signal: AbortSignal, delayMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"))
+      return
+    }
+    const timer = window.setTimeout(resolve, delayMs)
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer)
+        reject(new DOMException("Aborted", "AbortError"))
+      },
+      { once: true },
+    )
+  })
 }
 
 async function readAgentEvents(
@@ -348,7 +434,9 @@ function AgentAnswer({
           <strong>{answer.finding}</strong>
         </div>
         <div className="agent-answer-heading-actions">
-          {answer.confidence ? <em>{answer.confidence}</em> : null}
+          {answer.confidencePercent !== undefined ? (
+            <em>{answer.confidencePercent}% confidence</em>
+          ) : null}
           <button
             aria-expanded={!collapsed}
             aria-label={collapsed ? "Expand answer" : "Collapse answer"}
@@ -444,6 +532,7 @@ function AgentAnswer({
 }
 
 export function AgentPanel({
+  mode = configuredAgentMode,
   onClose,
   projectLabel,
   projectScope,
@@ -602,6 +691,23 @@ export function AgentPanel({
     const startedAt = performance.now()
 
     try {
+      if (mode === "demo") {
+        for (let stage = 1; stage < thinkingSteps.length; stage += 1) {
+          await waitForDemoStep(controller.signal, 420)
+          setThinkingStage(stage)
+        }
+        await waitForDemoStep(controller.signal, 280)
+        const structured = demoAnswerFor(prompt, projectLabel)
+        updateMessage(assistantMessage.id, (message) => ({
+          ...message,
+          durationMs: Math.max(1, Math.round(performance.now() - startedAt)),
+          structured,
+          text: formatStructuredAnswer(structured),
+          state: "complete",
+        }))
+        return
+      }
+
       let chatId = chatIdRef.current
       if (!chatId) {
         const readiness = await fetch("/api/podo/agent/readiness", {
@@ -675,6 +781,9 @@ export function AgentPanel({
             ...message,
             text: event.payload.message.content,
             state: "streaming",
+            ...(event.payload.message.answer
+              ? { structured: event.payload.message.answer }
+              : {}),
           }))
         } else if (event.kind === "chat.failed") {
           throw new Error(event.payload.error.message)
@@ -693,7 +802,7 @@ export function AgentPanel({
           (receivedText
             ? message.text
             : "The investigation completed without a written response.")
-        const structured = parseStructuredAnswer(text)
+        const structured = message.structured ?? parseStructuredAnswer(text)
         return {
           ...message,
           durationMs: Math.max(1, Math.round(performance.now() - startedAt)),

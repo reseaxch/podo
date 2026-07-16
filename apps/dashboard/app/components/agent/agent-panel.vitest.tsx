@@ -85,7 +85,7 @@ describe("AgentPanel", () => {
     ).toBeInTheDocument()
     await waitFor(() =>
       expect(
-        window.localStorage.getItem("podo-agent-history-v1:podo-cloud"),
+        window.localStorage.getItem("podo-agent-history-v2:podo-cloud"),
       ).toContain("This answer should survive closing the panel."),
     )
 
@@ -100,7 +100,7 @@ describe("AgentPanel", () => {
       screen.getByText("Investigate across the project"),
     ).toBeInTheDocument()
     expect(
-      window.localStorage.getItem("podo-agent-history-v1:podo-cloud"),
+      window.localStorage.getItem("podo-agent-history-v2:podo-cloud"),
     ).toBeNull()
   })
 
@@ -205,26 +205,36 @@ describe("AgentPanel", () => {
       configurable: true,
       value: { writeText: copy },
     })
-    const answer = [
-      "I checked podo-cloud and traced the strongest active signal.",
-      "The likely causal chain is:",
-      "checkout-service -> deploy v1.8.4 -> commit 8f3a2c1 -> session-cache.ts:47",
-      "Evidence checked:",
-      "- Memory reached 91% after the latest deployment.",
-      "- The system graph links the regression with 96% confidence.",
-      "Recommended next step:",
-      "Open INC-042 and review the cited traces. No changes were made.",
-    ].join("\n")
+    const content = "Canonical human-readable Core answer"
+    const answer = {
+      schemaVersion: "podo.agent-answer.v1" as const,
+      finding: "I checked podo-cloud and traced the strongest active signal.",
+      causalPath: [
+        "checkout-service",
+        "deploy v1.8.4",
+        "commit 8f3a2c1",
+        "session-cache.ts:47",
+      ],
+      evidence: [
+        "Memory reached 91% after the latest deployment.",
+        "The system graph links the regression with 96% confidence.",
+      ],
+      recommendation: "Open INC-042 and review the cited traces.",
+      safety: "No changes were made." as const,
+      confidencePercent: 96,
+      incidentId: "INC-042",
+    }
     mockAgentTurn([
-      event(2, { kind: "output.delta", payload: { text: answer } }),
+      event(2, { kind: "output.delta", payload: { text: content } }),
       event(3, {
         kind: "message.completed",
         payload: {
           message: {
             id: "assistant-structured",
             role: "assistant",
-            content: answer,
+            content,
             createdAt: timestamp,
+            answer,
           },
         },
       }),
@@ -246,7 +256,64 @@ describe("AgentPanel", () => {
     )
 
     await user.click(screen.getByRole("button", { name: "Copy" }))
-    expect(copy).toHaveBeenCalledWith(answer)
+    expect(copy).toHaveBeenCalledWith(content)
+  })
+
+  it("accepts light Markdown around the structured answer markers", async () => {
+    const user = userEvent.setup()
+    const answer = [
+      "The deployment is the strongest active signal.",
+      "**The likely causal chain is:**",
+      "checkout-service -> deploy v1.8.4 -> session-cache.ts:47",
+      "## Evidence checked:",
+      "- Memory reached 91% after the latest deployment.",
+      "**Recommended next step:**",
+      "Open INC-042 and review the cited traces. No changes were made.",
+    ].join("\n")
+    mockAgentTurn([
+      event(2, {
+        kind: "message.completed",
+        payload: {
+          message: {
+            id: "assistant-markdown-structured",
+            role: "assistant",
+            content: answer,
+            createdAt: timestamp,
+          },
+        },
+      }),
+    ])
+    renderPanel()
+
+    await user.click(
+      screen.getByRole("button", { name: "Summarize what needs attention" }),
+    )
+
+    expect(
+      await screen.findByRole("region", { name: "Investigation result" }),
+    ).toHaveTextContent("The deployment is the strongest active signal.")
+  })
+
+  it("runs the default Vercel-safe demo flow without agent API requests", async () => {
+    const user = userEvent.setup()
+    const fetch = vi.spyOn(globalThis, "fetch")
+    renderPanel("demo")
+
+    await user.click(
+      screen.getByRole("button", { name: "Summarize what needs attention" }),
+    )
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Mapping project scope",
+    )
+    expect(
+      await screen.findByRole(
+        "region",
+        { name: "Investigation result" },
+        { timeout: 3_000 },
+      ),
+    ).toHaveTextContent("96% confidence")
+    expect(fetch).not.toHaveBeenCalled()
   })
 })
 
@@ -259,9 +326,10 @@ const userMessage = {
   createdAt: timestamp,
 }
 
-function renderPanel() {
+function renderPanel(mode: "demo" | "live" = "live") {
   return render(
     <AgentPanel
+      mode={mode}
       onClose={vi.fn()}
       projectLabel="podo-cloud"
       projectScope="All project evidence"
