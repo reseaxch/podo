@@ -100,6 +100,7 @@ export async function createDemoCoreState(
     incidentGraph,
     pullRequestDelivery: {
       expectedRepository,
+      operatorIdentity: "judge-demo-operator",
       port: {
         async deliver(input: PullRequestDeliveryInput) {
           metrics.deliveryCalls += 1;
@@ -163,7 +164,21 @@ function pullRequestResult(input: PullRequestDeliveryInput) {
     baseCommit: input.artifact.provenance.baseCommit,
     baseBranch: input.artifact.pullRequestPreview.baseBranch,
     headBranch: input.artifact.pullRequestPreview.headBranch,
+    headSha: "d".repeat(40),
     artifactId: input.artifact.pullRequestPreview.id,
+    proof: {
+      providerStatus: "created",
+      idempotencyKey: input.deliveryId,
+      resultTreeOid: input.artifact.provenance.resultTreeOid,
+      patchSha256: input.artifact.patch.sha256,
+      validationChecks: [...input.artifact.validation.checks],
+      evidenceIds: [...input.artifact.evidenceIds],
+      authorization: {
+        approvalId: input.authorization.approvalId,
+        approvedBy: input.authorization.approvedBy,
+        approvedAt: input.authorization.approvedAt,
+      },
+    },
   };
 }
 
