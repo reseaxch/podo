@@ -29,23 +29,49 @@ export function agentSurfaceUnavailable(): Response | null {
 
 export async function readBoundedJson(request: Request): Promise<JsonResult> {
   const declaredLength = Number(request.headers.get("content-length") ?? "0")
-  if (Number.isFinite(declaredLength) && declaredLength > maxRequestBytes)
+  if (Number.isFinite(declaredLength) && declaredLength > maxRequestBytes) {
+    await request.body?.cancel("request_too_large")
     return {
       ok: false,
       response: Response.json({ error: "request_too_large" }, { status: 413 }),
     }
+  }
 
-  const bytes = new Uint8Array(await request.arrayBuffer())
-  if (bytes.byteLength > maxRequestBytes)
-    return {
-      ok: false,
-      response: Response.json({ error: "request_too_large" }, { status: 413 }),
+  const reader = request.body?.getReader()
+  const chunks: Uint8Array[] = []
+  let byteLength = 0
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      byteLength += value.byteLength
+      if (byteLength > maxRequestBytes) {
+        await reader.cancel("request_too_large")
+        return {
+          ok: false,
+          response: Response.json(
+            { error: "request_too_large" },
+            { status: 413 },
+          ),
+        }
+      }
+      chunks.push(value)
     }
+  }
+
+  const bytes = new Uint8Array(byteLength)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
 
   try {
     return {
       ok: true,
-      value: JSON.parse(new TextDecoder().decode(bytes)) as unknown,
+      value: JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+      ) as unknown,
     }
   } catch {
     return {
@@ -123,38 +149,44 @@ export function agentEventStream(
   const upstreamAbort = new AbortController()
   const abortUpstream = () => upstreamAbort.abort()
   request.signal.addEventListener("abort", abortUpstream, { once: true })
+  if (request.signal.aborted) abortUpstream()
 
   const events = client.subscribeAgentChatEvents(id, {
     afterSequence,
     signal: upstreamAbort.signal,
   })
   const iterator = events[Symbol.asyncIterator]()
+  let finalized = false
+
+  const finalize = async () => {
+    if (finalized) return
+    finalized = true
+    request.signal.removeEventListener("abort", abortUpstream)
+    upstreamAbort.abort()
+    try {
+      await iterator.return?.()
+    } catch {
+      // Cleanup is best-effort; never turn an upstream failure into a raw stream error.
+    }
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
         const result = await iterator.next()
         if (result.done) {
-          request.signal.removeEventListener("abort", abortUpstream)
+          await finalize()
           controller.close()
           return
         }
         controller.enqueue(encoder.encode(toSse(result.value)))
       } catch {
-        request.signal.removeEventListener("abort", abortUpstream)
-        if (!upstreamAbort.signal.aborted)
-          controller.enqueue(
-            encoder.encode(
-              'event: proxy.error\ndata: {"error":"agent_stream_unavailable"}\n\n',
-            ),
-          )
+        await finalize()
         controller.close()
       }
     },
     async cancel() {
-      request.signal.removeEventListener("abort", abortUpstream)
-      upstreamAbort.abort()
-      await iterator.return?.()
+      await finalize()
     },
   })
 
