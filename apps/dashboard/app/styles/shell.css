@@ -90,13 +90,6 @@
   text-decoration: none;
 }
 
-.icon-rail nav a:focus-visible,
-.icon-rail nav button:focus-visible,
-.rail-bottom button:focus-visible,
-.brand-mark:focus-visible {
-  box-shadow: none;
-}
-
 .icon-rail:hover nav a,
 .icon-rail:hover nav button,
 .icon-rail:hover .rail-bottom button,

@@ -18,7 +18,7 @@
   --primary-solid-hover: #075e6d;
   --on-primary-solid: #ffffff;
   --primary-soft: #ddeff1;
-  --focus: #4aa8b5;
+  --focus: #0b7285;
   --critical: #d64545;
   --critical-solid: #c73737;
   --on-critical-solid: #ffffff;
@@ -180,14 +180,31 @@ button {
   color: inherit;
 }
 
-:where(button, a, [role="button"], [role="tab"]):focus-visible {
+:is(button, a, [role="button"], [role="tab"]):focus-visible {
   outline: none;
-  box-shadow: inset 0 -2px color-mix(in srgb, var(--focus) 75%, transparent);
+  box-shadow: inset 0 -3px 0 currentColor;
 }
 
-:where(input, textarea, select):focus-visible {
+:is(input, textarea, select):focus-visible {
   outline: none;
   border-color: var(--focus);
+  box-shadow: inset 0 -2px 0 var(--focus);
+}
+
+@media (forced-colors: active) {
+  :is(
+    button,
+    a,
+    [role="button"],
+    [role="tab"],
+    input,
+    textarea,
+    select
+  ):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
 }
 
 .icon {
