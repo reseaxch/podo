@@ -64,13 +64,9 @@ test("incident workspace supports its primary investigation flow", async ({
   await expect(page.locator(".graph-inspector")).toHaveCount(0)
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
-  await page
-    .getByRole("button", { name: "Switch to light theme" })
-    .click()
+  await page.getByRole("button", { name: "Switch to light theme" }).click()
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
-  await page
-    .getByRole("button", { name: "Switch to dark theme" })
-    .click()
+  await page.getByRole("button", { name: "Switch to dark theme" }).click()
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
   await page.reload()
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")

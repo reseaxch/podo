@@ -29,7 +29,16 @@ export function IncidentWorkspace({
   initialGraphNodeId?: GraphNodeId | undefined
   initialTab?: IncidentTab
 }) {
-  const [activeTab, setActiveTab] = useState<IncidentTab>(initialTab)
+  const [tabSelection, setTabSelection] = useState({
+    initialTab,
+    selected: initialTab,
+  })
+  const activeTab =
+    tabSelection.initialTab === initialTab ? tabSelection.selected : initialTab
+  const setActiveTab = useCallback(
+    (selected: IncidentTab) => setTabSelection({ initialTab, selected }),
+    [initialTab],
+  )
   const [expandedId, setExpandedId] = useState<string | null>("trace")
   const [diagnosisOpen, setDiagnosisOpen] = useState(true)
   const [compactDiagnosis, setCompactDiagnosis] = useState(false)
@@ -51,7 +60,7 @@ export function IncidentWorkspace({
   const openEvidence = useCallback((id: string) => {
     setActiveTab("evidence")
     setExpandedId(id)
-  }, [])
+  }, [setActiveTab])
   const closeDiagnosis = useCallback(() => setDiagnosisOpen(false), [])
   const openDiagnosis = useCallback(() => {
     setDiagnosisOpen(true)
@@ -74,10 +83,6 @@ export function IncidentWorkspace({
   useEffect(() => {
     shellRef.current?.setAttribute("data-ready", "true")
   }, [])
-
-  useEffect(() => {
-    setActiveTab(initialTab)
-  }, [initialTab])
 
   return (
     <main className="app-shell" ref={shellRef}>

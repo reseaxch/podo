@@ -142,9 +142,7 @@ export function GraphView({
 
   function replayNodeClass(id: GraphNodeId) {
     if (replayStep === null) return ""
-    const nodeStep = replayNodeIds.indexOf(
-      id as (typeof replayNodeIds)[number],
-    )
+    const nodeStep = replayNodeIds.indexOf(id as (typeof replayNodeIds)[number])
     if (nodeStep < 0) return "replay-node-secondary"
     if (nodeStep < replayStep) return "replay-node-passed"
     if (nodeStep === replayStep) return "replay-node-active"
