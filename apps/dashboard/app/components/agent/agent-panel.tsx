@@ -4,6 +4,7 @@ import type { AgentChatEvent, CreateAgentChatResponse } from "@podo/contracts"
 import Link from "next/link"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 
+import { isAgentChatTransportFailure } from "../../lib/agent-chat-transport"
 import { incidentWorkspaceHref } from "../../lib/incident-links"
 import { Icon } from "../ui/pictogram"
 
@@ -223,9 +224,9 @@ async function readAgentEvents(
         .map((line) => line.slice(5).trimStart())
         .join("\n")
       if (data) {
-        const parsed = JSON.parse(data) as AgentChatEvent | { error?: string }
-        if ("error" in parsed)
-          throw new Error("The Podo agent stream became unavailable")
+        const parsed = JSON.parse(data) as unknown
+        if (isAgentChatTransportFailure(parsed))
+          throw new Error(parsed.error.message)
         onEvent(parsed as AgentChatEvent)
       }
       boundary = buffer.indexOf("\n\n")

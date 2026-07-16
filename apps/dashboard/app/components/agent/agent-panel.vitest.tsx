@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { agentChatTransportFailure } from "../../lib/agent-chat-transport"
 import { AgentPanel } from "./agent-panel"
 
 afterEach(() => {
@@ -137,6 +138,35 @@ describe("AgentPanel", () => {
     ).toBeInTheDocument()
   })
 
+  it("distinguishes a typed transport failure from normal stream completion", async () => {
+    const user = userEvent.setup()
+    const partial = event(2, {
+      kind: "output.delta",
+      payload: { text: "Partial evidence was received." },
+    })
+    mockAgentTurn([], {
+      stream: textStream(
+        `id: ${partial.sequence}\nevent: ${partial.kind}\ndata: ${JSON.stringify(partial)}\n\n` +
+          `event: transport.failed\ndata: ${JSON.stringify(agentChatTransportFailure())}\n\n`,
+      ),
+    })
+    renderPanel()
+
+    await user.click(
+      screen.getByRole("button", { name: "Summarize what needs attention" }),
+    )
+
+    expect(
+      await screen.findByText("Partial evidence was received."),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Failed")).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        "The investigation completed without a written response.",
+      ),
+    ).not.toBeInTheDocument()
+  })
+
   it("cancels the Core-owned turn and exposes no approval action", async () => {
     const user = userEvent.setup()
     let streamController:
@@ -261,6 +291,15 @@ function sseResponse(events: AgentChatEvent[]) {
       .join(""),
     { headers: { "content-type": "text/event-stream" } },
   )
+}
+
+function textStream(value: string) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(value))
+      controller.close()
+    },
+  })
 }
 
 function mockAgentTurn(
