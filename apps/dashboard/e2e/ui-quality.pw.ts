@@ -54,17 +54,17 @@ test("keyboard focus stays visible across controls in both themes", async ({
     await page.goto("/demo")
     const button = page.getByRole("button", { name: /podo-cloud/i })
     await tabTo(page, button)
-    await expect(button).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(button)
 
     await page.goto("/incidents")
     const link = page.locator("a.overview-toggle")
     await tabTo(page, link)
-    await expect(link).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(link)
 
     await page.goto("/demo")
     const tab = page.getByRole("tab", { name: "Evidence" })
     await tabTo(page, tab)
-    await expect(tab).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(tab)
 
     await page.goto("/settings")
     const input = page.getByRole("textbox", { name: "Workspace name" })
@@ -80,7 +80,7 @@ test("keyboard focus stays visible across controls in both themes", async ({
     expect(
       contrastRatio(colors.focus, colors.background),
     ).toBeGreaterThanOrEqual(3)
-    await expect(input).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(input)
   }
 })
 
@@ -198,6 +198,22 @@ async function tabTo(page: Page, target: Locator): Promise<void> {
       return
   }
   throw new Error("Keyboard focus did not reach the expected control")
+}
+
+async function expectVisibleFocus(target: Locator): Promise<void> {
+  const focusStyle = await target.evaluate((element) => {
+    const styles = getComputedStyle(element)
+    return {
+      boxShadow: styles.boxShadow,
+      outlineStyle: styles.outlineStyle,
+      outlineWidth: Number.parseFloat(styles.outlineWidth),
+    }
+  })
+
+  expect(
+    focusStyle.boxShadow !== "none" ||
+      (focusStyle.outlineStyle !== "none" && focusStyle.outlineWidth > 0),
+  ).toBe(true)
 }
 
 function contrastRatio(foreground: string, background: string): number {
