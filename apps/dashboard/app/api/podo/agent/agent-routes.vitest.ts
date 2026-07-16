@@ -97,6 +97,33 @@ describe("dashboard agent chat routes", () => {
     expect(client.sendAgentChatMessage).not.toHaveBeenCalled()
   })
 
+  it("stops consuming a chunked body as soon as the byte limit is exceeded", async () => {
+    let pulls = 0
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        controller.enqueue(new Uint8Array(4_096))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+
+    const response = await createChat(
+      new Request("http://dashboard.test/api/podo/agent/chats", {
+        method: "POST",
+        body,
+        duplex: "half",
+      } as RequestInit),
+    )
+
+    expect(response.status).toBe(413)
+    expect(cancelled).toBe(true)
+    expect(pulls).toBeLessThanOrEqual(6)
+    expect(client.createAgentChat).not.toHaveBeenCalled()
+  })
+
   it("forwards only content and an idempotent client request id", async () => {
     client.sendAgentChatMessage
       .mockResolvedValueOnce({ chat, accepted: true })
@@ -177,6 +204,61 @@ describe("dashboard agent chat routes", () => {
     await reader.cancel()
 
     expect(upstreamSignal?.aborted).toBe(true)
+  })
+
+  it("passes an aborted signal upstream when the browser was already disconnected", async () => {
+    let upstreamSignal: AbortSignal | undefined
+    client.subscribeAgentChatEvents.mockImplementation(
+      (_id: string, options: { signal?: AbortSignal }) => {
+        upstreamSignal = options.signal
+        return eventStream([])
+      },
+    )
+    const downstream = new AbortController()
+    downstream.abort()
+
+    const response = await streamEvents(
+      new Request("http://dashboard.test/api/podo/agent/chats/chat-1/events", {
+        signal: downstream.signal,
+      }),
+      context,
+    )
+    await response.text()
+
+    expect(upstreamSignal?.aborted).toBe(true)
+  })
+
+  it("aborts and returns the iterator when the upstream stream fails", async () => {
+    let upstreamSignal: AbortSignal | undefined
+    let returned = false
+    const iterator: AsyncIterator<AgentChatEvent> = {
+      next: vi.fn().mockRejectedValue(new Error("invalid chat id")),
+      return: vi.fn(async () => {
+        returned = true
+        return {
+          done: true,
+          value: undefined,
+        } as IteratorResult<AgentChatEvent>
+      }),
+    }
+    client.subscribeAgentChatEvents.mockImplementation(
+      (_id: string, options: { signal?: AbortSignal }) => {
+        upstreamSignal = options.signal
+        return { [Symbol.asyncIterator]: () => iterator }
+      },
+    )
+
+    const response = await streamEvents(
+      new Request("http://dashboard.test/api/podo/agent/chats/missing/events"),
+      { params: Promise.resolve({ id: "missing" }) },
+    )
+    const body = await response.text()
+
+    expect(body).toBe("")
+    expect(body).not.toContain("proxy.error")
+    expect(upstreamSignal?.aborted).toBe(true)
+    expect(returned).toBe(true)
+    expect(iterator.return).toHaveBeenCalledOnce()
   })
 
   it("forwards bounded failed-turn events without exposing upstream exceptions", async () => {
