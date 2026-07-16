@@ -51,6 +51,47 @@ export function ChangesView({
       : reviewState === "changes-requested"
         ? "Podo AI will update the patch and rerun verification"
         : `Target: ${currentRemediation.branch} · base: ${currentRemediation.baseBranch}`
+  const workflowStages = [
+    {
+      label: "Incident detected",
+      detail: "INC-042 · checkout memory",
+      icon: "warning-circle",
+      state: "complete",
+    },
+    {
+      label: "Evidence correlated",
+      detail: "6 trusted signals",
+      icon: "database",
+      state: "complete",
+    },
+    {
+      label: "Root cause found",
+      detail: "Unbounded cache retention",
+      icon: "graph",
+      state: "complete",
+    },
+    {
+      label: "Fix verified",
+      detail: "6 / 6 checks passed",
+      icon: "shield-check",
+      state: "complete",
+    },
+    {
+      label: "Human approval",
+      detail: reviewState === "approved" ? "Approved" : "Decision required",
+      icon: "git-branch",
+      state: reviewState === "approved" ? "complete" : "active",
+    },
+    {
+      label: "Pull request",
+      detail:
+        reviewState === "approved"
+          ? `PR #${currentRemediation.pullRequest?.number ?? "—"}`
+          : "Created after approval",
+      icon: "arrow-square-out",
+      state: reviewState === "approved" ? "complete" : "pending",
+    },
+  ] as const
 
   async function approveChange() {
     setPendingAction("approval")
@@ -192,6 +233,40 @@ export function ChangesView({
           <em>Internal cache only</em>
         </span>
       </div>
+      <section
+        className={`remediation-timeline timeline-${reviewState}`}
+        aria-label="Incident to pull request progress"
+      >
+        <header>
+          <span>
+            <small>Evidence-backed workflow</small>
+            <strong>Incident → tested fix → pull request</strong>
+          </span>
+          <em>Live causal trace</em>
+        </header>
+        <div className="remediation-trace" role="list">
+          <span aria-hidden="true" className="trace-beam-track">
+            <span />
+          </span>
+          {workflowStages.map((stage, index) => (
+            <article
+              aria-current={stage.state === "active" ? "step" : undefined}
+              className={`trace-stage trace-stage-${stage.state}`}
+              key={stage.label}
+              role="listitem"
+              style={{ "--trace-index": index } as React.CSSProperties}
+            >
+              <span className="trace-node">
+                <Icon name={stage.icon} size={15} />
+              </span>
+              <span>
+                <strong>{stage.label}</strong>
+                <small>{stage.detail}</small>
+              </span>
+            </article>
+          ))}
+        </div>
+      </section>
       <section className="change-rationale" aria-label="Change rationale">
         <span className="rationale-icon">
           <Icon name="wrench" size={18} />
@@ -593,7 +668,7 @@ export function ChangesView({
                 Request changes
               </button>
               <button
-                className="primary-button"
+                className="primary-button motion-border-cta"
                 disabled={pendingAction !== null}
                 onClick={approveChange}
                 type="button"

@@ -5,12 +5,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { operationsOverviewMock } from "../../mocks/operations-overview"
 import { OperationsOverview } from "./operations-overview"
 
+const pushMock = vi.hoisted(() => vi.fn())
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/overview",
+  useRouter: () => ({ push: pushMock }),
 }))
 
 describe("OperationsOverview", () => {
   beforeEach(() => {
+    pushMock.mockReset()
     window.localStorage.clear()
     delete document.documentElement.dataset.theme
   })
@@ -81,8 +85,8 @@ describe("OperationsOverview", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole("button", {
-        name: /Open active incident INC-040/,
+        name: /INC-040: Notification delivery backlog\. Workspace unavailable/,
       }),
-    ).toBeInTheDocument()
+    ).toBeDisabled()
   })
 })

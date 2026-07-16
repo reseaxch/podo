@@ -11,11 +11,17 @@ const routes = [
   "/settings",
 ]
 
-test("dark theme keeps the neutral graphite palette", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.localStorage.setItem("podo-theme", "dark")
-  })
-  await page.goto("/demo")
+test("dark theme is the product default", async ({ page }) => {
+  await page.goto("/incidents")
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
+  await expect(
+    page.getByRole("button", { name: "Switch to light theme" }),
+  ).toBeVisible()
+})
+
+test("dark theme keeps the Vercel graphite palette", async ({ page }) => {
+  await page.goto("/incidents")
 
   const tokens = await page.evaluate(() => {
     const styles = getComputedStyle(document.documentElement)
@@ -42,23 +48,23 @@ test("keyboard focus stays visible across controls in both themes", async ({
 }) => {
   for (const theme of ["light", "dark"] as const) {
     await page.addInitScript((selectedTheme) => {
-      window.localStorage.setItem("podo-theme", selectedTheme)
+      window.localStorage.setItem("podo-theme-v2", selectedTheme)
     }, theme)
 
     await page.goto("/demo")
     const button = page.getByRole("button", { name: /podo-cloud/i })
     await tabTo(page, button)
-    await expect(button).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(button)
 
     await page.goto("/incidents")
     const link = page.locator("a.overview-toggle")
     await tabTo(page, link)
-    await expect(link).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(link)
 
     await page.goto("/demo")
     const tab = page.getByRole("tab", { name: "Evidence" })
     await tabTo(page, tab)
-    await expect(tab).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(tab)
 
     await page.goto("/settings")
     const input = page.getByRole("textbox", { name: "Workspace name" })
@@ -74,7 +80,7 @@ test("keyboard focus stays visible across controls in both themes", async ({
     expect(
       contrastRatio(colors.focus, colors.background),
     ).toBeGreaterThanOrEqual(3)
-    await expect(input).not.toHaveCSS("box-shadow", "none")
+    await expectVisibleFocus(input)
   }
 })
 
@@ -98,7 +104,7 @@ for (const theme of ["light", "dark"] as const) {
     })
     page.on("pageerror", (error) => errors.push(error.message))
     await page.addInitScript((selectedTheme) => {
-      window.localStorage.setItem("podo-theme", selectedTheme)
+      window.localStorage.setItem("podo-theme-v2", selectedTheme)
     }, theme)
 
     for (const route of routes) {
@@ -124,6 +130,67 @@ for (const theme of ["light", "dark"] as const) {
   })
 }
 
+test("primary navigation remains available on desktop and mobile", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/overview")
+  if (testInfo.project.name === "mobile-chromium") {
+    const trigger = page.getByRole("button", {
+      name: "Open primary navigation",
+    })
+    await expect(trigger).toBeVisible()
+    await trigger.click()
+    const dialog = page.getByRole("dialog", { name: "Primary navigation" })
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.getByRole("link", { name: "Safety & approvals" }),
+    ).toHaveAttribute("href", "/safety")
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+    await expect(trigger).toBeFocused()
+    return
+  }
+
+  await expect(
+    page.getByRole("complementary", { name: "Primary navigation" }),
+  ).toBeVisible()
+})
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 768, height: 900 },
+  { width: 1440, height: 900 },
+]) {
+  test(`overview content reflows at ${viewport.width}px`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium")
+    await page.setViewportSize(viewport)
+    await page.goto("/overview")
+
+    const clipping = await page.locator("main > section").evaluate((root) => {
+      const viewportWidth = document.documentElement.clientWidth
+      return Array.from(
+        root.querySelectorAll<HTMLElement>("h1, h2, p, a, button, strong"),
+      )
+        .filter((element) => element.offsetParent !== null)
+        .map((element) => {
+          const bounds = element.getBoundingClientRect()
+          return {
+            text: element.textContent?.trim().replace(/\s+/g, " ").slice(0, 80),
+            left: bounds.left,
+            right: bounds.right,
+          }
+        })
+        .filter(
+          (element) => element.left < -1 || element.right > viewportWidth + 1,
+        )
+    })
+
+    expect(clipping).toEqual([])
+  })
+}
+
 async function tabTo(page: Page, target: Locator): Promise<void> {
   for (let index = 0; index < 80; index += 1) {
     await page.keyboard.press("Tab")
@@ -131,6 +198,22 @@ async function tabTo(page: Page, target: Locator): Promise<void> {
       return
   }
   throw new Error("Keyboard focus did not reach the expected control")
+}
+
+async function expectVisibleFocus(target: Locator): Promise<void> {
+  const focusStyle = await target.evaluate((element) => {
+    const styles = getComputedStyle(element)
+    return {
+      boxShadow: styles.boxShadow,
+      outlineStyle: styles.outlineStyle,
+      outlineWidth: Number.parseFloat(styles.outlineWidth),
+    }
+  })
+
+  expect(
+    focusStyle.boxShadow !== "none" ||
+      (focusStyle.outlineStyle !== "none" && focusStyle.outlineWidth > 0),
+  ).toBe(true)
 }
 
 function contrastRatio(foreground: string, background: string): number {

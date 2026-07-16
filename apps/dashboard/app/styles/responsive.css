@@ -262,9 +262,18 @@
   .topbar {
     grid-template-columns: 1fr auto auto auto;
     gap: 8px;
+    padding-right: 10px;
+    padding-left: 60px;
   }
   .project-switcher {
+    max-width: 100%;
     justify-self: start;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .project-switcher .icon:last-child {
+    margin-left: auto;
   }
   .command-search {
     display: none;

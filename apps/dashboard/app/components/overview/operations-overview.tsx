@@ -1,39 +1,29 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 import { useToast } from "../../hooks/use-toast"
 import { incidentWorkspaceHref } from "../../lib/incident-links"
 import type { IncidentSummary } from "../../lib/incident-overview-types"
 import type { OperationsOverviewViewModel } from "../../lib/operations-overview-types"
+import { runViewTransition } from "../../lib/view-transition"
 import { IconRail } from "../shell/icon-rail"
 import { Topbar } from "../shell/topbar"
+import { AnimatedNumber } from "../ui/animated-number"
 import { Icon } from "../ui/pictogram"
 import styles from "./operations-overview.module.css"
-
-function openIncident(
-  incident: IncidentSummary,
-  notify: (message: string) => void,
-  tab: "evidence" | "graph" | "changes" = "evidence",
-) {
-  if (incident.hasWorkspace) {
-    window.location.assign(
-      incidentWorkspaceHref({ incidentId: incident.id, tab }),
-    )
-    return
-  }
-  notify(`${incident.id} detail is waiting for backend data`)
-}
 
 export function OperationsOverview({
   overview,
 }: {
   overview: OperationsOverviewViewModel
 }) {
+  const router = useRouter()
   const [query, setQuery] = useState("")
   const [scope, setScope] = useState<"all" | "mine">("all")
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
 
   const active = overview.incidents.filter(
     (incident) => incident.status !== "Resolved",
@@ -61,6 +51,14 @@ export function OperationsOverview({
   const affectedServiceCount = new Set(
     active.map((incident) => incident.service),
   ).size
+
+  function openIncident(
+    incident: IncidentSummary,
+    tab: "evidence" | "graph" | "changes" = "evidence",
+  ) {
+    if (!incident.hasWorkspace) return
+    router.push(incidentWorkspaceHref({ incidentId: incident.id, tab }))
+  }
 
   return (
     <main className="app-shell" data-ready="true">
@@ -117,22 +115,30 @@ export function OperationsOverview({
           </div>
           <div className={styles.postureMetric}>
             <small>Active</small>
-            <strong>{active.length}</strong>
+            <strong>
+              <AnimatedNumber value={active.length} />
+            </strong>
             <span>investigations</span>
           </div>
           <div className={styles.postureMetric}>
             <small>Critical</small>
-            <strong className={styles.criticalValue}>{criticalCount}</strong>
+            <strong className={styles.criticalValue}>
+              <AnimatedNumber value={criticalCount} />
+            </strong>
             <span>P1 incidents</span>
           </div>
           <div className={styles.postureMetric}>
             <small>Approval</small>
-            <strong>{approvalCount}</strong>
+            <strong>
+              <AnimatedNumber value={approvalCount} />
+            </strong>
             <span>waiting</span>
           </div>
           <div className={styles.postureMetric}>
             <small>Affected services</small>
-            <strong>{affectedServiceCount}</strong>
+            <strong>
+              <AnimatedNumber value={affectedServiceCount} />
+            </strong>
             <span>{criticalCount} on critical paths</span>
           </div>
         </section>
@@ -149,18 +155,26 @@ export function OperationsOverview({
             <div className={styles.decisionList}>
               {decisions.slice(0, 3).map((incident, index) => (
                 <button
-                  aria-label={`Open decision incident ${incident.id}: ${incident.title}`}
-                  key={incident.id}
+                  aria-label={
+                    incident.hasWorkspace
+                      ? `Open decision incident ${incident.id}: ${incident.title}`
+                      : `${incident.id}: ${incident.title}. Workspace unavailable`
+                  }
+                  className={
+                    incident.hasWorkspace ? undefined : styles.unavailableRow
+                  }
+                  disabled={!incident.hasWorkspace}
+                  key={`${scope}-${normalizedQuery}-${incident.id}`}
                   onClick={() =>
                     openIncident(
                       incident,
-                      showToast,
                       incident.status === "Awaiting approval"
                         ? "changes"
                         : "graph",
                     )
                   }
                   type="button"
+                  style={{ viewTransitionName: `overview-${incident.id}` }}
                 >
                   <span className={styles.rank}>0{index + 1}</span>
                   <i
@@ -179,7 +193,11 @@ export function OperationsOverview({
                     <i>{incident.owner.initials}</i>
                     <small>{incident.updated}</small>
                   </span>
-                  <Icon name="caret-right" size={14} />
+                  {incident.hasWorkspace ? (
+                    <Icon name="caret-right" size={14} />
+                  ) : (
+                    <span className={styles.availability}>Summary only</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -224,14 +242,14 @@ export function OperationsOverview({
               <div className={styles.scopeToggle} aria-label="Incident scope">
                 <button
                   aria-pressed={scope === "all"}
-                  onClick={() => setScope("all")}
+                  onClick={() => void runViewTransition(() => setScope("all"))}
                   type="button"
                 >
                   All active
                 </button>
                 <button
                   aria-pressed={scope === "mine"}
-                  onClick={() => setScope("mine")}
+                  onClick={() => void runViewTransition(() => setScope("mine"))}
                   type="button"
                 >
                   My work
@@ -241,9 +259,17 @@ export function OperationsOverview({
             <div className={styles.investigationList}>
               {visible.slice(0, 5).map((incident) => (
                 <button
-                  aria-label={`Open active incident ${incident.id}: ${incident.title}`}
+                  aria-label={
+                    incident.hasWorkspace
+                      ? `Open active incident ${incident.id}: ${incident.title}`
+                      : `${incident.id}: ${incident.title}. Workspace unavailable`
+                  }
+                  className={
+                    incident.hasWorkspace ? undefined : styles.unavailableRow
+                  }
+                  disabled={!incident.hasWorkspace}
                   key={incident.id}
-                  onClick={() => openIncident(incident, showToast, "evidence")}
+                  onClick={() => openIncident(incident, "evidence")}
                   type="button"
                 >
                   <i
@@ -261,7 +287,9 @@ export function OperationsOverview({
                     <strong>{incident.diagnosis}</strong>
                     <small>{incident.confidence ?? "—"}% confidence</small>
                   </span>
-                  <span className={styles.state}>{incident.status}</span>
+                  <span className={styles.state}>
+                    {incident.hasWorkspace ? incident.status : "Summary only"}
+                  </span>
                 </button>
               ))}
               {visible.length === 0 ? (
@@ -314,7 +342,7 @@ export function OperationsOverview({
       </section>
 
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" data-motion-state={toastState} role="status">
           <Icon name="check-circle" size={18} /> {toast}
         </div>
       ) : null}

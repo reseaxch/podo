@@ -35,16 +35,38 @@ test("incident workspace supports its primary investigation flow", async ({
   await expect(
     page.getByRole("heading", { name: "Why this is the root cause" }),
   ).toBeVisible()
+  await expect
+    .poll(async () =>
+      page.locator(".causal-canvas").evaluate((canvas) => {
+        const viewport = canvas.getBoundingClientRect()
+        return Array.from(
+          canvas.querySelectorAll<HTMLElement>(
+            ".graph-node, .ruled-out-node, .context-node",
+          ),
+        )
+          .filter((node) => node.offsetParent !== null)
+          .every((node) => {
+            const bounds = node.getBoundingClientRect()
+            return (
+              bounds.left >= viewport.left - 2 &&
+              bounds.right <= viewport.right + 2 &&
+              bounds.top >= viewport.top - 2 &&
+              bounds.bottom <= viewport.bottom + 2
+            )
+          })
+      }),
+    )
+    .toBe(true)
   const runtimeNode = page.getByRole("button", { name: /GC pressure 6×/ })
   await runtimeNode.click()
   await expect(page.locator(".graph-inspector")).toBeVisible()
   await page.locator(".causal-canvas").click({ position: { x: 20, y: 20 } })
   await expect(page.locator(".graph-inspector")).toHaveCount(0)
 
-  const themeToggle = page.getByRole("button", {
-    name: "Switch to dark theme",
-  })
-  await themeToggle.click()
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
+  await page.getByRole("button", { name: "Switch to light theme" }).click()
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
+  await page.getByRole("button", { name: "Switch to dark theme" }).click()
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
   await page.reload()
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
@@ -64,7 +86,7 @@ test("persisted dark theme hydrates without a mismatch", async ({ page }) => {
       hydrationErrors.push(message.text())
   })
   await page.addInitScript(() => {
-    window.localStorage.setItem("podo-theme", "dark")
+    window.localStorage.setItem("podo-theme-v2", "dark")
   })
 
   await page.goto("/demo")
@@ -87,19 +109,19 @@ test("incident overview filters the inbox and opens the primary incident", async
   ).toBeVisible()
 
   await page.getByRole("tab", { name: /^Resolved/ }).click()
-  await expect(
-    page.getByRole("button", {
-      name: /Open INC-039: Elevated checkout 500 rate/,
-    }),
-  ).toBeVisible()
+  const resolvedSummary = page.getByRole("button", {
+    name: /INC-039: Elevated checkout 500 rate\. Workspace unavailable/,
+  })
+  await expect(resolvedSummary).toBeVisible()
+  await expect(resolvedSummary).toBeDisabled()
 
   await page.getByRole("tab", { name: /^All/ }).click()
   await page.getByRole("button", { name: "Next page" }).click()
   await expect(
     page.getByRole("button", {
-      name: /Open INC-035: Order export jobs timing out/,
+      name: /INC-035: Order export jobs timing out\. Workspace unavailable/,
     }),
-  ).toBeVisible()
+  ).toBeDisabled()
 
   await page.getByRole("tab", { name: /^Active/ }).click()
   await page

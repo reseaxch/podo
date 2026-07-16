@@ -155,7 +155,7 @@ export function SettingsWorkspace({
   const [dialog, setDialog] = useState<
     "plan" | "connections" | "invite" | null
   >(null)
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
 
   function update(mutator: (current: WorkspaceSettings) => void) {
@@ -1011,7 +1011,11 @@ export function SettingsWorkspace({
         </div>
       </section>
       {toast ? (
-        <div className={styles.toast} role="status">
+        <div
+          className={styles.toast}
+          data-motion-state={toastState}
+          role="status"
+        >
           <Icon name="check-circle" size={17} /> {toast}
         </div>
       ) : null}

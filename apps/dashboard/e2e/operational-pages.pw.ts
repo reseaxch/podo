@@ -5,9 +5,15 @@ test("overview prioritizes actionable work and preserves source boundaries", asy
 }) => {
   await page.goto("/overview")
 
+  const decisionQueue = page.getByRole("article").filter({
+    has: page.getByRole("heading", { name: "What needs you now" }),
+  })
   await expect(
-    page.getByRole("button", { name: /^Open decision incident/ }),
-  ).toHaveCount(3)
+    decisionQueue.getByRole("button", { name: /^Open decision incident/ }),
+  ).toHaveCount(1)
+  await expect(
+    decisionQueue.getByRole("button", { name: /Workspace unavailable$/ }),
+  ).toHaveCount(2)
   await expect(page.getByText("SLO breached", { exact: true })).toBeVisible()
   await expect(page.getByText("Needs approval", { exact: true })).toBeVisible()
   await expect(page.getByText("Escalating", { exact: true })).toBeVisible()

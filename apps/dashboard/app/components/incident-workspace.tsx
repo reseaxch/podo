@@ -29,14 +29,23 @@ export function IncidentWorkspace({
   initialGraphNodeId?: GraphNodeId | undefined
   initialTab?: IncidentTab
 }) {
-  const [activeTab, setActiveTab] = useState<IncidentTab>(initialTab)
+  const [tabSelection, setTabSelection] = useState({
+    initialTab,
+    selected: initialTab,
+  })
+  const activeTab =
+    tabSelection.initialTab === initialTab ? tabSelection.selected : initialTab
+  const setActiveTab = useCallback(
+    (selected: IncidentTab) => setTabSelection({ initialTab, selected }),
+    [initialTab],
+  )
   const [expandedId, setExpandedId] = useState<string | null>("trace")
   const [diagnosisOpen, setDiagnosisOpen] = useState(true)
   const [compactDiagnosis, setCompactDiagnosis] = useState(false)
   const [query, setQuery] = useState("")
   const compactLayoutRef = useRef<boolean | null>(null)
   const shellRef = useRef<HTMLElement | null>(null)
-  const { toast, showToast } = useToast()
+  const { toast, toastState, showToast } = useToast()
 
   const filteredEvidence = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -48,10 +57,13 @@ export function IncidentWorkspace({
     )
   }, [incident.evidence, query])
 
-  const openEvidence = useCallback((id: string) => {
-    setActiveTab("evidence")
-    setExpandedId(id)
-  }, [])
+  const openEvidence = useCallback(
+    (id: string) => {
+      setActiveTab("evidence")
+      setExpandedId(id)
+    },
+    [setActiveTab],
+  )
   const closeDiagnosis = useCallback(() => setDiagnosisOpen(false), [])
   const openDiagnosis = useCallback(() => {
     setDiagnosisOpen(true)
@@ -108,6 +120,7 @@ export function IncidentWorkspace({
               <button
                 aria-selected={activeTab === "evidence"}
                 onClick={() => setActiveTab("evidence")}
+                onMouseDown={(event) => event.preventDefault()}
                 role="tab"
                 type="button"
               >
@@ -116,6 +129,7 @@ export function IncidentWorkspace({
               <button
                 aria-selected={activeTab === "graph"}
                 onClick={() => setActiveTab("graph")}
+                onMouseDown={(event) => event.preventDefault()}
                 role="tab"
                 type="button"
               >
@@ -124,6 +138,7 @@ export function IncidentWorkspace({
               <button
                 aria-selected={activeTab === "changes"}
                 onClick={() => setActiveTab("changes")}
+                onMouseDown={(event) => event.preventDefault()}
                 role="tab"
                 type="button"
               >
@@ -173,7 +188,7 @@ export function IncidentWorkspace({
         </div>
       </section>
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" data-motion-state={toastState} role="status">
           <Icon name="check-circle" size={18} /> {toast}
         </div>
       ) : null}

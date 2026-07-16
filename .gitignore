@@ -16,6 +16,8 @@ build/
 coverage/
 playwright-report/
 test-results/
+.playwright-cli/
+output/
 *.tsbuildinfo
 
 # Logs and temporary files

@@ -130,6 +130,213 @@
   color: var(--verified);
   font-weight: 700;
 }
+.remediation-timeline {
+  margin: 14px 28px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px
+    color-mix(in srgb, var(--shadow-color) 52%, transparent);
+}
+.remediation-timeline > header {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-subtle);
+}
+.remediation-timeline > header > span {
+  display: grid;
+  gap: 2px;
+}
+.remediation-timeline > header small {
+  color: var(--primary);
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.remediation-timeline > header strong {
+  font-size: 11px;
+}
+.remediation-timeline > header em {
+  color: var(--muted);
+  font-size: 9px;
+  font-style: normal;
+}
+.remediation-trace {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  padding: 16px 12px 17px;
+}
+.remediation-trace::before,
+.trace-beam-track {
+  position: absolute;
+  top: 31px;
+  right: 8.5%;
+  left: 8.5%;
+  height: 2px;
+  border-radius: 999px;
+  content: "";
+  pointer-events: none;
+}
+.remediation-trace::before {
+  background: linear-gradient(
+    90deg,
+    var(--primary) 0 79.3%,
+    var(--border) 79.3% 100%
+  );
+}
+.trace-beam-track {
+  z-index: 1;
+  right: auto;
+  width: 65.8%;
+  overflow: hidden;
+}
+.trace-beam-track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 18%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary-hover) 30%,
+    color-mix(in srgb, var(--focus) 34%, white) 50%,
+    var(--primary-hover) 70%,
+    transparent
+  );
+  box-shadow: 0 0 6px color-mix(in srgb, var(--focus) 82%, transparent);
+  transform: translateX(0);
+}
+.timeline-approved .remediation-trace::before {
+  background: var(--primary);
+}
+.timeline-approved .trace-beam-track {
+  display: none;
+}
+.trace-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 7px;
+  padding-inline: 5px;
+  text-align: center;
+}
+.trace-node {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--surface);
+  box-shadow: 0 3px 9px var(--shadow-color);
+}
+.trace-stage-complete .trace-node {
+  border-color: color-mix(in srgb, var(--primary) 60%, var(--border));
+  color: var(--primary-hover);
+  background: var(--primary-soft);
+}
+.trace-stage-active .trace-node {
+  border-color: var(--primary);
+  color: white;
+  background: var(--primary-solid);
+}
+.trace-stage > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.trace-stage strong,
+.trace-stage small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trace-stage strong {
+  font-size: 9px;
+}
+.trace-stage small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+@keyframes remediationBeamTravel {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(456%);
+  }
+}
+
+@keyframes traceStageReveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .trace-beam-track > span {
+    animation: remediationBeamTravel 2.8s linear infinite;
+  }
+  .trace-stage {
+    animation: traceStageReveal 300ms var(--motion-ease-emphasized) both;
+    animation-delay: calc(var(--trace-index) * 70ms);
+  }
+  .trace-stage-active .trace-node {
+    animation: motion-status-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .trace-stage {
+      animation: traceStageReveal linear both;
+      animation-timeline: view(block);
+      animation-range: entry 0% cover 30%;
+    }
+  }
+}
+
+@media (max-width: 760px) {
+  .remediation-trace {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 18px;
+  }
+  .remediation-trace::before,
+  .remediation-trace::after {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .remediation-timeline {
+    margin-inline: 12px;
+  }
+  .remediation-timeline > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .remediation-trace {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .change-rationale {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

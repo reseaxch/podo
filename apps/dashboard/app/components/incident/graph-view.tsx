@@ -5,6 +5,24 @@ import { useEffect, useRef, useState } from "react"
 import { graphNodeDetails, type GraphNodeId } from "../../mocks/incident"
 import { Icon } from "../ui/pictogram"
 
+const causalPaths = [
+  "M128 178 C182 178 188 93 252 93",
+  "M353 93 C408 93 405 93 456 93",
+  "M353 93 C405 93 408 253 456 253",
+  "M559 93 C620 93 620 178 674 178",
+  "M559 253 C620 253 620 178 674 178",
+] as const
+
+const replayNodeIds = ["deploy", "heap", "trace", "gc", "code"] as const
+const replayEdgeSteps = [1, 2, 3, 4, 4] as const
+const replayLabels = [
+  "Deploy v2.8.1",
+  "Heap anomaly",
+  "Dominant trace",
+  "GC pressure",
+  "Root cause confirmed",
+] as const
+
 export function GraphView({
   initialSelectedNode = null,
   onOpenEvidence,
@@ -17,6 +35,7 @@ export function GraphView({
   const [selectedNode, setSelectedNode] = useState<GraphNodeId | null>(
     initialSelectedNode,
   )
+  const [replayStep, setReplayStep] = useState<number | null>(null)
   const dragRef = useRef<{
     pointerId: number
     startX: number
@@ -30,12 +49,20 @@ export function GraphView({
   const sceneRef = useRef<HTMLDivElement | null>(null)
   const spotlightRef = useRef<HTMLDivElement | null>(null)
   const spotlightFrameRef = useRef<number | null>(null)
+  const replayTimersRef = useRef<number[]>([])
   const nodes = [
-    ["deploy", "Deploy v2.8.1", "10:02 AM", "Release", "cube"],
-    ["heap", "Heap 94%", "10:06 AM", "Metric", "chart-line-up"],
-    ["trace", "Latency 812ms", "10:11 AM", "Trace", "git-fork"],
-    ["gc", "GC pressure 6×", "10:12 AM", "Runtime", "activity"],
-    ["code", "CheckoutCache.set()", "cache.ts:47", "Root cause", "code"],
+    ["deploy", "Deploy v2.8.1", "10:02 AM", "Release", "cube", "changed"],
+    ["heap", "Heap 94%", "10:06 AM", "Metric", "chart-line-up", "degraded"],
+    ["trace", "Latency 812ms", "10:11 AM", "Trace", "git-fork", "degraded"],
+    ["gc", "GC pressure 6×", "10:12 AM", "Runtime", "activity", "degraded"],
+    [
+      "code",
+      "CheckoutCache.set()",
+      "cache.ts:47",
+      "Root cause",
+      "code",
+      "critical",
+    ],
   ] as const
 
   useEffect(() => {
@@ -59,6 +86,77 @@ export function GraphView({
     }
   }, [])
 
+  useEffect(
+    () => () => {
+      replayTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    },
+    [],
+  )
+
+  function clearReplayTimers() {
+    replayTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    replayTimersRef.current = []
+  }
+
+  function stopReplay() {
+    clearReplayTimers()
+    setReplayStep(null)
+  }
+
+  function toggleReplay() {
+    if (replayStep !== null) {
+      stopReplay()
+      return
+    }
+
+    clearReplayTimers()
+    setGraphMode("causal")
+    setSelectedNode(null)
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches
+    if (reduceMotion) {
+      setReplayStep(replayNodeIds.length - 1)
+      replayTimersRef.current.push(
+        window.setTimeout(() => setReplayStep(null), 1200),
+      )
+      return
+    }
+
+    setReplayStep(0)
+    for (let step = 1; step < replayNodeIds.length; step += 1) {
+      replayTimersRef.current.push(
+        window.setTimeout(() => setReplayStep(step), step * 520),
+      )
+    }
+    replayTimersRef.current.push(
+      window.setTimeout(() => setReplayStep(null), 3180),
+    )
+  }
+
+  function selectNode(id: GraphNodeId) {
+    stopReplay()
+    setSelectedNode(id)
+  }
+
+  function replayNodeClass(id: GraphNodeId) {
+    if (replayStep === null) return ""
+    const nodeStep = replayNodeIds.indexOf(id as (typeof replayNodeIds)[number])
+    if (nodeStep < 0) return "replay-node-secondary"
+    if (nodeStep < replayStep) return "replay-node-passed"
+    if (nodeStep === replayStep) return "replay-node-active"
+    return "replay-node-pending"
+  }
+
+  function replayEdgeClass(index: number) {
+    if (replayStep === null) return ""
+    const edgeStep = replayEdgeSteps[index] ?? Number.POSITIVE_INFINITY
+    if (edgeStep < replayStep) return "replay-edge-passed"
+    if (edgeStep === replayStep) return "replay-edge-active"
+    return "replay-edge-pending"
+  }
+
   function zoomBy(amount: number) {
     setViewport((current) => ({
       ...current,
@@ -67,6 +165,7 @@ export function GraphView({
   }
 
   function changeGraphMode(mode: "causal" | "all") {
+    stopReplay()
     setGraphMode(mode)
     if (mode === "causal")
       setSelectedNode((current) =>
@@ -185,6 +284,7 @@ export function GraphView({
       suppressCanvasClickRef.current = false
       return
     }
+    stopReplay()
     setSelectedNode(null)
   }
 
@@ -253,6 +353,15 @@ export function GraphView({
             </small>
           </span>
           <div className="graph-toolbar-actions">
+            <button
+              aria-pressed={replayStep !== null}
+              className="graph-replay-button"
+              onClick={toggleReplay}
+              type="button"
+            >
+              <Icon name="activity" size={13} />
+              {replayStep === null ? "Replay path" : "Stop replay"}
+            </button>
             <div className="graph-mode">
               <button
                 aria-pressed={graphMode === "causal"}
@@ -317,7 +426,7 @@ export function GraphView({
             ref={spotlightRef}
           />
           <div
-            className="graph-scene"
+            className={`graph-scene ${replayStep !== null ? "is-replaying" : ""}`}
             ref={sceneRef}
             style={{
               transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`,
@@ -329,11 +438,21 @@ export function GraphView({
               viewBox="0 0 760 350"
               preserveAspectRatio="none"
             >
-              <path d="M128 178 C182 178 188 93 252 93" />
-              <path d="M353 93 C408 93 405 93 456 93" />
-              <path d="M353 93 C405 93 408 253 456 253" />
-              <path d="M559 93 C620 93 620 178 674 178" />
-              <path d="M559 253 C620 253 620 178 674 178" />
+              {causalPaths.map((path, index) => (
+                <path
+                  className={replayEdgeClass(index)}
+                  d={path}
+                  key={`causal-track-${path}`}
+                />
+              ))}
+              {causalPaths.map((path, index) => (
+                <path
+                  className={`graph-edge-flow ${replayEdgeClass(index)}`}
+                  d={path}
+                  key={`causal-flow-${path}`}
+                  pathLength="1"
+                />
+              ))}
             </svg>
             <svg
               aria-hidden="true"
@@ -377,12 +496,12 @@ export function GraphView({
             >
               top span
             </span>
-            {nodes.map(([id, label, time, kind, icon]) => (
+            {nodes.map(([id, label, time, kind, icon, health]) => (
               <button
                 aria-pressed={selectedNode === id}
-                className={`graph-node node-${id} ${id === "code" ? "root-cause" : ""}`}
+                className={`graph-node graph-node-causal graph-node-${health} node-${id} ${id === "code" ? "root-cause graph-node-root" : ""} ${replayNodeClass(id)}`}
                 key={id}
-                onClick={() => setSelectedNode(id)}
+                onClick={() => selectNode(id)}
                 type="button"
               >
                 <span className="graph-node-icon">
@@ -397,8 +516,8 @@ export function GraphView({
             ))}
             <button
               aria-pressed={selectedNode === "flags"}
-              className="ruled-out-node node-flags"
-              onClick={() => setSelectedNode("flags")}
+              className={`ruled-out-node node-flags ${replayNodeClass("flags")}`}
+              onClick={() => selectNode("flags")}
               type="button"
             >
               <Icon name="flag" size={15} />
@@ -409,8 +528,8 @@ export function GraphView({
             </button>
             <button
               aria-pressed={selectedNode === "infra"}
-              className="ruled-out-node node-infra"
-              onClick={() => setSelectedNode("infra")}
+              className={`ruled-out-node graph-node-healthy node-infra ${replayNodeClass("infra")}`}
+              onClick={() => selectNode("infra")}
               type="button"
             >
               <Icon name="stack" size={15} />
@@ -423,8 +542,8 @@ export function GraphView({
               <>
                 <button
                   aria-pressed={selectedNode === "traffic"}
-                  className="context-node node-traffic"
-                  onClick={() => setSelectedNode("traffic")}
+                  className={`context-node graph-node-healthy node-traffic ${replayNodeClass("traffic")}`}
+                  onClick={() => selectNode("traffic")}
                   type="button"
                 >
                   <Icon name="trend-up" size={15} />
@@ -435,8 +554,8 @@ export function GraphView({
                 </button>
                 <button
                   aria-pressed={selectedNode === "config"}
-                  className="context-node node-config"
-                  onClick={() => setSelectedNode("config")}
+                  className={`context-node graph-node-healthy node-config ${replayNodeClass("config")}`}
+                  onClick={() => selectNode("config")}
                   type="button"
                 >
                   <Icon name="gear-six" size={15} />
@@ -448,12 +567,26 @@ export function GraphView({
               </>
             ) : null}
           </div>
+          {replayStep !== null ? (
+            <span
+              aria-live="polite"
+              className="graph-replay-status"
+              key={replayStep}
+              role="status"
+            >
+              <i /> Tracing · {replayLabels[replayStep]}
+            </span>
+          ) : null}
           <span className="pan-hint">
             <Icon name="share-network" size={14} /> Drag to pan · scroll to zoom
           </span>
         </div>
         {selectedNode ? (
-          <section aria-live="polite" className="graph-inspector">
+          <section
+            aria-live="polite"
+            className="graph-inspector"
+            key={selectedNode}
+          >
             <header>
               <span>
                 <small>{graphNodeDetails[selectedNode].kind}</small>

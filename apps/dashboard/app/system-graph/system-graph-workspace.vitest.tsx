@@ -62,6 +62,9 @@ describe("SystemGraphWorkspace", () => {
     ).toBeInTheDocument()
     expect(within(inspector).getByText("Heap retainers")).toBeInTheDocument()
     expect(within(inspector).getByText("63.8 MB")).toBeInTheDocument()
+    expect(
+      document.querySelectorAll('[class*="edgeBeam"]').length,
+    ).toBeGreaterThan(0)
 
     await user.click(
       within(inspector).getByRole("button", { name: "Close node details" }),
@@ -189,7 +192,9 @@ describe("SystemGraphWorkspace", () => {
       within(inspector).getByRole("button", { name: /payments-service/ }),
     )
     expect(
-      within(inspector).getByRole("heading", { name: "payments-service" }),
+      within(
+        screen.getByRole("complementary", { name: "Node details" }),
+      ).getByRole("heading", { name: "payments-service" }),
     ).toBeInTheDocument()
   })
 

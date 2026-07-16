@@ -7,7 +7,7 @@
 
 .page > * {
   width: 100%;
-  max-width: 1920px;
+  max-width: var(--page-content-max);
   margin-right: auto;
   margin-left: auto;
 }
@@ -117,7 +117,7 @@
 }
 
 .postureLead small,
-.postureMetric span {
+.postureMetric > span {
   color: var(--text-subtle);
   font-size: 9px;
 }
@@ -152,9 +152,11 @@
 }
 
 .postureMetric strong {
-  font-size: 21px;
+  font-size: 27px;
+  font-weight: 740;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .postureMetric .criticalValue {
@@ -232,9 +234,25 @@
   border-bottom: 0;
 }
 
-.decisionList > button:hover,
-.investigationList > button:hover {
+.decisionList > button:hover:not(:disabled),
+.investigationList > button:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+
+.unavailableRow {
+  color: var(--muted) !important;
+  cursor: not-allowed !important;
+}
+
+.unavailableRow strong {
+  color: var(--muted);
+}
+
+.availability {
+  color: var(--text-subtle);
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .rank {
@@ -535,11 +553,29 @@
     padding: calc(var(--topbar-height) + 24px) 12px 28px;
   }
 
+  .page > *,
+  .pageHeader > div,
+  .posture,
+  .primaryGrid,
+  .secondaryGrid,
+  .decisionPanel,
+  .signalsPanel,
+  .investigationsPanel,
+  .activityPanel {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .pageHeader {
-    align-items: flex-start;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .headerActions {
+    justify-content: flex-end;
   }
   .pageHeader p {
-    max-width: 280px;
+    max-width: 100%;
     font-size: 12px;
   }
   .liveStatus {
@@ -566,6 +602,14 @@
   .decisionList > button {
     grid-template-columns: 28px minmax(0, 1fr) auto;
     padding: 0 12px;
+  }
+  .decisionCopy strong,
+  .decisionCopy small,
+  .investigationList strong,
+  .investigationList small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
   .rank,
   .owner {
@@ -613,5 +657,13 @@
   }
   .scopeToggle button {
     flex: 1;
+  }
+  .decisionCopy small > span {
+    display: none;
+  }
+  .availability {
+    max-width: 62px;
+    text-align: right;
+    white-space: normal;
   }
 }
