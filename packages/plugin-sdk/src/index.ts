@@ -2,6 +2,8 @@ export type PluginCapability =
   | "code_graph"
   | "telemetry_source"
   | "repository_read"
+  | "ci_read"
+  | "ci_retry"
   | "issue_write"
   | "pull_request_write"
 

@@ -72,6 +72,9 @@ export class LocalWorktreeRemediationExecutor implements IncidentRemediationExec
       throw failure("remediation_policy_inconsistent")
     }
     const repository = await this.verifyRepository()
+    if (input.incident.expectedBaseCommit && repository.baseCommit !== input.incident.expectedBaseCommit) {
+      throw failure("incident_source_revision_mismatch")
+    }
     const worktreePath = resolve(this.config.scratchParent, `podo-remediation-${randomUUID()}`)
     assertOwnedPath(this.config.scratchParent, worktreePath)
     let registered = false

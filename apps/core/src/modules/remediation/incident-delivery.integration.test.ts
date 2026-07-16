@@ -3,6 +3,7 @@ import type { CodexRuntime, CodexRuntimeEvent } from "@podo/codex-app-server-cli
 
 import { createPodoClient } from "../../../../../packages/client/src/index"
 import { createCoreHandler } from "../../app"
+import type { PullRequestDeliveryInput } from "./incident-delivery"
 
 const baseCommit = "a".repeat(40)
 
@@ -101,7 +102,11 @@ async function completedRemediationFixture(delivery: { deliver(input: unknown): 
   const handler = createCoreHandler({
     runtime,
     remediationExecutor,
-    pullRequestDelivery: { expectedRepository: "reseaxch/podo", port: delivery },
+    pullRequestDelivery: {
+      expectedRepository: "reseaxch/podo",
+      operatorIdentity: "fixture-operator",
+      port: delivery,
+    },
   })
   const client = createPodoClient({
     baseUrl: "http://podo.test",
@@ -118,7 +123,7 @@ async function completedRemediationFixture(delivery: { deliver(input: unknown): 
   return { client, handler, incident: ingested.incident, remediation: completed.remediation }
 }
 
-function deliveredResult(artifactId: string) {
+function deliveredResult(input: PullRequestDeliveryInput) {
   return {
     provider: "github",
     repository: "reseaxch/podo",
@@ -127,7 +132,21 @@ function deliveredResult(artifactId: string) {
     baseCommit,
     baseBranch: "main",
     headBranch: "podo/fix-checkout-cache",
-    artifactId,
+    headSha: "d".repeat(40),
+    artifactId: input.artifact.pullRequestPreview.id,
+    proof: {
+      providerStatus: "created",
+      idempotencyKey: input.deliveryId,
+      resultTreeOid: input.artifact.provenance.resultTreeOid,
+      patchSha256: input.artifact.patch.sha256,
+      validationChecks: [...input.artifact.validation.checks],
+      evidenceIds: [...input.artifact.evidenceIds],
+      authorization: {
+        approvalId: input.authorization.approvalId,
+        approvedBy: input.authorization.approvedBy,
+        approvedAt: input.authorization.approvedAt,
+      },
+    },
   }
 }
 
@@ -138,7 +157,7 @@ describe("incident pull request delivery API", () => {
     const fixture = await completedRemediationFixture({
       async deliver(input) {
         deliveryInputs.push(input)
-        return deliveredResult(artifactId)
+        return deliveredResult(input as PullRequestDeliveryInput)
       },
     })
     artifactId = fixture.remediation.artifact!.pullRequestPreview.id
@@ -206,6 +225,7 @@ describe("incident pull request delivery API", () => {
         artifactId,
         baseCommit,
         baseBranch: "main",
+        headSha: "d".repeat(40),
       },
     })
     expect((await fixture.client.getIncidentRemediationAudit(fixture.incident.id)).events.slice(-4)).toMatchObject([
@@ -242,17 +262,15 @@ describe("incident pull request delivery API", () => {
     expect(JSON.stringify(failed)).not.toContain("private-provider-output")
     expect(JSON.stringify(failed)).not.toContain("unifiedDiff")
 
-    let invalidArtifactId = ""
     const invalidFixture = await completedRemediationFixture({
-      async deliver() {
+      async deliver(raw) {
         return {
-          ...deliveredResult(invalidArtifactId),
+          ...deliveredResult(raw as PullRequestDeliveryInput),
           repository: "attacker/podo",
           url: "https://github.com/attacker/podo/pull/6",
         }
       },
     })
-    invalidArtifactId = invalidFixture.remediation.artifact!.pullRequestPreview.id
     const invalidPending = await invalidFixture.client.startIncidentDelivery(invalidFixture.incident.id)
     const invalid = await invalidFixture.client.approveIncidentDelivery(
       invalidFixture.incident.id,
@@ -262,13 +280,11 @@ describe("incident pull request delivery API", () => {
     expect(invalid.delivery.pullRequest).toBeUndefined()
     expect(JSON.stringify(invalid)).not.toContain("attacker/podo")
 
-    let wrongBaseArtifactId = ""
     const wrongBaseFixture = await completedRemediationFixture({
-      async deliver() {
-        return { ...deliveredResult(wrongBaseArtifactId), baseBranch: "release" }
+      async deliver(raw) {
+        return { ...deliveredResult(raw as PullRequestDeliveryInput), baseBranch: "release" }
       },
     })
-    wrongBaseArtifactId = wrongBaseFixture.remediation.artifact!.pullRequestPreview.id
     const wrongBasePending = await wrongBaseFixture.client.startIncidentDelivery(wrongBaseFixture.incident.id)
     const wrongBase = await wrongBaseFixture.client.approveIncidentDelivery(
       wrongBaseFixture.incident.id,
@@ -277,6 +293,20 @@ describe("incident pull request delivery API", () => {
     expect(wrongBase.delivery).toMatchObject({ status: "failed", error: { code: "invalid_delivery_result" } })
     expect(wrongBase.delivery.pullRequest).toBeUndefined()
     expect(JSON.stringify(wrongBase)).not.toContain("release")
+
+    const wrongTreeFixture = await completedRemediationFixture({
+      async deliver(raw) {
+        const result = deliveredResult(raw as PullRequestDeliveryInput)
+        return { ...result, proof: { ...result.proof, resultTreeOid: "e".repeat(40) } }
+      },
+    })
+    const wrongTreePending = await wrongTreeFixture.client.startIncidentDelivery(wrongTreeFixture.incident.id)
+    const wrongTree = await wrongTreeFixture.client.approveIncidentDelivery(
+      wrongTreeFixture.incident.id,
+      wrongTreePending.delivery.approval.id,
+    )
+    expect(wrongTree.delivery).toMatchObject({ status: "failed", error: { code: "invalid_delivery_result" } })
+    expect(wrongTree.delivery.pullRequest).toBeUndefined()
   })
 
   test("keeps create_pull_request authorization exclusively behind delivery approval policy", async () => {

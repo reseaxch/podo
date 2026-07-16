@@ -11,6 +11,9 @@
 - controlled lazy replacement of a failed Codex runtime.
 - core-owned settings plus telemetry ingestion and incident read APIs;
 - deterministic, replay-safe cache-growth incident detection.
+- repository-bound GitHub Actions failure ingestion, workflow/job/step evidence,
+  automatic read-only Build Incident investigation, approved retry, exact-head
+  remediation CI verification, and a unified ordered audit;
 - incident-scoped, evidence-backed investigator handoff through the typed client.
 - approval-gated remediation with a verified public artifact only after a
   failing pre-patch regression, passing post-patch regression, and full
@@ -60,6 +63,49 @@ traversal-shaped configuration aborts startup with the stable sanitized error
 `invalid_production_incident_graph_config`. An enabled built Core therefore
 requires `PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH`; it never relies on a
 source-tree-relative runtime default.
+
+## GitHub Actions Build Incident composition
+
+UC-13 is disabled by default. The complete provider boundary is enabled only
+for one configured repository and one Core-owned repository directory:
+
+```sh
+PODO_GITHUB_ACTIONS_ENABLED=true
+PODO_GITHUB_TOKEN=github_token
+PODO_GITHUB_REPOSITORY=owner/repository
+PODO_GITHUB_ACTIONS_WEBHOOK_SECRET=webhook_secret
+PODO_GITHUB_ACTIONS_REPOSITORY_CWD=/absolute/path/to/repository
+PODO_GITHUB_OPERATOR_IDENTITY=local-operator
+```
+
+The webhook target is `POST /api/github/actions/workflow-runs`. Core verifies
+`X-Hub-Signature-256` over the exact raw body, accepts only a failed completed
+`workflow_run` for the configured repository, and re-reads the exact run,
+attempt, jobs, and steps before creating incident state. The configured
+repository directory—not caller input—is used for the automatic read-only,
+deny-all-approvals investigation. Set Core autonomy to `recommend` or
+`act_with_approval` before ingestion; `observe` intentionally refuses diagnosis.
+
+`POST /api/build-incidents/:id/retry` creates only a pending approval. The only
+write path is approval at
+`POST /api/build-incidents/:id/retry/approvals/:approvalId`; Core re-evaluates
+policy, seals repository/run/head/attempt and operator attribution, and the
+plugin may call only GitHub's failed-jobs retry endpoint. Success is accepted
+only from the exact next attempt of that same run and head.
+
+For a tested remediation, the normal isolated checkout and PR delivery gates
+remain authoritative. Their Build Incident aliases live under
+`/api/build-incidents/:id/remediation...`. CI verification begins only after a
+red-green artifact and separately approved delivery expose the exact derived
+head. `POST /api/build-incidents/:id/remediation/verification` lists CI runs for
+that head and accepts only the original workflow on the delivered branch. The
+artifact ID, result tree, branch, head SHA, CI run, approval decisions, and
+sanitized failures are retained at `GET /api/build-incidents/:id/audit`.
+
+The source failure fixture is a push to the trusted default branch, so
+`PODO_REMEDIATION_BASE_REF` must resolve to that exact failed source commit when
+the remediation path begins. Provider tests inject REST fakes; they never use
+the configured token, network, or a real GitHub write.
 
 Production remediation is disabled by default. When explicitly configured, the
 Core startup composes the detached-worktree executor with the same supervised

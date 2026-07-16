@@ -1,0 +1,61 @@
+{
+  "total_count": 3,
+  "jobs": [
+    {
+      "id": 81001,
+      "run_id": 91377001,
+      "run_attempt": 1,
+      "name": "Workspace",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "html_url": "https://github.com/reseaxch/podo/actions/runs/91377001/job/81001",
+      "started_at": "2026-07-16T08:00:10Z",
+      "completed_at": "2026-07-16T08:03:40Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": null,
+          "completed_at": null
+        },
+        {
+          "number": 2,
+          "name": "Run workspace tests",
+          "status": "completed",
+          "conclusion": "failure",
+          "started_at": null,
+          "completed_at": null
+        }
+      ]
+    },
+    {
+      "id": 81002,
+      "run_id": 91377001,
+      "run_attempt": 1,
+      "name": "Dashboard",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "html_url": "https://github.com/reseaxch/podo/actions/runs/91377001/job/81002",
+      "started_at": "2026-07-16T08:00:10Z",
+      "completed_at": "2026-07-16T08:02:40Z",
+      "steps": []
+    },
+    {
+      "id": 81003,
+      "run_id": 91377001,
+      "run_attempt": 1,
+      "name": "Codex compatibility",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "html_url": "https://github.com/reseaxch/podo/actions/runs/91377001/job/81003",
+      "started_at": "2026-07-16T08:00:10Z",
+      "completed_at": "2026-07-16T08:01:40Z",
+      "steps": []
+    }
+  ]
+}

@@ -23,3 +23,26 @@ this internal provenance API is not exposed to clients.
 
 Clients start the transition through `@podo/client`, never this module
 directly, and cannot submit replacement prompt text or evidence.
+
+## GitHub Actions Build Incidents
+
+`BuildIncidentRegistry` is the Core-owned source of truth for the UC-13 build
+flow. It accepts a normalized `workflow_run` signal, calls an injected
+read-only Actions capture port, and validates the returned run, job, and step
+bindings before creating evidence. Incident and evidence identifiers are
+content-derived, so webhook delivery retries and concurrent duplicate signals
+cannot create a second incident or investigation.
+
+The registry automatically starts the shared `InvestigationService` with the
+Core-configured absolute repository path, a read-only sandbox, and deny-all
+runtime approvals. Only validated public evidence is included in the prompt;
+provider responses and Codex errors are never copied into API-facing failure
+messages. A completed diagnosis must satisfy the structured diagnosis contract,
+cite only supplied evidence IDs, and name the workflow-owned affected service.
+
+Retry and remediation services project their state back through the registry's
+finite mutation methods. Those methods enforce monotonic transitions and bind
+successful CI results to either the exact next attempt of the failed run or the
+stored tested-remediation head and artifact. This keeps incident, evidence,
+resolution, and verified-CI state in one authoritative record while the shared
+audit store retains the ordered lifecycle history.

@@ -3,13 +3,11 @@ import type {
   IncidentRemediation,
   IncidentRemediationAuditEvent,
   IncidentRemediationArtifact,
+  IncidentDiagnosis,
   ValidatedIncidentDiagnosis,
 } from "@podo/contracts"
 import { buildRemediatorPrompt, evaluateReaction, type PromptPolicy, type RemediatorTool } from "@podo/domain"
 import type { SettingsStore } from "../../settings"
-import type { IncidentMonitor } from "../incidents/incident-monitor"
-import type { IncidentInvestigationCoordinator } from "../investigation/incident-investigation"
-
 export interface IncidentRemediationExecutorInput {
   incident: {
     id: string
@@ -17,6 +15,7 @@ export interface IncidentRemediationExecutorInput {
     deploymentId: string
     evidenceIds: string[]
     diagnosis: ValidatedIncidentDiagnosis
+    expectedBaseCommit?: string
   }
   target: "isolated_checkout"
   policy: PromptPolicy<RemediatorTool>
@@ -54,6 +53,19 @@ export interface IncidentRemediationExecutor {
   execute(input: IncidentRemediationExecutorInput): Promise<unknown>
 }
 
+export interface IncidentRemediationSourceContext {
+  id: string
+  affectedService: string
+  deploymentId: string
+  evidenceIds: string[]
+  diagnosis?: IncidentDiagnosis
+  expectedBaseCommit?: string
+}
+
+export interface IncidentRemediationSource {
+  getRemediationContext(incidentId: string): IncidentRemediationSourceContext | null
+}
+
 export type StartIncidentRemediationResult =
   | { ok: true; created: boolean; remediation: IncidentRemediation }
   | { ok: false; status: 404; error: "not_found"; message: string }
@@ -89,8 +101,7 @@ export class IncidentRemediationService {
   private readonly byIncident = new Map<string, RemediationRecord>()
 
   constructor(
-    private readonly incidents: IncidentMonitor,
-    private readonly investigations: IncidentInvestigationCoordinator,
+    private readonly source: IncidentRemediationSource,
     private readonly settings: SettingsStore,
     private readonly executor?: IncidentRemediationExecutor,
   ) {}
@@ -99,10 +110,10 @@ export class IncidentRemediationService {
     const existing = this.byIncident.get(incidentId)
     if (existing) return { ok: true, created: false, remediation: copy(existing.remediation) }
 
-    const incident = this.incidents.getIncident(incidentId)
-    if (!incident) return { ok: false, status: 404, error: "not_found", message: "Incident was not found" }
+    const context = this.source.getRemediationContext(incidentId)
+    if (!context) return { ok: false, status: 404, error: "not_found", message: "Incident was not found" }
 
-    const diagnosis = this.investigations.publicIncident(incident).diagnosis
+    const diagnosis = context.diagnosis
     if (!diagnosis || diagnosis.status !== "validated") {
       return { ok: false, status: 409, error: "diagnosis_not_validated", message: "A validated authoritative diagnosis is required" }
     }
@@ -219,7 +230,7 @@ export class IncidentRemediationService {
       return
     }
 
-    const incident = this.incidents.getIncident(record.remediation.incidentId)
+    const incident = this.source.getRemediationContext(record.remediation.incidentId)
     if (!incident) {
       this.fail(record, "policy_denied", "The authoritative incident is no longer available")
       return
@@ -234,6 +245,7 @@ export class IncidentRemediationService {
           deploymentId: incident.deploymentId,
           evidenceIds: [...record.diagnosis.evidenceIds],
           diagnosis: copy(record.diagnosis),
+          ...(incident.expectedBaseCommit ? { expectedBaseCommit: incident.expectedBaseCommit } : {}),
         },
         target,
         policy: buildRemediatorPrompt({ mode, approval: "approved", regression: "not_run", target }),
@@ -246,6 +258,10 @@ export class IncidentRemediationService {
     const parsed = parseExecutorResult(raw)
     if (!parsed.ok) {
       this.fail(record, parsed.code, parsed.message)
+      return
+    }
+    if (incident.expectedBaseCommit && parsed.value.provenance.baseCommit !== incident.expectedBaseCommit) {
+      this.fail(record, "verification_failed", "Remediation was not verified from the incident source revision")
       return
     }
 

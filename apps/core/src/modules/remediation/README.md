@@ -22,6 +22,12 @@ persistence, or delivery. Core accepts a completed result only when:
 - full validation passed with named checks;
 - the PR preview is complete and policy allows it.
 
+Build Incidents reuse this lifecycle through the
+`/api/build-incidents/:incidentId/remediation...` aliases. Their authoritative
+context additionally seals `expectedBaseCommit` to the failed workflow head;
+an executor result based on any other revision is rejected before an artifact
+can exist.
+
 Only then does the public artifact include the sorted authoritative diagnosis
 evidence IDs, trusted base ref and commit, deterministic patched-tree OID, diff,
 integrity hash, verification record, and reproducible PR preview. The preview ID
