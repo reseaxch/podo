@@ -208,9 +208,11 @@ describe("dashboard agent chat routes", () => {
 
   it("passes an aborted signal upstream when the browser was already disconnected", async () => {
     let upstreamSignal: AbortSignal | undefined
+    let abortedAtSubscription = false
     client.subscribeAgentChatEvents.mockImplementation(
       (_id: string, options: { signal?: AbortSignal }) => {
         upstreamSignal = options.signal
+        abortedAtSubscription = options.signal?.aborted ?? false
         return eventStream([])
       },
     )
@@ -225,6 +227,7 @@ describe("dashboard agent chat routes", () => {
     )
     await response.text()
 
+    expect(abortedAtSubscription).toBe(true)
     expect(upstreamSignal?.aborted).toBe(true)
   })
 
