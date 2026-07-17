@@ -9,6 +9,7 @@ export type TuiRunStatus =
   | "waiting_for_approval"
   | "failed"
   | "completed"
+  | "cancelled"
 
 export type TuiAutonomyMode = "observe" | "recommend" | "act_with_approval"
 export type TuiSandboxMode = "read-only" | "workspace-write"
@@ -20,6 +21,20 @@ export interface TuiSettings {
   timeoutSeconds: number
 }
 
+export type TuiInvestigationStreamStatus = "connecting" | "live" | "reconnecting" | "complete"
+
+export interface TuiInvestigationActivity {
+  sequence: number
+  occurredAt: string
+  label: string
+}
+
+export interface TuiInvestigationView {
+  id: string
+  streamStatus: TuiInvestigationStreamStatus
+  activity: readonly TuiInvestigationActivity[]
+}
+
 export interface PodoTuiViewModel {
   status: TuiRunStatus
   statusDetail?: string
@@ -29,6 +44,7 @@ export interface PodoTuiViewModel {
     id: string
     summary: string
   }
+  investigation?: TuiInvestigationView
   settings: TuiSettings
 }
 
@@ -79,6 +95,7 @@ const statusLabels: Record<TuiRunStatus, string> = {
   waiting_for_approval: "WAITING FOR APPROVAL",
   failed: "FAILED",
   completed: "COMPLETED",
+  cancelled: "CANCELLED",
 }
 
 const statusColors: Record<TuiRunStatus, string> = {
@@ -89,6 +106,7 @@ const statusColors: Record<TuiRunStatus, string> = {
   waiting_for_approval: "#fbbf24",
   failed: "#f87171",
   completed: "#4ade80",
+  cancelled: "#94a3b8",
 }
 
 function cycle<T>(items: readonly T[], current: T, direction: 1 | -1): T {
@@ -231,6 +249,14 @@ export function PodoTui({ coreUrl, viewModel = defaultViewModel, controller = no
           {evidence.slice(0, narrow ? 2 : 4).map((item, index) => (
             <text key={`${index}:${item}`}>• {item}</text>
           ))}
+          {viewModel.investigation && (
+            <>
+              <text>Investigation: {viewModel.investigation.id} · {viewModel.investigation.streamStatus}</text>
+              {viewModel.investigation.activity.slice(-(narrow ? 2 : 4)).map((event) => (
+                <text key={event.sequence}>#{event.sequence} {event.label}</text>
+              ))}
+            </>
+          )}
           {pendingApproval && (
             <box title="Human approval required" style={{ border: true, paddingX: 1, flexDirection: "column" }}>
               <text fg="#fbbf24">{pendingApproval.summary}</text>
