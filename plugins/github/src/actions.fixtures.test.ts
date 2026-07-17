@@ -14,6 +14,7 @@ import {
   GitHubActionsReadAdapter,
   GitHubActionsWebhookDecoder,
   type GitHubActionsFailureSnapshot,
+  type GitHubActionsRunSnapshot,
   type GitHubActionsWebhookSignal,
 } from "./index"
 
@@ -30,6 +31,8 @@ interface RepositoryPayload {
 const failureWebhookBody = await readFixtureText("failure-webhook.json")
 const failureRun = await readFixtureJson<{ repository: RepositoryPayload }>("failure-run.json")
 const failureJobs = await readFixtureJson<unknown>("failure-jobs.json")
+const retrySuccessRun = await readFixtureJson<unknown>("retry-success-run.json")
+const remediationSuccessRun = await readFixtureJson<unknown>("remediation-success-run.json")
 
 const repository = {
   owner: failureRun.repository.owner.login,
@@ -41,6 +44,8 @@ const token = "uc13-plugin-contract-github-token"
 const runId = 91377001
 const headSha = "c".repeat(40)
 const deliveryId = "uc13-plugin-contract-delivery"
+const remediationRunId = 91377002
+const remediationHeadSha = "d".repeat(40)
 
 const runsPath = `/repos/${repository.owner}/${repository.name}/actions/runs`
 
@@ -188,6 +193,94 @@ describe("GitHub Actions plugin over canonical UC-13 fixtures", () => {
     expect(JSON.stringify(capture)).not.toContain(token)
   })
 })
+
+describe("GitHub Actions plugin over canonical UC-13 success fixtures", () => {
+  test("normalizes the retry-success fixture as the same run with its successful second attempt", async () => {
+    const requests: Array<{ url: string; method: string; authorized: boolean }> = []
+    const adapter = new GitHubActionsReadAdapter({
+      token,
+      repository,
+      fetch: fixtureFetch(requests, `${runsPath}/${runId}`, retrySuccessRun),
+    })
+
+    const current = await adapter.getCurrentRun({ repository, runId, headSha })
+
+    expect(current).toEqual({
+      id: runId,
+      workflowId: 3001,
+      workflowName: "Workspace",
+      workflowPath: ".github/workflows/ci.yml",
+      runNumber: 77,
+      attempt: 2,
+      event: "push",
+      headBranch: "main",
+      headSha,
+      status: "completed",
+      conclusion: "success",
+      createdAt: "2026-07-16T08:00:00.000Z",
+      updatedAt: "2026-07-16T08:09:00.000Z",
+      url: `https://github.com/${repository.owner}/${repository.name}/actions/runs/${runId}`,
+    } satisfies GitHubActionsRunSnapshot)
+    expect(requests).toEqual([
+      { url: `https://api.github.com${runsPath}/${runId}`, method: "GET", authorized: true },
+    ])
+    expect(JSON.stringify(current)).not.toContain(token)
+  })
+
+  test("normalizes the remediation-success fixture as a completed run on its distinct remediation head", async () => {
+    const requests: Array<{ url: string; method: string; authorized: boolean }> = []
+    const adapter = new GitHubActionsReadAdapter({
+      token,
+      repository,
+      fetch: fixtureFetch(requests, `${runsPath}/${remediationRunId}`, remediationSuccessRun),
+    })
+
+    const current = await adapter.getCurrentRun({
+      repository,
+      runId: remediationRunId,
+      headSha: remediationHeadSha,
+    })
+
+    expect(current).toEqual({
+      id: remediationRunId,
+      workflowId: 3001,
+      workflowName: "Workspace",
+      workflowPath: ".github/workflows/ci.yml",
+      runNumber: 78,
+      attempt: 1,
+      event: "pull_request",
+      headBranch: "podo/remediation-0123456789abcdef",
+      headSha: remediationHeadSha,
+      status: "completed",
+      conclusion: "success",
+      createdAt: "2026-07-16T08:10:00.000Z",
+      updatedAt: "2026-07-16T08:14:00.000Z",
+      url: `https://github.com/${repository.owner}/${repository.name}/actions/runs/${remediationRunId}`,
+    } satisfies GitHubActionsRunSnapshot)
+    expect(current.headSha).not.toBe(headSha)
+    expect(requests).toEqual([
+      { url: `https://api.github.com${runsPath}/${remediationRunId}`, method: "GET", authorized: true },
+    ])
+    expect(JSON.stringify(current)).not.toContain(token)
+  })
+})
+
+function fixtureFetch(
+  requests: Array<{ url: string; method: string; authorized: boolean }>,
+  expectedPath: string,
+  payload: unknown,
+): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  return async (input, init) => {
+    const url = new URL(String(input))
+    requests.push({
+      url: url.toString(),
+      method: init?.method ?? "GET",
+      authorized: new Headers(init?.headers).get("authorization") === `Bearer ${token}`,
+    })
+    if ((init?.method ?? "GET") === "GET" && url.pathname === expectedPath) return Response.json(payload)
+    throw new Error(`unexpected fixture GitHub request: ${init?.method ?? "GET"} ${url.pathname}`)
+  }
+}
 
 function fixtureSignal(): GitHubActionsWebhookSignal {
   return {
