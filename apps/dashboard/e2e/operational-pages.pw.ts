@@ -1,12 +1,8 @@
 import { expect, test } from "@playwright/test"
 
-test("build incident requires approval for the exact failed run retry", async ({
+test("build incident stays read-only without an operator boundary", async ({
   page,
-}, testInfo) => {
-  test.skip(
-    testInfo.project.name === "mobile-chromium",
-    "The mutating contract flow runs once; mobile reflow is covered by UI quality checks",
-  )
+}) => {
   await page.goto("/build-incidents")
   await expect(
     page.getByRole("region", {
@@ -27,13 +23,18 @@ test("build incident requires approval for the exact failed run retry", async ({
     page.getByRole("region", { name: "Build incident summary" }),
   ).toBeVisible()
 
-  await page.getByRole("button", { name: "Request exact retry" }).click()
-  await expect(page.getByText("Retry approval required")).toBeVisible()
   await expect(
-    page.getByLabel("Next safe action").getByText("Run 1042 · attempt 1"),
+    page.getByLabel("Next safe action").getByText("Read-only workspace"),
   ).toBeVisible()
-  await page.getByRole("button", { name: "Approve exact retry" }).click()
-  await expect(page.getByText("Awaiting CI result")).toBeVisible()
+  await expect(
+    page.getByText("Demo actions are disabled and never call Core."),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Request exact retry" }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "Refresh Core state" }),
+  ).toBeVisible()
 })
 
 test("overview prioritizes actionable work and preserves source boundaries", async ({
