@@ -17,10 +17,18 @@ Keyboard escape paths, resize behavior, cleanup, and observable rendering are pa
 
 `PodoTui` consumes an injected `PodoTuiViewModel` and `PodoTuiController`.
 `ConnectedPodoTui` is the `@podo/client` adapter: it loads readiness,
-settings, and incidents, and persists complete settings drafts. The renderer
-does not call core, persistence, or Codex directly. Investigation selection and
-live approval synchronization are the next adapter increment; until then the
-connected adapter never presents an actionable approval.
+settings, and incidents, then follows only the newest incident that has a
+Core-owned investigation link. It retrieves the linked investigation by ID,
+reconciles its ordered SSE stream with a cursor (including reconnect and
+duplicate suppression), and persists complete settings drafts. The renderer
+does not call core, persistence, or Codex directly.
+
+The adapter never creates a generic investigation or accepts prompt, cwd, or
+sandbox input from the terminal. It exposes approve, deny, and cancel only for
+the selected Core-linked investigation, after Core has supplied a matching
+pending approval. Activity labels, failures, and approval summaries are
+sanitized: raw agent deltas, Core error text, commands, reasons, and answers
+are not rendered or retained in the TUI view model.
 
 - `Tab` moves focus between the run and settings panels.
 - `a`, `d`, and `c` explicitly approve, deny, or cancel while an approval is pending. Approval is

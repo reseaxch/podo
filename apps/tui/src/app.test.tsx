@@ -96,6 +96,7 @@ describe("PodoTui states", () => {
     waiting_for_approval: "WAITING FOR APPROVAL",
     failed: "FAILED",
     completed: "COMPLETED",
+    cancelled: "CANCELLED",
   }
 
   for (const [status, label] of Object.entries(expected) as [TuiRunStatus, string][]) {
