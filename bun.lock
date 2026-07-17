@@ -91,6 +91,12 @@
     "evals": {
       "name": "@podo/evals",
       "version": "0.0.0",
+      "devDependencies": {
+        "@podo/client": "workspace:*",
+        "@podo/contracts": "workspace:*",
+        "@podo/core": "workspace:*",
+        "@podo/plugin-github": "workspace:*",
+      },
     },
     "packages/client": {
       "name": "@podo/client",
