@@ -5,7 +5,14 @@
   "type": "module",
   "scripts": {
     "eval": "bun src/index.ts",
+    "eval:build-incident": "bun src/build-incident/index.ts",
     "typecheck": "tsc -p tsconfig.json",
     "build": "bun build src/index.ts --outdir dist --target bun"
+  },
+  "devDependencies": {
+    "@podo/client": "workspace:*",
+    "@podo/contracts": "workspace:*",
+    "@podo/core": "workspace:*",
+    "@podo/plugin-github": "workspace:*"
   }
 }
