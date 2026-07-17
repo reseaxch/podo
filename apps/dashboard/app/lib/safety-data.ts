@@ -1,6 +1,5 @@
 import type { IncidentDelivery, IncidentRemediation } from "@podo/contracts"
 
-import { safetyApprovalsMock } from "../mocks/safety"
 import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
 import type { ApprovalRequest, SafetyApprovalsViewModel } from "./safety-types"
 
@@ -87,7 +86,10 @@ function deliveryRequest(
 }
 
 export async function getSafetyApprovals(): Promise<SafetyApprovalsViewModel> {
-  if (isDemoDashboard()) return structuredClone(safetyApprovalsMock)
+  if (isDemoDashboard()) {
+    const { safetyApprovalsMock } = await import("../mocks/safety")
+    return structuredClone(safetyApprovalsMock)
+  }
   const client = createDashboardClient()
   const { incidents } = await client.listIncidents()
   const requests = (
@@ -123,23 +125,9 @@ export async function getSafetyApprovals(): Promise<SafetyApprovalsViewModel> {
     revision: requests.reduce((sum, request) => sum + request.id.length, 0),
     owner: { name: "Podo Core", avatar: "/icon.svg" },
     generatedAt: "Updated from Core",
-    currentActor: "Authenticated operator",
+    currentActor: "Not provided by Core",
     requests,
     history: [],
-    policies: [
-      {
-        id: "human-review-required",
-        name: "Human review required",
-        description:
-          "Remediation and delivery remain separate explicit approvals.",
-        mode: "enforced",
-        coverage: "All incident mutations",
-        rules: [
-          "No production mutation",
-          "No default approval",
-          "No automatic merge",
-        ],
-      },
-    ],
+    policies: [],
   }
 }

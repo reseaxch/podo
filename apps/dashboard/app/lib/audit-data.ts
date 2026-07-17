@@ -3,7 +3,6 @@ import type {
   IncidentRemediationAuditEvent,
 } from "@podo/contracts"
 
-import { auditLogMock } from "../mocks/audit"
 import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
 import type {
   AuditCategory,
@@ -77,12 +76,15 @@ function adapt(
       value: String(value),
     })),
     payload,
-    integrityHash: `${event.incidentId}:${event.sequence}`,
+    integrityHash: "Not provided by Core",
   }
 }
 
 export async function getAuditLog(): Promise<AuditLogViewModel> {
-  if (isDemoDashboard()) return structuredClone(auditLogMock)
+  if (isDemoDashboard()) {
+    const { auditLogMock } = await import("../mocks/audit")
+    return structuredClone(auditLogMock)
+  }
 
   const client = createDashboardClient()
   const { incidents } = await client.listIncidents()

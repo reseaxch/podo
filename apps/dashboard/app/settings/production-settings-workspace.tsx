@@ -57,6 +57,7 @@ export function ProductionSettingsWorkspace({
         searchLabel="Search settings"
         searchPlaceholder="Core settings"
         section="Settings"
+        source="core"
       />
       <section className="core-settings-page">
         <header>

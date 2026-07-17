@@ -1,4 +1,3 @@
-import { evidenceSourceRecordsMock } from "../mocks/evidence-sources"
 import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
 import type {
   EvidenceSource,
@@ -89,6 +88,8 @@ export async function getEvidenceSources(): Promise<EvidenceSourcesViewModel> {
       ],
     }
   }
+  const { evidenceSourceRecordsMock } =
+    await import("../mocks/evidence-sources")
   return {
     owner: { name: "Maya Chen", avatar: "/maya-chen.jpg" },
     sources: evidenceSourceRecordsMock.map(adaptEvidenceSource),

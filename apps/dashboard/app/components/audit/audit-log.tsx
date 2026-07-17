@@ -41,9 +41,11 @@ function escapeCsv(value: string | number | null) {
 export function AuditLog({
   audit,
   initialEventId,
+  source = "demo",
 }: {
   audit: AuditLogViewModel
   initialEventId?: string | undefined
+  source?: "demo" | "core"
 }) {
   const [query, setQuery] = useState("")
   const [view, setView] = useState<AuditView>("All activity")
@@ -192,6 +194,7 @@ export function AuditLog({
         searchLabel="Search audit log"
         searchPlaceholder="Search actor, action, incident..."
         section="Audit log"
+        source={source}
       />
 
       <section className={styles.page}>
@@ -233,10 +236,15 @@ export function AuditLog({
               <Icon name="shield-check" size={20} />
             </span>
             <span>
-              <strong>Audit chain verified</strong>
+              <strong>
+                {source === "core"
+                  ? "Integrity verification not provided"
+                  : "Audit chain verified"}
+              </strong>
               <small>
-                All event hashes are intact · retention {audit.retentionDays}{" "}
-                days
+                {source === "core"
+                  ? "Retention policy is not supplied by Core"
+                  : `All event hashes are intact · retention ${audit.retentionDays} days`}
               </small>
             </span>
           </div>
@@ -558,12 +566,23 @@ export function AuditLog({
                 </section>
 
                 <section className={styles.integrityCard}>
-                  <Icon name="shield-check" size={17} />
+                  <Icon
+                    name={source === "core" ? "warning-circle" : "shield-check"}
+                    size={17}
+                  />
                   <span>
-                    <small>Integrity hash</small>
-                    <code>{selectedEvent.integrityHash}</code>
+                    <small>
+                      {source === "core"
+                        ? "Core event identity"
+                        : "Integrity hash"}
+                    </small>
+                    <code>
+                      {source === "core"
+                        ? selectedEvent.id
+                        : selectedEvent.integrityHash}
+                    </code>
                   </span>
-                  <i>Verified</i>
+                  <i>{source === "core" ? "Not verified" : "Verified"}</i>
                 </section>
 
                 {selectedEvent.incidentId ? (

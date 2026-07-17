@@ -209,6 +209,7 @@ export function SafetyApprovals({
         query={query}
         searchLabel="Search safety and approvals"
         searchPlaceholder="Search approvals, decisions, policies..."
+        source={source}
       />
 
       <section className={styles.page}>
@@ -405,8 +406,9 @@ export function SafetyApprovals({
               <div>
                 <h2>Decision history</h2>
                 <p>
-                  Every resolved request includes the actor, reason, and final
-                  state.
+                  {source === "core"
+                    ? "Resolved decision metadata appears when Core exposes it."
+                    : "Every resolved request includes the actor, reason, and final state."}
                 </p>
               </div>
               <Link className={styles.auditLink} href="/audit">
@@ -443,12 +445,25 @@ export function SafetyApprovals({
               ))}
               {!filteredHistory.length ? (
                 <div className={styles.empty}>
-                  <Icon name="magnifying-glass" size={22} />
-                  <strong>No decisions match this search</strong>
-                  <p>Try a request ID, incident, reviewer, or decision.</p>
-                  <button onClick={() => setQuery("")} type="button">
-                    Clear search
-                  </button>
+                  <Icon
+                    name={source === "core" ? "file-text" : "magnifying-glass"}
+                    size={22}
+                  />
+                  <strong>
+                    {source === "core" && !query
+                      ? "Decision history is not provided by Core"
+                      : "No decisions match this search"}
+                  </strong>
+                  <p>
+                    {source === "core" && !query
+                      ? "Use the authoritative audit log for the events currently available."
+                      : "Try a request ID, incident, reviewer, or decision."}
+                  </p>
+                  {query ? (
+                    <button onClick={() => setQuery("")} type="button">
+                      Clear search
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -465,7 +480,11 @@ export function SafetyApprovals({
           >
             <header>
               <h2>Enforced safety policies</h2>
-              <p>Presentation cannot bypass these controller-owned checks.</p>
+              <p>
+                {source === "core"
+                  ? "Only policy metadata returned by Core is shown here."
+                  : "Presentation cannot bypass these controller-owned checks."}
+              </p>
             </header>
             <div>
               {filteredPolicies.map((policy) => (
@@ -493,12 +512,27 @@ export function SafetyApprovals({
               ))}
               {!filteredPolicies.length ? (
                 <div className={styles.empty}>
-                  <Icon name="magnifying-glass" size={22} />
-                  <strong>No policies match this search</strong>
-                  <p>Try a policy ID, environment, or enforced rule.</p>
-                  <button onClick={() => setQuery("")} type="button">
-                    Clear search
-                  </button>
+                  <Icon
+                    name={
+                      source === "core" ? "shield-check" : "magnifying-glass"
+                    }
+                    size={22}
+                  />
+                  <strong>
+                    {source === "core" && !query
+                      ? "Policy metadata is not provided by Core"
+                      : "No policies match this search"}
+                  </strong>
+                  <p>
+                    {source === "core" && !query
+                      ? "Approval enforcement remains Core-owned even when policy descriptions are unavailable."
+                      : "Try a policy ID, environment, or enforced rule."}
+                  </p>
+                  {query ? (
+                    <button onClick={() => setQuery("")} type="button">
+                      Clear search
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>

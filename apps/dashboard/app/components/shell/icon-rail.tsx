@@ -23,6 +23,7 @@ export function IconRail() {
     pathname === "/" ||
     pathname === "/demo" ||
     pathname.startsWith("/incidents")
+  const buildIncidentsActive = pathname.startsWith("/build-incidents")
   const auditActive = pathname.startsWith("/audit")
   const evidenceActive = pathname.startsWith("/evidence-sources")
   const graphActive = pathname.startsWith("/system-graph")
@@ -138,6 +139,17 @@ export function IconRail() {
                   <Icon name="trend-up" />
                 </span>
                 <span className="rail-label">Incidents</span>
+              </Link>
+              <Link
+                aria-current={buildIncidentsActive ? "page" : undefined}
+                aria-label="Build incidents"
+                className={buildIncidentsActive ? "active" : undefined}
+                href="/build-incidents"
+              >
+                <span className="rail-icon">
+                  <Icon name="wrench" />
+                </span>
+                <span className="rail-label">Build incidents</span>
               </Link>
               <Link
                 aria-current={evidenceActive ? "page" : undefined}
@@ -306,6 +318,14 @@ export function IconRail() {
                 onClick={() => closeMobileNavigation(false)}
               >
                 <Icon name="trend-up" /> Incidents
+              </Link>
+              <Link
+                aria-current={buildIncidentsActive ? "page" : undefined}
+                className={buildIncidentsActive ? "active" : undefined}
+                href="/build-incidents"
+                onClick={() => closeMobileNavigation(false)}
+              >
+                <Icon name="wrench" /> Build incidents
               </Link>
               <Link
                 aria-current={evidenceActive ? "page" : undefined}

@@ -17,6 +17,7 @@ type TopbarProps = {
   onQueryChange: (query: string) => void
   onNotificationOpen?: (id: string, message: string) => void
   onNotify: (message: string) => void
+  source?: "demo" | "core"
 }
 
 export function Topbar({
@@ -29,6 +30,7 @@ export function Topbar({
   onQueryChange,
   onNotificationOpen,
   onNotify,
+  source = "demo",
 }: TopbarProps) {
   const [project, setProject] = useState("podo-cloud")
   const [notificationsRead, setNotificationsRead] = useState(false)
@@ -58,53 +60,62 @@ export function Topbar({
 
   return (
     <header className="topbar">
-      <div
-        className="menu-anchor"
-        ref={openMenu === "project" ? menuRef : undefined}
-      >
-        <button
-          aria-expanded={openMenu === "project"}
-          aria-haspopup="menu"
-          className="project-switcher"
-          onClick={(event) => toggleMenu("project", event.currentTarget)}
-          type="button"
+      {source === "core" ? (
+        <div
+          aria-label="Live Core workspace"
+          className="project-switcher live-core-context"
         >
-          <Icon name="cube" size={17} /> {project}{" "}
-          <Icon name="caret-down" size={14} />
-        </button>
-        {openMenu === "project" ? (
-          <div className="shell-menu project-menu" role="menu">
-            <span className="menu-label">Projects</span>
-            {["podo-cloud", "payments-prod", "identity-edge"].map((name) => (
-              <button
-                aria-current={project === name ? "true" : undefined}
-                key={name}
-                onClick={() => {
-                  setProject(name)
-                  closeMenu()
-                  onNotify(`Switched to ${name}`)
-                }}
-                role="menuitem"
-                type="button"
-              >
-                <Icon
-                  name={name === "podo-cloud" ? "cube" : "stack"}
-                  size={16}
-                />
-                <span>
-                  <strong>{name}</strong>
-                  <small>
-                    {name === "podo-cloud" ? "Current incident" : "Healthy"}
-                  </small>
-                </span>
-                {project === name ? (
-                  <Icon name="check-circle" size={15} />
-                ) : null}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
+          <Icon name="cube" size={17} /> Podo Core
+        </div>
+      ) : (
+        <div
+          className="menu-anchor"
+          ref={openMenu === "project" ? menuRef : undefined}
+        >
+          <button
+            aria-expanded={openMenu === "project"}
+            aria-haspopup="menu"
+            className="project-switcher"
+            onClick={(event) => toggleMenu("project", event.currentTarget)}
+            type="button"
+          >
+            <Icon name="cube" size={17} /> {project}{" "}
+            <Icon name="caret-down" size={14} />
+          </button>
+          {openMenu === "project" ? (
+            <div className="shell-menu project-menu" role="menu">
+              <span className="menu-label">Projects</span>
+              {["podo-cloud", "payments-prod", "identity-edge"].map((name) => (
+                <button
+                  aria-current={project === name ? "true" : undefined}
+                  key={name}
+                  onClick={() => {
+                    setProject(name)
+                    closeMenu()
+                    onNotify(`Switched to ${name}`)
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  <Icon
+                    name={name === "podo-cloud" ? "cube" : "stack"}
+                    size={16}
+                  />
+                  <span>
+                    <strong>{name}</strong>
+                    <small>
+                      {name === "podo-cloud" ? "Current incident" : "Healthy"}
+                    </small>
+                  </span>
+                  {project === name ? (
+                    <Icon name="check-circle" size={15} />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="breadcrumbs">
         <span>{section}</span>
         {current ? (
@@ -136,64 +147,68 @@ export function Topbar({
       >
         <Icon name={theme === "dark" ? "sun" : "moon"} />
       </button>
-      <div
-        className="menu-anchor notification-anchor"
-        ref={openMenu === "notifications" ? menuRef : undefined}
-      >
-        <button
-          aria-expanded={openMenu === "notifications"}
-          aria-haspopup="menu"
-          aria-label="Notifications"
-          className="notification-button"
-          onClick={(event) => toggleMenu("notifications", event.currentTarget)}
-          type="button"
+      {source === "demo" ? (
+        <div
+          className="menu-anchor notification-anchor"
+          ref={openMenu === "notifications" ? menuRef : undefined}
         >
-          <Icon name="bell" />
-          {!notificationsRead ? <span /> : null}
-        </button>
-        {openMenu === "notifications" ? (
-          <div className="shell-menu notification-menu" role="menu">
-            <div className="menu-heading">
-              <strong>Notifications</strong>
+          <button
+            aria-expanded={openMenu === "notifications"}
+            aria-haspopup="menu"
+            aria-label="Notifications"
+            className="notification-button"
+            onClick={(event) =>
+              toggleMenu("notifications", event.currentTarget)
+            }
+            type="button"
+          >
+            <Icon name="bell" />
+            {!notificationsRead ? <span /> : null}
+          </button>
+          {openMenu === "notifications" ? (
+            <div className="shell-menu notification-menu" role="menu">
+              <div className="menu-heading">
+                <strong>Notifications</strong>
+                <button
+                  onClick={() => {
+                    setNotificationsRead(true)
+                    onNotify("Notifications marked as read")
+                  }}
+                  type="button"
+                >
+                  Mark read
+                </button>
+              </div>
               <button
-                onClick={() => {
-                  setNotificationsRead(true)
-                  onNotify("Notifications marked as read")
-                }}
+                onClick={() =>
+                  openNotification("metrics", "Heap evidence opened")
+                }
+                role="menuitem"
                 type="button"
               >
-                Mark read
+                <i className="notification-dot" />
+                <span>
+                  <strong>Heap crossed 90%</strong>
+                  <small>2 min ago · Datadog</small>
+                </span>
+              </button>
+              <button
+                onClick={() =>
+                  openNotification("runtime", "Runtime evidence opened")
+                }
+                role="menuitem"
+                type="button"
+              >
+                <i className="notification-dot warning" />
+                <span>
+                  <strong>GC pressure remains high</strong>
+                  <small>5 min ago · GCP</small>
+                </span>
               </button>
             </div>
-            <button
-              onClick={() =>
-                openNotification("metrics", "Heap evidence opened")
-              }
-              role="menuitem"
-              type="button"
-            >
-              <i className="notification-dot" />
-              <span>
-                <strong>Heap crossed 90%</strong>
-                <small>2 min ago · Datadog</small>
-              </span>
-            </button>
-            <button
-              onClick={() =>
-                openNotification("runtime", "Runtime evidence opened")
-              }
-              role="menuitem"
-              type="button"
-            >
-              <i className="notification-dot warning" />
-              <span>
-                <strong>GC pressure remains high</strong>
-                <small>5 min ago · GCP</small>
-              </span>
-            </button>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      ) : null}
       <Image
         alt={owner.name}
         className="avatar"
