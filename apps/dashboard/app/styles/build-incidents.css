@@ -835,6 +835,30 @@
   color: var(--text);
   font-size: 10px;
 }
+.build-read-only-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 10px;
+  border-left: 2px solid var(--primary);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+.build-read-only-notice .icon {
+  margin-top: 1px;
+  color: var(--primary);
+}
+.build-read-only-notice span {
+  display: grid;
+  gap: 2px;
+}
+.build-read-only-notice strong {
+  color: var(--text);
+  font-size: 10px;
+}
 .build-failed-copy {
   padding: 10px;
   border-left: 2px solid var(--danger);

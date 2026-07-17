@@ -148,10 +148,12 @@ export function BuildIncidentWorkspace({
   initial,
   controller = defaultController,
   shell = coreShell,
+  mutationsEnabled = false,
 }: {
   initial: BuildIncidentWorkspaceState
   controller?: BuildIncidentWorkspaceController
   shell?: DashboardShellContext
+  mutationsEnabled?: boolean
 }) {
   const [state, setState] = useState(initial)
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -466,7 +468,28 @@ export function BuildIncidentWorkspace({
             )}
 
             <div className="build-decision-actions">
-              {incident.status === "awaiting_action" ? (
+              {!mutationsEnabled ? (
+                incident.status === "verified" && incident.ciResult ? (
+                  <a
+                    className="primary-button"
+                    href={incident.ciResult.url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Open verified CI run
+                  </a>
+                ) : (
+                  <div className="build-read-only-notice" role="status">
+                    <Icon name="shield-check" size={16} />
+                    <span>
+                      <strong>Read-only workspace</strong>
+                      {shell.source === "demo"
+                        ? "Demo actions are disabled and never call Core."
+                        : "Live actions stay unavailable until authenticated operator access is implemented."}
+                    </span>
+                  </div>
+                )
+              ) : incident.status === "awaiting_action" ? (
                 <>
                   <button
                     className="primary-button"

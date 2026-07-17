@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { createDashboardClient } from "../../../../lib/dashboard-client"
+import {
+  createDashboardClient,
+  isDemoDashboard,
+} from "../../../../lib/dashboard-client"
 
 type Context = { params: Promise<{ id: string }> }
 
@@ -35,63 +38,21 @@ export async function GET(_request: Request, context: Context) {
   return NextResponse.json(await state(id))
 }
 
-type Command =
-  | { action: "start-retry" }
-  | { action: "decide-retry"; approvalId: string; decision: "approve" | "deny" }
-  | { action: "start-remediation" }
-  | {
-      action: "decide-remediation"
-      approvalId: string
-      decision: "approve" | "deny"
-    }
-  | { action: "start-delivery" }
-  | {
-      action: "decide-delivery"
-      approvalId: string
-      decision: "approve" | "deny"
-    }
-  | { action: "start-verification" }
-
-export async function POST(request: Request, context: Context) {
-  const { id } = await context.params
-  const command = (await request.json()) as Command
-  const client = createDashboardClient()
-  switch (command.action) {
-    case "start-retry":
-      await client.startBuildIncidentRetry(id)
-      break
-    case "decide-retry":
-      await client.decideBuildIncidentRetry(id, command.approvalId, {
-        decision: command.decision,
-      })
-      break
-    case "start-remediation":
-      await client.startIncidentRemediation(id)
-      break
-    case "decide-remediation":
-      if (command.decision === "approve")
-        await client.approveIncidentRemediation(id, command.approvalId)
-      else await client.denyIncidentRemediation(id, command.approvalId)
-      break
-    case "start-delivery":
-      await client.startIncidentDelivery(id)
-      break
-    case "decide-delivery":
-      if (command.decision === "approve")
-        await client.approveIncidentDelivery(id, command.approvalId)
-      else await client.denyIncidentDelivery(id, command.approvalId)
-      break
-    case "start-verification":
-      await client.startBuildRemediationVerification(id)
-      break
-    default:
-      return NextResponse.json(
-        {
-          error: "invalid_action",
-          message: "Unsupported build incident action",
-        },
-        { status: 400 },
-      )
+export async function POST(request: Request) {
+  try {
+    await request.body?.cancel("build_incidents_read_only")
+  } catch {
+    // The request is rejected before parsing; cancellation is best-effort.
   }
-  return NextResponse.json(await state(id))
+
+  const demo = isDemoDashboard()
+  return NextResponse.json(
+    {
+      error: demo ? "demo_read_only" : "operator_identity_required",
+      message: demo
+        ? "Build incident actions are disabled in the demo workspace."
+        : "Build incident actions require an authenticated operator boundary.",
+    },
+    { status: 405, headers: { allow: "GET" } },
+  )
 }

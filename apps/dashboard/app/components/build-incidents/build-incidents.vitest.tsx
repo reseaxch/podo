@@ -182,6 +182,7 @@ describe("BuildIncidentWorkspace", () => {
       <BuildIncidentWorkspace
         controller={controller}
         initial={{ incident: readyIncident, events: [] }}
+        mutationsEnabled
       />,
     )
     expect(screen.getByLabelText("Live Core workspace")).toBeVisible()
@@ -231,6 +232,7 @@ describe("BuildIncidentWorkspace", () => {
       <BuildIncidentWorkspace
         controller={controller}
         initial={{ incident: pendingIncident, events: [] }}
+        mutationsEnabled
       />,
     )
     expect(controller.decideRetry).not.toHaveBeenCalled()
@@ -284,6 +286,7 @@ describe("BuildIncidentWorkspace", () => {
           delivery: null,
           events: [],
         }}
+        mutationsEnabled
       />,
     )
     expect(
@@ -297,5 +300,28 @@ describe("BuildIncidentWorkspace", () => {
       "remediation-approval-1",
       "approve",
     )
+  })
+
+  it("keeps the runtime workspace read-only without an operator boundary", () => {
+    render(
+      <BuildIncidentWorkspace
+        initial={{ incident, events: [] }}
+        shell={{
+          owner: { name: "Podo Core", avatar: "/icon.svg" },
+          source: "core",
+        }}
+      />,
+    )
+
+    expect(screen.getByText("Read-only workspace")).toBeVisible()
+    expect(
+      screen.getByText(/authenticated operator access is implemented/),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole("button", { name: "Request exact retry" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Refresh Core state" }),
+    ).toBeVisible()
   })
 })
