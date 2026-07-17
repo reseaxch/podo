@@ -83,7 +83,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
       fixture.parent,
     ))
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
     expect(await Bun.file(join(fixture.repositoryRoot, "src/cache.ts")).text()).toBe("export const cacheLimit = 0\n")
     expect(await Bun.file(join(fixture.repositoryRoot, "local-uncommitted.txt")).text()).toBe("must remain untouched\n")
     expect(new Uint8Array(await Bun.file(join(fixture.repositoryRoot, ".git/index")).arrayBuffer())).toEqual(sourceIndexBefore)
@@ -108,7 +108,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
     await expect(executor.execute(input())).rejects.toThrow("remediation_validation_failed")
     await expect(executor.execute(input())).rejects.not.toThrow("process.exit")
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
   })
 
   test("rejects a passing post-patch regression command that mutates the candidate patch", async () => {
@@ -127,7 +127,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
     await expect(execution).rejects.toThrow("verification_command_mutated_worktree")
     await expect(execution).rejects.not.toThrow("cacheLimit = 11")
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
     expect(await Bun.file(join(fixture.repositoryRoot, "src/cache.ts")).text()).toBe("export const cacheLimit = 0\n")
   })
 
@@ -146,7 +146,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
     await expect(execution).rejects.toThrow("verification_command_mutated_worktree")
     await expect(execution).rejects.not.toThrow("validation-output.txt")
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
     expect(await Bun.file(join(fixture.repositoryRoot, "validation-output.txt")).exists()).toBe(false)
   })
 
@@ -249,7 +249,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
     expect(disposeCalls).toBe(1)
     expect(worktreeExistedDuringDispose).toBe(true)
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
   })
 
   test("still cleans the owned worktree when producer disposal throws", async () => {
@@ -264,7 +264,7 @@ describe("LocalWorktreeRemediationExecutor", () => {
     await expect(result).rejects.toThrow("producer_dispose_failed")
     await expect(result).rejects.not.toThrow("private dispose detail")
     expect(await readdir(fixture.scratchParent)).toEqual([])
-    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([await realpath(fixture.repositoryRoot)])
+    expect(await worktreePaths(fixture.repositoryRoot)).toEqual([toGitPath(await realpath(fixture.repositoryRoot))])
   })
 })
 
@@ -364,6 +364,14 @@ async function git(cwd: string, args: string[]): Promise<string> {
 async function worktreePaths(repositoryRoot: string): Promise<string[]> {
   const output = await git(repositoryRoot, ["worktree", "list", "--porcelain"])
   return output.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => line.slice("worktree ".length))
+}
+
+// `git worktree list --porcelain` always emits forward-slash paths, while
+// realpath() returns native separators (backslashes on Windows). Normalize the
+// realpath side to Git's canonical forward-slash form so the comparison holds on
+// both Windows and Unix.
+function toGitPath(path: string): string {
+  return path.replaceAll("\\", "/")
 }
 
 async function treeAfterApplying(

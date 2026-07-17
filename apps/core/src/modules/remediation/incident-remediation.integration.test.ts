@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resolve } from "node:path"
 import type { CodexRuntime, CodexRuntimeEvent } from "@podo/codex-app-server-client"
 
 import { createPodoClient } from "../../../../../packages/client/src/index"
@@ -8,10 +9,10 @@ import type { IssueDeliveryInput } from "./incident-issue"
 
 const productionRemediationEnvironment = {
   PODO_REMEDIATION_ENABLED: "true",
-  PODO_REMEDIATION_REPOSITORY_ROOT: "/repo",
+  PODO_REMEDIATION_REPOSITORY_ROOT: resolve("/repo"),
   PODO_REMEDIATION_BASE_REF: "refs/heads/main",
   PODO_REMEDIATION_PULL_REQUEST_BASE_BRANCH: "main",
-  PODO_REMEDIATION_SCRATCH_PARENT: "/scratch",
+  PODO_REMEDIATION_SCRATCH_PARENT: resolve("/scratch"),
   PODO_REMEDIATION_REGRESSION_COMMAND: '["bun","test","demo/services/checkout-service"]',
   PODO_REMEDIATION_VALIDATION_COMMANDS: '[["bun","run","typecheck"],["bun","test"]]',
   PODO_REMEDIATION_COMMAND_TIMEOUT_MS: "120000",

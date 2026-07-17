@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resolve } from "node:path"
 import type { CodexRuntime } from "@podo/codex-app-server-client"
 import { buildRemediatorPrompt } from "@podo/domain"
 import type {
@@ -15,12 +16,14 @@ import {
   createProductionRemediationExecutorFactory,
 } from "./production-remediation"
 
+const repositoryRoot = resolve("/repo")
+const scratchParent = resolve("/scratch")
 const enabledEnvironment = {
   PODO_REMEDIATION_ENABLED: "true",
-  PODO_REMEDIATION_REPOSITORY_ROOT: "/repo",
+  PODO_REMEDIATION_REPOSITORY_ROOT: repositoryRoot,
   PODO_REMEDIATION_BASE_REF: "refs/heads/main",
   PODO_REMEDIATION_PULL_REQUEST_BASE_BRANCH: "main",
-  PODO_REMEDIATION_SCRATCH_PARENT: "/scratch",
+  PODO_REMEDIATION_SCRATCH_PARENT: scratchParent,
   PODO_REMEDIATION_REGRESSION_COMMAND: '["bun","test","demo/services/checkout-service"]',
   PODO_REMEDIATION_VALIDATION_COMMANDS: '[["bun","run","typecheck"],["bun","test"]]',
   PODO_REMEDIATION_COMMAND_TIMEOUT_MS: "120000",
@@ -90,10 +93,10 @@ describe("production remediation composition", () => {
     expect(runtimeRequests).toBe(1)
     expect(producerConfig).toEqual({ runtime, turnTimeoutMs: 90_000 })
     expect(executorConfig).toEqual({
-      repositoryRoot: "/repo",
+      repositoryRoot,
       trustedBaseRef: "refs/heads/main",
       pullRequestBaseBranch: "main",
-      scratchParent: "/scratch",
+      scratchParent,
       regressionCommand: ["bun", "test", "demo/services/checkout-service"],
       validationCommands: [["bun", "run", "typecheck"], ["bun", "test"]],
       commandTimeoutMs: 120_000,

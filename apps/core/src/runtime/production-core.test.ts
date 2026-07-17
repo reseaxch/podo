@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test"
+import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { createProductionCoreHandler } from "./production-core"
 
+const configuredRepository = resolve("/configured/repository")
+const canonicalRepository = resolve("/canonical/repository")
 const enabledEnvironment = {
   PODO_INCIDENT_GRAPH_ENABLED: "true",
   PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH: fileURLToPath(new URL(
@@ -66,14 +69,14 @@ test("production composition keeps the incident graph disabled by default", asyn
 
 test("production composition injects the opt-in read-only agent chat", async () => {
   let receivedAgentChat: unknown
-  await createProductionCoreHandler({ PODO_AGENT_CHAT_ENABLED: "true", PODO_AGENT_CHAT_CWD: "/configured/repository" }, {
-    agentChat: { async resolveDirectory() { return "/canonical/repository" } },
+  await createProductionCoreHandler({ PODO_AGENT_CHAT_ENABLED: "true", PODO_AGENT_CHAT_CWD: configuredRepository }, {
+    agentChat: { async resolveDirectory() { return canonicalRepository } },
     createHandler(options) {
       receivedAgentChat = options.agentChat
       return async () => new Response()
     },
   })
-  expect(receivedAgentChat).toEqual({ cwd: "/canonical/repository" })
+  expect(receivedAgentChat).toEqual({ cwd: canonicalRepository })
 })
 
 test("production composition injects the opt-in GitHub issue fallback", async () => {
@@ -111,7 +114,7 @@ test("production composition injects the opt-in GitHub Actions boundary", async 
     PODO_GITHUB_TOKEN: "github-actions-token",
     PODO_GITHUB_REPOSITORY: "owner/repository",
     PODO_GITHUB_ACTIONS_WEBHOOK_SECRET: "github-actions-webhook-secret",
-    PODO_GITHUB_ACTIONS_REPOSITORY_CWD: "/configured/repository",
+    PODO_GITHUB_ACTIONS_REPOSITORY_CWD: configuredRepository,
     PODO_GITHUB_OPERATOR_IDENTITY: "local-operator",
   }, {
     createHandler(options) {
@@ -122,7 +125,7 @@ test("production composition injects the opt-in GitHub Actions boundary", async 
 
   expect(receivedGitHubActions).toMatchObject({
     repository: { owner: "owner", name: "repository" },
-    repositoryCwd: "/configured/repository",
+    repositoryCwd: configuredRepository,
     operatorIdentity: "local-operator",
     decodeWebhook: expect.any(Function),
     captureFailedRun: expect.any(Function),

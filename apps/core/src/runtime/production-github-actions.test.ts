@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resolve } from "node:path"
 import {
   GitHubActionsError,
   type GitHubActionsFailureSnapshot,
@@ -24,12 +25,13 @@ import {
 const token = "github-actions-token-never-expose"
 const webhookSecret = "github-actions-webhook-secret-never-expose"
 const repository = { owner: "reseaxch", name: "podo" } as const
+const repositoryCwd = resolve("/srv/podo")
 const environment = {
   PODO_GITHUB_ACTIONS_ENABLED: "true",
   PODO_GITHUB_TOKEN: token,
   PODO_GITHUB_REPOSITORY: "reseaxch/podo",
   PODO_GITHUB_ACTIONS_WEBHOOK_SECRET: webhookSecret,
-  PODO_GITHUB_ACTIONS_REPOSITORY_CWD: "/srv/podo",
+  PODO_GITHUB_ACTIONS_REPOSITORY_CWD: repositoryCwd,
   PODO_GITHUB_OPERATOR_IDENTITY: "local-lead",
 } as const
 
@@ -128,7 +130,7 @@ describe("production GitHub Actions composition", () => {
     if (!boundary) throw new Error("expected enabled GitHub Actions boundary")
 
     expect(boundary.repository).toEqual(repository)
-    expect(boundary.repositoryCwd).toBe("/srv/podo")
+    expect(boundary.repositoryCwd).toBe(repositoryCwd)
     expect(boundary.operatorIdentity).toBe("local-lead")
     expect(decoderConfigs).toEqual([{ secret: webhookSecret, repository }])
     expect(readerConfigs).toEqual([{ token, repository }])

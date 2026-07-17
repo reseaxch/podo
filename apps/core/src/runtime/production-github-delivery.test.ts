@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resolve } from "node:path"
 import type {
   GitCliBranchPublisherConfig,
   GitHubDeliveryAdapterConfig,
@@ -13,6 +14,8 @@ import {
 } from "./production-github-delivery"
 
 const token = "github-secret-token-never-expose"
+const repositoryRoot = resolve("/repo")
+const scratchParent = resolve("/scratch")
 const enabledEnvironment = {
   PODO_REMEDIATION_ENABLED: "true",
   PODO_GITHUB_DELIVERY_ENABLED: "true",
@@ -23,8 +26,8 @@ const enabledEnvironment = {
   PODO_GITHUB_REMOTE_NAME: "origin",
   PODO_GITHUB_COMMAND_TIMEOUT_MS: "120000",
   PODO_GITHUB_MAX_OUTPUT_BYTES: "524288",
-  PODO_REMEDIATION_REPOSITORY_ROOT: "/repo",
-  PODO_REMEDIATION_SCRATCH_PARENT: "/scratch",
+  PODO_REMEDIATION_REPOSITORY_ROOT: repositoryRoot,
+  PODO_REMEDIATION_SCRATCH_PARENT: scratchParent,
   PODO_REMEDIATION_PULL_REQUEST_BASE_BRANCH: "main",
 } as const
 
@@ -106,8 +109,8 @@ describe("production GitHub delivery composition", () => {
     expect(config?.expectedRepository).toBe("reseaxch/podo")
     expect(config?.operatorIdentity).toBe("local-lead")
     expect(publisherConfig).toMatchObject({
-      repositoryRoot: "/repo",
-      scratchParent: "/scratch",
+      repositoryRoot,
+      scratchParent,
       remoteName: "origin",
       owner: "reseaxch",
       repository: "podo",
