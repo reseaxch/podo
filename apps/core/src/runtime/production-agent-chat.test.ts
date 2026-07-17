@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test"
+import { resolve } from "node:path"
 import { loadProductionAgentChat } from "./production-agent-chat"
+
+const configuredRepository = resolve("/configured/repository")
+const canonicalRepository = resolve("/canonical/repository")
 
 test("production agent chat is disabled by default", async () => {
   await expect(loadProductionAgentChat({})).resolves.toBeUndefined()
@@ -7,10 +11,10 @@ test("production agent chat is disabled by default", async () => {
 
 test("production agent chat resolves one operator-configured directory", async () => {
   const resolved: string[] = []
-  await expect(loadProductionAgentChat({ PODO_AGENT_CHAT_ENABLED: "true", PODO_AGENT_CHAT_CWD: "/configured/repository" }, {
-    async resolveDirectory(path) { resolved.push(path); return "/canonical/repository" },
-  })).resolves.toEqual({ cwd: "/canonical/repository" })
-  expect(resolved).toEqual(["/configured/repository"])
+  await expect(loadProductionAgentChat({ PODO_AGENT_CHAT_ENABLED: "true", PODO_AGENT_CHAT_CWD: configuredRepository }, {
+    async resolveDirectory(path) { resolved.push(path); return canonicalRepository },
+  })).resolves.toEqual({ cwd: canonicalRepository })
+  expect(resolved).toEqual([configuredRepository])
 })
 
 test("production agent chat rejects ambiguous or unsafe configuration before startup", async () => {

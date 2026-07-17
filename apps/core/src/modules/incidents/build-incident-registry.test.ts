@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
+import { resolve } from "node:path"
 import type {
   CodexRuntime,
   CodexRuntimeEvent,
   StartCodexThreadInput,
 } from "@podo/codex-app-server-client"
+
+const repositoryCwd = resolve("/trusted/repository")
 
 import { InvestigationService, type InvestigationTimer } from "../../investigations"
 import { SettingsStore } from "../../settings"
@@ -173,7 +176,7 @@ function createFixture(
   settings.update({ autonomyMode: "recommend" })
   const audit = new IncidentAuditStore()
   const registry = new BuildIncidentRegistry({
-    repositoryCwd: "/trusted/repository",
+    repositoryCwd,
     capturePort: { captureFailedRun: capture },
   }, investigations, settings, audit)
   return { runtime, investigations, settings, audit, registry }
@@ -256,7 +259,7 @@ describe("BuildIncidentRegistry", () => {
     expect(new Set(captured.incident.evidence.map(({ id }) => id)).size).toBe(3)
 
     expect(fixture.runtime.threads).toEqual([expect.objectContaining({
-      cwd: "/trusted/repository",
+      cwd: repositoryCwd,
       sandbox: "read-only",
       developerInstructions: expect.stringContaining("Required schema"),
     })])
