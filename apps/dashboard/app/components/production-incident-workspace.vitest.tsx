@@ -169,15 +169,18 @@ describe("ProductionIncidentWorkspace", () => {
     expect(
       screen.getByText("The deployed cache retains entries without a bound"),
     ).toBeInTheDocument()
-    expect(screen.getAllByText("88%").length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole("progressbar", { name: "Diagnosis confidence" }),
+    ).toHaveAttribute("value", "88")
     await user.click(screen.getByRole("tab", { name: "Graph" }))
     expect(
       screen.getByRole("heading", { name: "Evidence to affected code" }),
     ).toBeInTheDocument()
-    expect(screen.getAllByText("CheckoutCache.set").length).toBeGreaterThan(0)
     expect(
-      screen.getAllByText("services/checkout/cache.ts").length,
-    ).toBeGreaterThan(0)
+      screen.getByRole("button", {
+        name: /Affected code CheckoutCache\.set cache\.ts/i,
+      }),
+    ).toBeInTheDocument()
   })
 
   it("routes workflow actions through Core and refreshes the workspace", async () => {
