@@ -26,12 +26,18 @@ test.describe.serial("real Core incident workflow", () => {
     const status = await reset(request, "success")
     await page.goto(`/?incident=${encodeURIComponent(status.incidentId)}`)
 
+    await page.getByRole("tab", { name: "Graph" }).click()
     await expect(
-      page.getByRole("heading", { name: "Evidence to code" }),
+      page.getByRole("heading", { name: "Evidence to affected code" }),
     ).toBeVisible()
-    await expect(page.getByText("CheckoutCache", { exact: true })).toBeVisible()
-    await expect(page.getByText(/cache\.ts$/)).toBeVisible()
+    const graph = page.getByLabel(
+      "Core causal graph from telemetry to affected code",
+    )
+    await expect(
+      graph.getByRole("button", { name: /CheckoutCache/i }),
+    ).toBeVisible()
 
+    await page.getByRole("tab", { name: "Changes" }).click()
     await page.getByRole("button", { name: "Investigate incident" }).click()
     await expect(
       page.getByRole("button", { name: "Prepare tested remediation" }),
@@ -39,17 +45,19 @@ test.describe.serial("real Core incident workflow", () => {
     await page
       .getByRole("button", { name: "Prepare tested remediation" })
       .click()
-    await page.getByRole("button", { name: "Approve tested fix" }).click()
+    await page
+      .getByRole("button", { name: "Approve tested remediation" })
+      .click()
 
     await expect(
-      page.getByRole("region", { name: "Verified remediation artifact" }),
-    ).toContainText("failed", { timeout: 30_000 })
+      page.getByText("failed → passed", { exact: true }),
+    ).toBeVisible({
+      timeout: 30_000,
+    })
     await expect(
-      page.getByRole("region", { name: "Verified remediation artifact" }),
-    ).toContainText("passed")
-    await page
-      .getByRole("button", { name: "Prepare pull request delivery" })
-      .click()
+      page.getByRole("region", { name: "Verified patch" }),
+    ).toBeVisible()
+    await page.getByRole("button", { name: "Prepare pull request" }).click()
     await page.getByRole("button", { name: "Approve & create PR" }).click()
 
     await expect(
@@ -70,6 +78,7 @@ test.describe.serial("real Core incident workflow", () => {
     const status = await reset(request, "validation_failure")
     await page.goto(`/?incident=${encodeURIComponent(status.incidentId)}`)
 
+    await page.getByRole("tab", { name: "Changes" }).click()
     await page.getByRole("button", { name: "Investigate incident" }).click()
     await expect(
       page.getByRole("button", { name: "Prepare tested remediation" }),
@@ -77,7 +86,9 @@ test.describe.serial("real Core incident workflow", () => {
     await page
       .getByRole("button", { name: "Prepare tested remediation" })
       .click()
-    await page.getByRole("button", { name: "Approve tested fix" }).click()
+    await page
+      .getByRole("button", { name: "Approve tested remediation" })
+      .click()
     await expect(page.getByRole("alert")).toBeVisible({ timeout: 30_000 })
     await page.getByRole("button", { name: "Create GitHub issue" }).click()
 
