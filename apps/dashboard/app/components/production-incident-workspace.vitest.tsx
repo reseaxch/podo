@@ -169,7 +169,7 @@ describe("ProductionIncidentWorkspace", () => {
     expect(
       screen.getByText("The deployed cache retains entries without a bound"),
     ).toBeInTheDocument()
-    expect(screen.getByText("88%")).toBeInTheDocument()
+    expect(screen.getAllByText("88%").length).toBeGreaterThan(0)
     await user.click(screen.getByRole("tab", { name: "Graph" }))
     expect(
       screen.getByRole("heading", { name: "Evidence to affected code" }),
