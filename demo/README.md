@@ -81,3 +81,58 @@ is a diagnostic mode, not the deterministic judge presentation. GitHub writes
 remain disabled. `PODO_DEMO_CORE_PORT`, `PODO_DEMO_SCRATCH_PARENT`, and
 `PODO_DEMO_BASE_REF` configure this mode; judge runs should keep the default
 deterministic mode.
+
+## Live service lab
+
+Use the live lab when the presentation should begin with real application
+traffic instead of a preloaded telemetry fixture:
+
+```sh
+# terminal 1: Podo Core + Dashboard + checkout + inventory + worker
+bun run lab
+
+# terminal 2: sustained checkout traffic that triggers the defect
+bun run lab:load
+```
+
+`bun run lab` starts the actual demo TypeScript services. Every successful
+checkout reserves stock through `inventory-service`, retains a unique session
+in the defective in-memory cache, enqueues an HTTP notification job, and
+exports normalized metric, trace, and log events to the real Core ingestion
+endpoint. `notification-worker` drains those jobs asynchronously.
+`bun run lab:load` sends 14 real HTTP requests: 11 grow the cache and 3 reach
+the controlled pressure boundary and return HTTP 500. The command verifies all
+11 notifications were delivered, Core detects the resulting evidence, and the
+exact incident URL is printed for the Dashboard.
+
+The lab retains 2 MiB per checkout locally, but reports a
+production-equivalent 42 MiB heap contribution per retained session. This keeps
+the laptop-safe process under roughly 25 MiB of intentional retained payload
+while preserving the canonical detector thresholds and the same 17-evidence
+incident used by the recorded scenario. The traffic, inventory calls, cache
+retention, HTTP failures, telemetry ingestion, detection, investigation,
+approval gates, regression, and delivery flow all execute; only the heap scale
+and external GitHub delivery are deterministic demo boundaries.
+
+For another clean take, stop terminal 1 with Ctrl-C and restart both commands.
+The runner removes only its own temporary remediation checkout. Optional port
+overrides are:
+
+```sh
+PODO_LAB_DASHBOARD_PORT=3030 \
+PODO_LAB_CORE_PORT=4130 \
+PODO_LAB_CHECKOUT_PORT=8181 \
+PODO_LAB_INVENTORY_PORT=8182 \
+PODO_LAB_NOTIFICATION_PORT=8183 \
+bun run lab
+```
+
+Pass the corresponding URLs to the load command when ports are overridden:
+
+```sh
+PODO_LAB_DASHBOARD_URL=http://127.0.0.1:3030 \
+PODO_LAB_CORE_URL=http://127.0.0.1:4130 \
+PODO_LAB_CHECKOUT_URL=http://127.0.0.1:8181 \
+PODO_LAB_NOTIFICATION_URL=http://127.0.0.1:8183 \
+bun run lab:load
+```

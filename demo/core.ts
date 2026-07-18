@@ -33,6 +33,13 @@ interface DemoCoreState {
   outcome: DemoOutcome;
 }
 
+export interface DemoCoreRuntime {
+  handler: ReturnType<typeof createCoreHandler>;
+  metrics: DemoMetrics;
+  outcome: DemoOutcome;
+  prepareIncidentDiagnosis(incident: DetectedIncident): void;
+}
+
 export interface DemoCoreStatus {
   status: "ready";
   outcome: DemoOutcome;
@@ -54,6 +61,42 @@ const expectedRepository = "reseaxch/podo";
 export async function createDemoCoreState(
   options: DemoCoreOptions,
 ): Promise<DemoCoreState> {
+  const runtime = await createDemoCoreRuntime(options);
+  const client = createPodoClient({
+    baseUrl: "http://podo.demo.internal",
+    fetch: (input, init) => runtime.handler(new Request(input, init)),
+  });
+  const telemetry = await Bun.file(
+    resolve(
+      options.sourceRoot,
+      "scenarios/cache-growth/fixtures/telemetry.json",
+    ),
+  ).json();
+  if (!Array.isArray(telemetry))
+    throw new Error("Canonical telemetry fixture must be an array");
+  await client.updateSettings({ autonomyMode: "act_with_approval" });
+  const replay = await replayTelemetry(telemetry, client, {
+    acceleration: 1_000_000,
+    batchSize: 50,
+  });
+  if (replay.status !== "completed" || replay.rejected !== 0)
+    throw new Error("Canonical telemetry replay failed");
+  const { incidents } = await client.listIncidents();
+  if (incidents.length !== 1)
+    throw new Error("Canonical telemetry must create exactly one incident");
+  const incident = incidents[0]!;
+  runtime.prepareIncidentDiagnosis(incident);
+  return {
+    handler: runtime.handler,
+    incident,
+    metrics: runtime.metrics,
+    outcome: runtime.outcome,
+  };
+}
+
+export async function createDemoCoreRuntime(
+  options: DemoCoreOptions,
+): Promise<DemoCoreRuntime> {
   const incidentGraph = await loadProductionIncidentGraph({
     PODO_INCIDENT_GRAPH_ENABLED: "true",
     PODO_INCIDENT_GRAPH_BOOTSTRAP_PATH: resolve(
@@ -118,35 +161,18 @@ export async function createDemoCoreState(
       },
     },
   });
-  const client = createPodoClient({
-    baseUrl: "http://podo.demo.internal",
-    fetch: (input, init) => handler(new Request(input, init)),
-  });
-  const telemetry = await Bun.file(
-    resolve(
-      options.sourceRoot,
-      "scenarios/cache-growth/fixtures/telemetry.json",
-    ),
-  ).json();
-  if (!Array.isArray(telemetry))
-    throw new Error("Canonical telemetry fixture must be an array");
-  await client.updateSettings({ autonomyMode: "act_with_approval" });
-  const replay = await replayTelemetry(telemetry, client, {
-    acceleration: 1_000_000,
-    batchSize: 50,
-  });
-  if (replay.status !== "completed" || replay.rejected !== 0)
-    throw new Error("Canonical telemetry replay failed");
-  const { incidents } = await client.listIncidents();
-  if (incidents.length !== 1)
-    throw new Error("Canonical telemetry must create exactly one incident");
-  const incident = incidents[0]!;
-  diagnosisRuntime.prepareAutomaticDiagnosis({
-    evidenceIds: incident.evidence.map(({ id }) => id),
-    affectedService: incident.affectedService,
-    safeToAttemptFix: true,
-  });
-  return { handler, incident, metrics, outcome: options.outcome };
+  return {
+    handler,
+    metrics,
+    outcome: options.outcome,
+    prepareIncidentDiagnosis(incident) {
+      diagnosisRuntime.prepareAutomaticDiagnosis({
+        evidenceIds: incident.evidence.map(({ id }) => id),
+        affectedService: incident.affectedService,
+        safeToAttemptFix: true,
+      });
+    },
+  };
 }
 
 export function parseDemoOutcome(value: string | undefined): DemoOutcome {

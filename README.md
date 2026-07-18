@@ -231,6 +231,20 @@ The judge-facing demo experience is also one command:
 bun run demo
 ```
 
+To show Podo observing real HTTP traffic from the three demo services instead
+of starting from recorded telemetry, run the live service lab:
+
+```sh
+bun run lab
+# second terminal
+bun run lab:load
+```
+
+The load command verifies inventory, checkout, asynchronous notification
+delivery, and Podo incident detection, then prints the detected incident URL. See
+[`demo/README.md`](demo/README.md#live-service-lab) for the exact service
+topology, safe heap scaling, ports, and clean-restart procedure.
+
 For an automated readiness check that cleans up its child processes after the
 incident route is ready, run:
 

@@ -6,8 +6,11 @@ export interface ReservationResult {
   sku: string
 }
 
-export async function reserveInventory(sku: string, quantity: number): Promise<ReservationResult> {
-  const baseUrl = process.env.INVENTORY_URL ?? "http://inventory-service:8082"
+export async function reserveInventory(
+  sku: string,
+  quantity: number,
+  baseUrl = process.env.INVENTORY_URL ?? "http://127.0.0.1:8082",
+): Promise<ReservationResult> {
   const response = await fetch(`${baseUrl}/reserve`, {
     method: "POST",
     headers: { "content-type": "application/json" },

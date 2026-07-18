@@ -26,6 +26,8 @@
     "codex:upstream:update": "bun scripts/codex-upstream.ts update",
     "demo": "bun demo/run.ts",
     "demo:verify": "bun demo/run.ts --verify",
+    "lab": "bun demo/live-lab.ts",
+    "lab:load": "bun demo/live-load.ts",
     "poc": "bun run codex:smoke && bun test --timeout 60000 tests/integration/canonical-poc.test.ts && bun run telemetry:compare",
     "telemetry:compare": "bun scripts/cache-growth-comparison.ts",
     "eval": "bun run --cwd evals eval",

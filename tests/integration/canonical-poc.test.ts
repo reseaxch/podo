@@ -37,6 +37,7 @@ const EXPECTED_CORRELATION = {
 } as const
 
 const temporaryRepositories: CanonicalRemediationRepository[] = []
+const canonicalPocTimeoutMs = 60_000
 
 afterEach(async () => {
   await Promise.all(
@@ -302,7 +303,7 @@ test("proves the canonical incident-to-tested-fix-to-PR-preview flow", async () 
     expect(publicJson).not.toContain(forbidden)
   }
   expect(publicJson).not.toContain(proof.runtime.rawDiagnosis)
-})
+}, canonicalPocTimeoutMs)
 
 async function runCanonicalPocProof(): Promise<{
   replay: ReplaySummary
