@@ -126,6 +126,28 @@ function formatDuration(start: string, end: string): string {
   return `${Math.max(1, Math.ceil(milliseconds / 1_000))} sec`
 }
 
+function formatGraphTimestamp(timestamp: string): string {
+  const instant = new Date(timestamp)
+  const date = new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(instant)
+  const time = new Intl.DateTimeFormat("en", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(instant)
+  return `${date} · ${time} UTC`
+}
+
+function formatGraphMetric(record: IncidentEvidenceRecord): string {
+  const metric = record.event.metric
+  if (metric?.name === "process.heap.used" && metric.unit === "By")
+    return `Heap ${(metric.value / (1024 * 1024)).toFixed(0)} MiB`
+  return formatEvidenceValue(record)
+}
+
 function toEvidence(record: IncidentEvidenceRecord): Evidence {
   const instant = new Date(record.event.timestamp)
   const identifiers = [
@@ -205,7 +227,27 @@ function toDiagnosis(
       }
     : undefined
 
-  if (diagnosis?.status === "validated")
+  if (diagnosis?.status === "validated") {
+    const citedEvidence = diagnosis.evidenceIds.flatMap((id) => {
+      const item = evidenceById.get(id)
+      return item ? [item] : []
+    })
+    const representativeEvidence: Evidence[] = []
+    const includedIds = new Set<string>()
+    const include = (item: Evidence | undefined) => {
+      if (!item || includedIds.has(item.id)) return
+      includedIds.add(item.id)
+      representativeEvidence.push(item)
+    }
+    include(citedEvidence.find((item) => item.source === "Metric"))
+    include(citedEvidence.findLast((item) => item.source === "Metric"))
+    include(citedEvidence.find((item) => item.source === "Trace"))
+    include(citedEvidence.find((item) => item.source === "Runtime log"))
+    for (const item of citedEvidence) {
+      if (representativeEvidence.length >= 4) break
+      include(item)
+    }
+
     return {
       state: "validated",
       eyebrow: "Core diagnosis validated",
@@ -214,10 +256,12 @@ function toDiagnosis(
       probableRootCause: diagnosis.probableRootCause,
       confidencePercent: Math.round(diagnosis.confidence.value / 100),
       confidenceLabel: `${diagnosis.evidenceIds.length} cited Core evidence records`,
-      supportingEvidence: diagnosis.evidenceIds.flatMap((id) => {
-        const item = evidenceById.get(id)
-        return item ? [{ id, title: item.finding, detail: item.detail }] : []
-      }),
+      supportingEvidenceLabel: "Representative cited signals",
+      supportingEvidence: representativeEvidence.map((item) => ({
+        id: item.id,
+        title: item.finding,
+        detail: item.detail,
+      })),
       checks: [
         {
           title: "Evidence references resolved",
@@ -239,6 +283,7 @@ function toDiagnosis(
         ? "Review remediation workflow"
         : "Review issue fallback",
     }
+  }
 
   if (diagnosis?.status === "failed")
     return {
@@ -314,9 +359,11 @@ function toGraph(
         slot: "signal",
         kind: "Metric",
         title: latestMetric
-          ? formatEvidenceValue(latestMetric)
+          ? formatGraphMetric(latestMetric)
           : "Metric unavailable",
-        subtitle: latestMetric?.event.timestamp ?? incident.updatedAt,
+        subtitle: formatGraphTimestamp(
+          latestMetric?.event.timestamp ?? incident.updatedAt,
+        ),
         status: firstMetric
           ? `Growth observed since ${formatEvidenceValue(firstMetric)}`
           : "No metric record",
@@ -357,8 +404,8 @@ function toGraph(
             ? incident.diagnosis.probableRootCause
             : "Code location unresolved"),
         subtitle:
-          causalPath?.file.location?.path ??
           causalPath?.file.label ??
+          causalPath?.file.location?.path ??
           "Awaiting trusted causal path",
         status: causalPath
           ? `Commit ${causalPath.commit.sha}`

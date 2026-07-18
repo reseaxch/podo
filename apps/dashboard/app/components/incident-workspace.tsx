@@ -154,6 +154,9 @@ export function IncidentWorkspace({
                 expandedId={expandedId}
                 items={filteredEvidence}
                 onNotify={showToast}
+                {...(controller.refreshIncident
+                  ? { onRefresh: controller.refreshIncident }
+                  : {})}
                 onToggle={(id) =>
                   setExpandedId((current) => (current === id ? null : id))
                 }

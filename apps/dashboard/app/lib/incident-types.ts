@@ -98,6 +98,7 @@ export type IncidentController = RemediationController & {
     expectedStatus: IncidentStatus
     status: IncidentStatus
   }): Promise<{ status: IncidentStatus }>
+  refreshIncident?(): Promise<void>
   executeWorkflow?(input: IncidentWorkflowCommand): Promise<void>
 }
 
@@ -109,6 +110,7 @@ export type IncidentDiagnosisViewModel = {
   probableRootCause?: string
   confidencePercent?: number
   confidenceLabel?: string
+  supportingEvidenceLabel?: string
   supportingEvidence: Array<{
     id: string
     title: string

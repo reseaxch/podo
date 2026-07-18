@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 import type { Evidence } from "../../lib/incident-types"
 import { Icon } from "../ui/pictogram"
 
@@ -387,6 +389,7 @@ type EvidenceViewProps = {
   expandedId: string | null
   onToggle: (id: string) => void
   onNotify: (message: string) => void
+  onRefresh?: () => Promise<void>
 }
 
 export function EvidenceView({
@@ -395,7 +398,28 @@ export function EvidenceView({
   expandedId,
   onToggle,
   onNotify,
+  onRefresh,
 }: EvidenceViewProps) {
+  const [refreshing, setRefreshing] = useState(false)
+
+  const refreshEvidence = async () => {
+    if (!onRefresh) {
+      onNotify("Evidence is up to date")
+      return
+    }
+    setRefreshing(true)
+    try {
+      await onRefresh()
+      onNotify("Evidence refreshed from Core")
+    } catch (error) {
+      onNotify(
+        error instanceof Error ? error.message : "Evidence refresh failed",
+      )
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <div className="evidence-table">
       <div className="evidence-columns" aria-hidden="true">
@@ -425,11 +449,14 @@ export function EvidenceView({
           Showing latest {items.length} of {total} evidence events
         </span>
         <button
+          aria-busy={refreshing}
           className="secondary-button"
-          onClick={() => onNotify("Evidence is up to date")}
+          disabled={refreshing}
+          onClick={() => void refreshEvidence()}
           type="button"
         >
-          <Icon name="arrow-down" size={16} /> Load newer evidence
+          <Icon name="arrow-down" size={16} />{" "}
+          {refreshing ? "Refreshing evidence…" : "Load newer evidence"}
         </button>
       </footer>
     </div>

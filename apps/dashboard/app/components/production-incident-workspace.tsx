@@ -21,17 +21,25 @@ export function ProductionIncidentWorkspace({
   initialTab?: IncidentTab
   workspace: IncidentWorkspaceViewModel
 }) {
-  const [workspace, setWorkspace] = useState(initialWorkspace)
+  const incidentId = initialWorkspace.id
+  const [workspaceState, setWorkspaceState] = useState(() => ({
+    incidentId,
+    workspace: initialWorkspace,
+  }))
+  const workspace =
+    workspaceState.incidentId === incidentId
+      ? workspaceState.workspace
+      : initialWorkspace
 
   const refresh = useCallback(async () => {
     const response = await fetch(
-      `/api/podo/incidents/${encodeURIComponent(initialWorkspace.id)}`,
+      `/api/podo/incidents/${encodeURIComponent(incidentId)}`,
       { cache: "no-store" },
     )
     if (!response.ok) throw new Error(`Refresh failed (${response.status})`)
     const result = (await response.json()) as WorkspaceResponse
-    setWorkspace(result.workspace)
-  }, [initialWorkspace.id])
+    setWorkspaceState({ incidentId, workspace: result.workspace })
+  }, [incidentId])
 
   const controller = useMemo<IncidentController>(
     () => ({
@@ -47,9 +55,10 @@ export function ProductionIncidentWorkspace({
       async returnToReview() {
         throw new Error("Core remediation state cannot be rewound by the UI")
       },
+      refreshIncident: refresh,
       async executeWorkflow(command: IncidentWorkflowCommand) {
         const response = await fetch(
-          `/api/podo/incidents/${encodeURIComponent(initialWorkspace.id)}`,
+          `/api/podo/incidents/${encodeURIComponent(incidentId)}`,
           {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -67,7 +76,7 @@ export function ProductionIncidentWorkspace({
         await refresh()
       },
     }),
-    [initialWorkspace.id, refresh],
+    [incidentId, refresh],
   )
 
   const workflow = workspace.workflow

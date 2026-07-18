@@ -200,7 +200,8 @@ export function DiagnosisPanel({
               <h3>Supporting evidence</h3>
               <span>
                 {model.supportingEvidence.length
-                  ? "Strongest signals in the causal path"
+                  ? (model.supportingEvidenceLabel ??
+                    "Strongest signals in the causal path")
                   : "No diagnosis evidence has been cited yet"}
               </span>
             </div>

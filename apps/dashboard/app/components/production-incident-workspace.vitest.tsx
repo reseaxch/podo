@@ -213,4 +213,56 @@ describe("ProductionIncidentWorkspace", () => {
     )
     expect(await screen.findByText("Monitoring")).toBeInTheDocument()
   })
+
+  it("refreshes evidence through the Core incident endpoint", async () => {
+    const user = userEvent.setup()
+    const refreshed = workspace()
+    refreshed.evidence[0] = {
+      ...refreshed.evidence[0]!,
+      finding: "fresh process heap sample",
+    }
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ workspace: refreshed }))
+    vi.stubGlobal("fetch", fetchMock)
+    render(<ProductionIncidentWorkspace workspace={workspace()} />)
+
+    await user.click(
+      screen.getByRole("button", { name: "Load newer evidence" }),
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/podo/incidents/incident_live",
+      { cache: "no-store" },
+    )
+    expect(
+      await screen.findByRole("button", {
+        name: /fresh process heap sample/i,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it("renders a newly selected incident without retaining client state", () => {
+    const first = workspace()
+    const second = {
+      ...workspace(),
+      id: "incident_second",
+      title: "Cache growth in payments-service after deploy-2048",
+      service: "payments-service",
+    }
+    const { rerender } = render(
+      <ProductionIncidentWorkspace workspace={first} />,
+    )
+
+    rerender(<ProductionIncidentWorkspace workspace={second} />)
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Cache growth in payments-service after deploy-2048",
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("heading", { name: first.title }),
+    ).not.toBeInTheDocument()
+  })
 })
