@@ -605,6 +605,20 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
         : json({ error: result.error, message: result.message }, result.status)
     }
 
+    const incidentEvidenceMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/evidence$/)
+    if (incidentEvidenceMatch?.[1]) {
+      if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
+      const incidentId = decodeURIComponent(incidentEvidenceMatch[1])
+      if (!incidentMonitor.getIncident(incidentId)) return json({ error: "not_found" }, 404)
+      const records = incidentMonitor.getEvidenceRecords(incidentId)
+      return records
+        ? json({ records })
+        : json({
+          error: "evidence_unavailable",
+          message: "Incident evidence could not be resolved to normalized telemetry",
+        }, 409)
+    }
+
     const incidentMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)$/)
     if (incidentMatch?.[1]) {
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)

@@ -126,6 +126,22 @@ function DetailFacts({
 }
 
 function EvidenceDetail({ item }: { item: Evidence }) {
+  if (item.facts?.length)
+    return (
+      <div className="evidence-detail detail-stack">
+        <div className="detail-heading">
+          <span className="detail-kicker">Core telemetry record</span>
+          <strong>{item.finding}</strong>
+        </div>
+        <DetailFacts
+          facts={item.facts.map(({ label, value, note }) => [
+            label,
+            value,
+            note ?? "",
+          ])}
+        />
+      </div>
+    )
   if (item.id === "deploy")
     return (
       <div className="evidence-detail detail-stack">
@@ -332,7 +348,7 @@ function EvidenceRow({
         <span className="timeline-marker" />
         <span className="evidence-time">
           <strong>{item.time}</strong>
-          <small>Jul 14, 2026</small>
+          <small>{item.date ?? "Jul 14, 2026"}</small>
         </span>
         <span className="evidence-source">
           <Icon name={item.icon} size={18} />

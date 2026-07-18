@@ -25,14 +25,21 @@ export function IncidentHeader({
   const { closeMenu, menuRef, openMenu, toggleMenu } = useMenu<
     "status" | "actions"
   >()
+  const displayedStatus =
+    incident.statusEditable === false ? incident.status : incidentStatus
 
   function exportIncidentSummary() {
+    const diagnosis = incident.diagnosis
     const summary = [
       `${incident.id} · ${incident.title}`,
-      `Status: ${incidentStatus} · Confidence: 87%`,
-      "Root cause: Unbounded cache key retention in CheckoutCache.set()",
-      "Proposed fix: 500-entry LRU cache with a 60s TTL",
-      "Verification: 6/6 checks passed",
+      `Status: ${displayedStatus}`,
+      ...(diagnosis?.probableRootCause
+        ? [`Root cause: ${diagnosis.probableRootCause}`]
+        : []),
+      ...(diagnosis?.confidencePercent === undefined
+        ? []
+        : [`Confidence: ${diagnosis.confidencePercent}%`]),
+      ...(diagnosis?.summary ? [`Diagnosis: ${diagnosis.summary}`] : []),
     ].join("\n")
     const url = URL.createObjectURL(new Blob([summary], { type: "text/plain" }))
     const link = document.createElement("a")
@@ -50,76 +57,84 @@ export function IncidentHeader({
         <h1>{incident.title}</h1>
         <div className="incident-meta">
           <span className="severity">{incident.severity}</span>
-          <div
-            className="menu-anchor status-anchor"
-            ref={openMenu === "status" ? menuRef : undefined}
-          >
-            <button
-              aria-expanded={openMenu === "status"}
-              aria-haspopup="menu"
-              className={`status-button status-${incidentStatus.toLowerCase()}`}
-              onClick={(event) => toggleMenu("status", event.currentTarget)}
-              type="button"
+          {incident.statusEditable === false ? (
+            <span
+              className={`status-button status-${displayedStatus.toLowerCase()}`}
             >
-              <span /> {incidentStatus} <Icon name="caret-down" size={13} />
-            </button>
-            {openMenu === "status" ? (
-              <div className="shell-menu status-menu" role="menu">
-                <span className="menu-label">Incident status</span>
-                {(
-                  [
-                    "Investigating",
-                    "Mitigating",
-                    "Monitoring",
-                    "Resolved",
-                  ] as const
-                ).map((status) => (
-                  <button
-                    aria-current={
-                      incidentStatus === status ? "true" : undefined
-                    }
-                    key={status}
-                    disabled={statusPending}
-                    onClick={async () => {
-                      if (status === incidentStatus) {
-                        closeMenu()
-                        return
+              <span /> {displayedStatus}
+            </span>
+          ) : (
+            <div
+              className="menu-anchor status-anchor"
+              ref={openMenu === "status" ? menuRef : undefined}
+            >
+              <button
+                aria-expanded={openMenu === "status"}
+                aria-haspopup="menu"
+                className={`status-button status-${incidentStatus.toLowerCase()}`}
+                onClick={(event) => toggleMenu("status", event.currentTarget)}
+                type="button"
+              >
+                <span /> {incidentStatus} <Icon name="caret-down" size={13} />
+              </button>
+              {openMenu === "status" ? (
+                <div className="shell-menu status-menu" role="menu">
+                  <span className="menu-label">Incident status</span>
+                  {(
+                    [
+                      "Investigating",
+                      "Mitigating",
+                      "Monitoring",
+                      "Resolved",
+                    ] as const
+                  ).map((status) => (
+                    <button
+                      aria-current={
+                        incidentStatus === status ? "true" : undefined
                       }
-                      setStatusPending(true)
-                      try {
-                        const next = await controller.updateStatus({
-                          incidentId: incident.id,
-                          expectedStatus: incidentStatus,
-                          status,
-                        })
-                        setIncidentStatus(next.status)
-                        closeMenu()
-                        onNotify(`Status changed to ${next.status}`)
-                      } catch (error) {
-                        onNotify(
-                          error instanceof Error
-                            ? error.message
-                            : "Incident status was not changed",
-                        )
-                      } finally {
-                        setStatusPending(false)
-                      }
-                    }}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <i
-                      className={`status-dot status-${status.toLowerCase()}`}
-                    />
-                    <span>{status}</span>
-                    {incidentStatus === status ? (
-                      <Icon name="check-circle" size={15} />
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+                      key={status}
+                      disabled={statusPending}
+                      onClick={async () => {
+                        if (status === incidentStatus) {
+                          closeMenu()
+                          return
+                        }
+                        setStatusPending(true)
+                        try {
+                          const next = await controller.updateStatus({
+                            incidentId: incident.id,
+                            expectedStatus: incidentStatus,
+                            status,
+                          })
+                          setIncidentStatus(next.status)
+                          closeMenu()
+                          onNotify(`Status changed to ${next.status}`)
+                        } catch (error) {
+                          onNotify(
+                            error instanceof Error
+                              ? error.message
+                              : "Incident status was not changed",
+                          )
+                        } finally {
+                          setStatusPending(false)
+                        }
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      <i
+                        className={`status-dot status-${status.toLowerCase()}`}
+                      />
+                      <span>{status}</span>
+                      {incidentStatus === status ? (
+                        <Icon name="check-circle" size={15} />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
           <span>
             <Icon name="cube" size={16} /> {incident.service}
           </span>

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import type {
+  NormalizedTelemetryEvent,
   RejectedTelemetryEvent,
   TelemetryEventInput,
   TelemetryIngestionResult,
@@ -9,8 +10,7 @@ import type {
 
 export type { TelemetryEventInput, TelemetryIngestionResult } from "@podo/contracts"
 
-export interface TelemetryEvent extends TelemetryEventInput {
-  id: string
+export interface TelemetryEvent extends NormalizedTelemetryEvent {
   timestamp: string
 }
 

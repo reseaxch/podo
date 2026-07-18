@@ -6,6 +6,7 @@ import {
 import type {
   DetectedIncident,
   IncidentEvidence,
+  IncidentEvidenceRecord,
   IncidentReaction,
   TelemetryEventInput,
   TelemetryIngestionResult,
@@ -94,6 +95,22 @@ export class IncidentMonitor {
       const event = byId.get(evidence.sourceEventId)
       return event ? [structuredClone(event)] : []
     })
+  }
+
+  getEvidenceRecords(id: string): IncidentEvidenceRecord[] | null {
+    const incident = this.incidents.get(id)
+    if (!incident) return null
+    const byId = new Map(this.telemetry.list().map((event) => [event.id, event]))
+    const records: IncidentEvidenceRecord[] = []
+    for (const evidence of incident.evidence) {
+      const event = byId.get(evidence.sourceEventId)
+      if (!event) return null
+      records.push({
+        evidence: structuredClone(evidence),
+        event: structuredClone(event),
+      })
+    }
+    return records
   }
 }
 

@@ -125,6 +125,7 @@ The current core implementation is intentionally in-memory. It owns investigatio
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| `GET` | `/api/incidents/:id/evidence` | Read incident evidence paired with its normalized telemetry event for rich clients |
 | `POST` | `/api/incidents/:id/investigation` | Start a core-owned, evidence-backed, read-only investigation for a detected incident |
 | `POST` | `/api/investigations` | Start with required `prompt`, absolute `cwd`, and `sandbox` (`read-only` or `workspace-write`) |
 | `GET` | `/api/investigations/:id` | Read authoritative state and the current pending approval |

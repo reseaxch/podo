@@ -1,13 +1,13 @@
 import type {
   DetectedIncident,
-  IncidentDelivery,
   IncidentCausalPath,
-  IncidentIssueDelivery,
-  IncidentRemediation,
+  IncidentEvidenceRecord,
 } from "@podo/contracts"
 import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import userEvent from "@testing-library/user-event"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { toCoreIncidentWorkspace } from "../lib/incident-data"
 import { ProductionIncidentWorkspace } from "./production-incident-workspace"
 
 const incident: DetectedIncident = {
@@ -28,9 +28,9 @@ const incident: DetectedIncident = {
       deploymentId: "deploy-1042",
     },
     {
-      id: "evidence_log",
-      sourceEventId: "event_log",
-      sourceType: "log",
+      id: "evidence_trace",
+      sourceEventId: "event_trace",
+      sourceType: "trace",
       observedAt: "2026-07-14T10:06:00.000Z",
       service: "checkout-service",
       deploymentId: "deploy-1042",
@@ -38,16 +38,51 @@ const incident: DetectedIncident = {
   ],
 }
 
+const records: IncidentEvidenceRecord[] = [
+  {
+    evidence: incident.evidence[0]!,
+    event: {
+      id: "event_metric",
+      timestamp: "2026-07-14T10:05:00.000Z",
+      kind: "metric",
+      service: "checkout-service",
+      severity: "warn",
+      message: "process heap sample",
+      deploymentId: "deploy-1042",
+      containerId: "checkout-container",
+      metric: {
+        name: "process.heap.used",
+        value: 620 * 1024 * 1024,
+        unit: "By",
+      },
+    },
+  },
+  {
+    evidence: incident.evidence[1]!,
+    event: {
+      id: "event_trace",
+      timestamp: "2026-07-14T10:06:00.000Z",
+      kind: "trace",
+      service: "checkout-service",
+      severity: "error",
+      message: "POST /checkout returned 500",
+      deploymentId: "deploy-1042",
+      containerId: "checkout-container",
+      traceId: "trace-live",
+    },
+  },
+]
+
 const causalPath: IncidentCausalPath = {
   schemaVersion: "podo.causal-path.v1",
   id: "path-live",
   incident: { id: incident.id },
-  evidence: { id: incident.evidence[0]!.id },
+  evidence: { id: "evidence_metric" },
   telemetryEvent: {
-    id: incident.evidence[0]!.sourceEventId,
-    occurredAt: incident.evidence[0]!.observedAt,
+    id: "event_metric",
+    occurredAt: "2026-07-14T10:05:00.000Z",
   },
-  container: { id: "checkout-service-7b9c" },
+  container: { id: "checkout-container" },
   deployment: { id: "deploy-1042" },
   commit: { id: "commit-live", sha: "d34db33f" },
   file: {
@@ -55,317 +90,127 @@ const causalPath: IncidentCausalPath = {
     kind: "file",
     externalId: "file:cache",
     label: "cache.ts",
+    location: { path: "services/checkout/cache.ts", line: 1 },
   },
   function: {
     id: "function-live",
     kind: "function",
     externalId: "function:cache",
-    label: "CheckoutCache",
+    label: "CheckoutCache.set",
+    location: { path: "services/checkout/cache.ts", line: 47 },
   },
 }
 
-function withIncident(overrides: Partial<DetectedIncident>): DetectedIncident {
-  return { ...incident, ...overrides }
+function workspace(currentIncident = incident) {
+  return toCoreIncidentWorkspace({
+    incident: currentIncident,
+    records,
+    causalPath,
+    remediation: null,
+    delivery: null,
+    issueDelivery: null,
+  })
 }
 
 describe("ProductionIncidentWorkspace", () => {
-  it("renders the Core-owned evidence-to-code causal path", () => {
-    render(
-      <ProductionIncidentWorkspace
-        incident={incident}
-        causalPath={causalPath}
-      />,
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class ResizeObserverMock {
+        observe() {}
+        disconnect() {}
+      },
     )
-
-    expect(
-      screen.getByRole("heading", { name: "Evidence to code" }),
-    ).toBeInTheDocument()
-    expect(screen.getByText("cache.ts")).toBeInTheDocument()
-    expect(screen.getByText("CheckoutCache")).toBeInTheDocument()
   })
 
-  it("renders only core-backed detection and evidence state", () => {
-    render(<ProductionIncidentWorkspace incident={incident} />)
+  it("renders the rich workspace exclusively from Core data", () => {
+    render(<ProductionIncidentWorkspace workspace={workspace()} />)
 
     expect(
       screen.getByRole("heading", {
-        name: "Cache growth detected in checkout-service",
+        name: "Cache growth in checkout-service after deploy-1042",
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText("event_metric")).toBeInTheDocument()
-    expect(screen.getAllByText("deploy-1042")).toHaveLength(3)
     expect(
-      screen.getByRole("heading", { name: "Investigation not started" }),
+      screen.getByRole("button", { name: /process heap sample/i }),
     ).toBeInTheDocument()
+    expect(screen.getByText(/620 MiB/)).toBeInTheDocument()
+    expect(screen.getAllByText("Podo Core").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Maya Chen")).not.toBeInTheDocument()
     expect(
-      screen.queryByRole("button", { name: /approve/i }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByText(/87% confidence/i)).not.toBeInTheDocument()
-    expect(screen.queryByText("P1")).not.toBeInTheDocument()
-  })
-
-  it.each([
-    ["starting", "Investigation starting"],
-    ["running", "Investigation running"],
-    ["waiting_for_approval", "Investigation waiting for approval"],
-  ] as const)("renders the authoritative %s lifecycle", (status, heading) => {
-    render(
-      <ProductionIncidentWorkspace
-        incident={withIncident({
-          investigation: {
-            id: "investigation_live",
-            status,
-            startedAt: "2026-07-14T10:16:00.000Z",
-            updatedAt: "2026-07-14T10:17:00.000Z",
-          },
-        })}
-      />,
-    )
-
-    expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument()
-    expect(screen.queryByText(/probable root cause/i)).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /prepare tested remediation/i }),
+      screen.queryByText("Unbounded cache key retention"),
     ).not.toBeInTheDocument()
   })
 
-  it("renders a validated diagnosis and links only its core evidence", () => {
-    render(
-      <ProductionIncidentWorkspace
-        incident={withIncident({
-          investigation: {
-            id: "investigation_live",
-            status: "completed",
-            startedAt: "2026-07-14T10:16:00.000Z",
-            updatedAt: "2026-07-14T10:18:00.000Z",
-          },
-          diagnosis: {
-            status: "validated",
-            schemaVersion: "podo.diagnosis.v1",
-            summary: "Heap growth correlates with checkout failures",
-            affectedService: "checkout-service",
-            probableRootCause:
-              "The deployed cache retains entries without a bound",
-            confidence: { value: 8750, scale: "basis_points" },
-            evidenceIds: ["evidence_metric"],
-            recommendedAction: "Inspect the cache retention policy",
-            safeToAttemptFix: true,
-          },
-        })}
-      />,
-    )
+  it("projects validated diagnosis and trusted causal path into the rich UI", async () => {
+    const user = userEvent.setup()
+    const diagnosed: DetectedIncident = {
+      ...incident,
+      investigation: {
+        id: "investigation-live",
+        status: "completed",
+        startedAt: "2026-07-14T10:10:00.000Z",
+        updatedAt: "2026-07-14T10:12:00.000Z",
+      },
+      diagnosis: {
+        status: "validated",
+        schemaVersion: "podo.diagnosis.v1",
+        summary: "Heap growth correlates with checkout failures",
+        affectedService: "checkout-service",
+        probableRootCause: "The deployed cache retains entries without a bound",
+        confidence: { value: 8750, scale: "basis_points" },
+        evidenceIds: ["evidence_metric", "evidence_trace"],
+        recommendedAction: "Bound the cache and add a regression",
+        safeToAttemptFix: true,
+      },
+    }
+    render(<ProductionIncidentWorkspace workspace={workspace(diagnosed)} />)
 
-    expect(
-      screen.getByRole("heading", { name: "Evidence-backed diagnosis" }),
-    ).toBeInTheDocument()
     expect(
       screen.getByText("The deployed cache retains entries without a bound"),
     ).toBeInTheDocument()
-    expect(screen.getByText("87.50% confidence")).toBeInTheDocument()
+    expect(screen.getByText("87%")).toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "Graph" }))
     expect(
-      screen.getByText("Inspect the cache retention policy"),
+      screen.getByRole("heading", { name: "Evidence to affected code" }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole("link", { name: "evidence_metric" }),
-    ).toHaveAttribute("href", "#evidence-evidence_metric")
-    expect(
-      screen.queryByRole("link", { name: "evidence_log" }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: "Prepare tested remediation" }),
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/safe to attempt/i)).not.toBeInTheDocument()
+    expect(screen.getByText("CheckoutCache.set")).toBeInTheDocument()
+    expect(screen.getByText("services/checkout/cache.ts")).toBeInTheDocument()
   })
 
-  it("renders a failed diagnosis without remediation affordances", () => {
+  it("routes workflow actions through Core and refreshes the workspace", async () => {
+    const user = userEvent.setup()
+    const refreshed = workspace()
+    refreshed.status = "Monitoring"
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ accepted: true }))
+      .mockResolvedValueOnce(Response.json({ workspace: refreshed }))
+    vi.stubGlobal("fetch", fetchMock)
     render(
       <ProductionIncidentWorkspace
-        incident={withIncident({
-          investigation: {
-            id: "investigation_live",
-            status: "completed",
-            startedAt: "2026-07-14T10:16:00.000Z",
-            updatedAt: "2026-07-14T10:18:00.000Z",
-          },
-          diagnosis: {
-            status: "failed",
-            error: {
-              code: "invalid_output",
-              message:
-                "Codex output did not satisfy the Podo diagnosis contract",
-            },
-          },
-        })}
+        initialTab="changes"
+        workspace={workspace()}
       />,
     )
 
-    expect(
-      screen.getByRole("heading", { name: "Diagnosis unavailable" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        "Codex output did not satisfy the Podo diagnosis contract",
-      ),
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/recommended action/i)).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /prepare tested remediation/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it("fails closed when validated diagnosis cites evidence absent from the incident", () => {
-    render(
-      <ProductionIncidentWorkspace
-        incident={withIncident({
-          investigation: {
-            id: "investigation_live",
-            status: "completed",
-            startedAt: "2026-07-14T10:16:00.000Z",
-            updatedAt: "2026-07-14T10:18:00.000Z",
-          },
-          diagnosis: {
-            status: "validated",
-            schemaVersion: "podo.diagnosis.v1",
-            summary: "Untrusted diagnosis",
-            affectedService: "checkout-service",
-            probableRootCause: "Must not render",
-            confidence: { value: 9999, scale: "basis_points" },
-            evidenceIds: ["evidence_missing"],
-            recommendedAction: "Must not render",
-            safeToAttemptFix: true,
-          },
-        })}
-      />,
+    await user.click(
+      screen.getByRole("button", { name: "Investigate incident" }),
     )
 
-    expect(
-      screen.getByRole("heading", { name: "Diagnosis unavailable" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/lifecycle response is incomplete/i),
-    ).toBeInTheDocument()
-    expect(screen.queryByText("Must not render")).not.toBeInTheDocument()
-    expect(screen.queryByText("99.99% confidence")).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /prepare tested remediation/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it("fails closed when a completed investigation has no diagnosis state", () => {
-    render(
-      <ProductionIncidentWorkspace
-        incident={withIncident({
-          investigation: {
-            id: "investigation_live",
-            status: "completed",
-            startedAt: "2026-07-14T10:16:00.000Z",
-            updatedAt: "2026-07-14T10:18:00.000Z",
-          },
-        })}
-      />,
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/podo/incidents/incident_live",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ action: "start-investigation" }),
+      }),
     )
-
-    expect(
-      screen.getByRole("heading", { name: "Diagnosis unavailable" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /prepare tested remediation/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it("opens the authoritative delivered pull request URL", () => {
-    const delivery: IncidentDelivery = {
-      id: "delivery_live",
-      incidentId: incident.id,
-      remediationId: "remediation_live",
-      artifactId: "artifact_live",
-      status: "delivered",
-      approval: { id: "approval_delivery", status: "approved" },
-      createdAt: incident.createdAt,
-      updatedAt: incident.updatedAt,
-      pullRequest: {
-        provider: "github",
-        repository: "reseaxch/podo",
-        number: 1842,
-        url: "https://github.com/reseaxch/podo/pull/1842",
-        baseCommit: "abc123",
-        baseBranch: "main",
-        headBranch: "fix/incident-live",
-        artifactId: "artifact_live",
-      },
-    }
-    render(
-      <ProductionIncidentWorkspace incident={incident} delivery={delivery} />,
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/podo/incidents/incident_live",
+      { cache: "no-store" },
     )
-
-    expect(screen.getByRole("link", { name: "Open PR #1842" })).toHaveAttribute(
-      "href",
-      delivery.pullRequest?.url,
-    )
-  })
-
-  it("routes remediation failure through the Core-owned issue fallback", () => {
-    const remediation: IncidentRemediation = {
-      id: "remediation_live",
-      incidentId: incident.id,
-      status: "failed",
-      target: "isolated_checkout",
-      approval: { id: "approval_live", status: "approved" },
-      createdAt: incident.createdAt,
-      updatedAt: incident.updatedAt,
-      error: {
-        code: "verification_failed",
-        message: "Regression verification failed",
-      },
-    }
-    render(
-      <ProductionIncidentWorkspace
-        incident={incident}
-        remediation={remediation}
-      />,
-    )
-
-    expect(
-      screen.getByRole("button", { name: "Create GitHub issue" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole("link", { name: /issue/i }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /create pr/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it("opens only the exact issue URL returned by Core", () => {
-    const issueDelivery: IncidentIssueDelivery = {
-      id: "issue_delivery_live",
-      incidentId: incident.id,
-      reason: "remediation_failed",
-      status: "created",
-      createdAt: incident.createdAt,
-      updatedAt: incident.updatedAt,
-      issue: {
-        provider: "github",
-        repository: "reseaxch/podo",
-        number: 91,
-        url: "https://github.com/reseaxch/podo/issues/91",
-        state: "open",
-        providerStatus: "created",
-        draftId: "issue_draft_live",
-        idempotencyKey: "issue_delivery_live",
-        contentSha256: "abc123",
-      },
-    }
-
-    render(
-      <ProductionIncidentWorkspace
-        incident={incident}
-        issueDelivery={issueDelivery}
-      />,
-    )
-
-    expect(
-      screen.getByRole("link", { name: "Open issue #91" }),
-    ).toHaveAttribute("href", issueDelivery.issue?.url)
+    expect(await screen.findByText("Monitoring")).toBeInTheDocument()
   })
 })

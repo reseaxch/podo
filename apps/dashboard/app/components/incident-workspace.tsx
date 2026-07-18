@@ -10,6 +10,8 @@ import type {
 } from "../lib/incident-types"
 import type { GraphNodeId } from "../mocks/incident"
 import { ChangesView } from "./incident/changes-view"
+import { CoreChangesView } from "./incident/core-changes-view"
+import { CoreGraphView } from "./incident/core-graph-view"
 import { DiagnosisLauncher, DiagnosisPanel } from "./incident/diagnosis-panel"
 import { EvidenceView } from "./incident/evidence-view"
 import { GraphView } from "./incident/graph-view"
@@ -39,7 +41,9 @@ export function IncidentWorkspace({
     (selected: IncidentTab) => setTabSelection({ initialTab, selected }),
     [initialTab],
   )
-  const [expandedId, setExpandedId] = useState<string | null>("trace")
+  const [expandedId, setExpandedId] = useState<string | null>(() =>
+    incident.graph ? (incident.evidence[0]?.id ?? null) : "trace",
+  )
   const [diagnosisOpen, setDiagnosisOpen] = useState(true)
   const [compactDiagnosis, setCompactDiagnosis] = useState(false)
   const [query, setQuery] = useState("")
@@ -157,23 +161,40 @@ export function IncidentWorkspace({
               />
             ) : null}
             {activeTab === "graph" ? (
-              <GraphView
-                initialSelectedNode={initialGraphNodeId}
-                onOpenEvidence={openEvidence}
-              />
+              incident.graph ? (
+                <CoreGraphView
+                  graph={incident.graph}
+                  onOpenEvidence={openEvidence}
+                />
+              ) : (
+                <GraphView
+                  initialSelectedNode={initialGraphNodeId}
+                  onOpenEvidence={openEvidence}
+                />
+              )
             ) : null}
             {activeTab === "changes" ? (
-              <ChangesView
-                controller={controller}
-                incidentId={incident.id}
-                onNotify={showToast}
-                remediation={incident.remediation}
-              />
+              incident.workflow ? (
+                <CoreChangesView
+                  controller={controller}
+                  incidentId={incident.id}
+                  onNotify={showToast}
+                  workflow={incident.workflow}
+                />
+              ) : (
+                <ChangesView
+                  controller={controller}
+                  incidentId={incident.id}
+                  onNotify={showToast}
+                  remediation={incident.remediation}
+                />
+              )
             ) : null}
           </section>
           {diagnosisOpen ? (
             <DiagnosisPanel
               compact={compactDiagnosis}
+              {...(incident.diagnosis ? { diagnosis: incident.diagnosis } : {})}
               onClose={closeDiagnosis}
               onNotify={showToast}
               onOpenEvidence={openEvidence}
@@ -182,6 +203,7 @@ export function IncidentWorkspace({
           ) : (
             <DiagnosisLauncher
               compact={compactDiagnosis}
+              {...(incident.diagnosis ? { diagnosis: incident.diagnosis } : {})}
               onOpen={openDiagnosis}
             />
           )}

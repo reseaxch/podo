@@ -12,6 +12,11 @@ sandbox, system prompt, approval policy, or Codex identity. Check
 degraded reason, including `version_mismatch`, instead of assuming that process
 health or a basic App Server handshake means the configured model is usable.
 
+`getIncidentEvidence(incidentId)` reads the incident-owned evidence references
+with their normalized telemetry events. The client URL-encodes the incident
+identity, while Core remains responsible for resolving complete provenance and
+fails closed rather than returning a partial record set.
+
 `getIncidentCausalPath(incidentId, evidenceId)` reads the versioned,
 evidence-specific causal chain. Both identities are URL-encoded by the client;
 code graph and trusted deployment correlation remain server-side inputs. File

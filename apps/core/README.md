@@ -35,6 +35,12 @@ core-owned evidence IDs. The public incident then exposes either a validated
 diagnosis or a stable failure state; raw model output is never included in that
 projection and no diagnosis field authorizes remediation.
 
+`GET /api/incidents/:id/evidence` returns each incident-owned evidence reference
+paired with the normalized telemetry event that produced it. This is the
+authoritative rich-client boundary for metric values, messages, timestamps, and
+runtime identifiers; Core returns `409 evidence_unavailable` instead of a
+partial record set when stored provenance cannot be resolved.
+
 `GET /api/incidents/:id/causal-path?evidenceId=...` resolves the versioned
 incident-to-function chain for one evidence item. The handler accepts normalized
 code graph data and trusted deployment/container/commit/file correlation only

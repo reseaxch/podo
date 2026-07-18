@@ -118,6 +118,22 @@ test("typed client ingests telemetry and reads core-owned incidents", async () =
   const incidents = await client.listIncidents()
   expect(incidents.incidents).toEqual([result.incident])
   expect(await client.getIncident(result.incident!.id)).toEqual({ incident: result.incident })
+  const evidence = await client.getIncidentEvidence(result.incident.id)
+  expect(evidence.records).toHaveLength(6)
+  expect(evidence.records[0]).toEqual({
+    evidence: result.incident.evidence[0]!,
+    event: {
+      id: result.incident.evidence[0]!.sourceEventId,
+      ...metric(0, 180 * 1024 * 1024),
+    },
+  })
+  expect(evidence.records.at(-1)).toEqual({
+    evidence: result.incident.evidence.at(-1)!,
+    event: {
+      id: result.incident.evidence.at(-1)!.sourceEventId,
+      ...failure(5, "log", "trace-2", "JavaScript heap out of memory"),
+    },
+  })
 })
 
 test("typed client reads an evidence-specific production causal path", async () => {

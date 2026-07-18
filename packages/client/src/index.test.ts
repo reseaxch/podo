@@ -122,9 +122,11 @@ describe("createPodoClient", () => {
     })
 
     await client.getIncidentCausalPath("incident/1", "evidence?1")
+    await client.getIncidentEvidence("incident/1")
 
     expect(requestedUrls).toEqual([
       "http://podo.test/api/incidents/incident%2F1/causal-path?evidenceId=evidence%3F1",
+      "http://podo.test/api/incidents/incident%2F1/evidence",
     ])
   })
 

@@ -14,6 +14,7 @@ import type {
   GetBuildRemediationVerificationResponse,
   GetInvestigationResponse,
   GetIncidentCausalPathResponse,
+  GetIncidentEvidenceResponse,
   GetIncidentResponse,
   GetIncidentAuditResponse,
   GetIncidentIssueResponse,
@@ -86,6 +87,7 @@ export interface PodoAgentChatClient {
 export interface PodoIncidentClient extends PodoClient {
   startIncidentInvestigation(id: string, input: StartIncidentInvestigationRequest): Promise<StartIncidentInvestigationResponse>
   getIncidentCausalPath(id: string, evidenceId: string): Promise<GetIncidentCausalPathResponse>
+  getIncidentEvidence(id: string): Promise<GetIncidentEvidenceResponse>
 }
 
 export interface PodoIncidentAuditClient {
@@ -187,6 +189,7 @@ export function createPodoClient(options: PodoClientOptions = {}): PodoClient
     startIncidentIssue: (id) => command<StartIncidentIssueResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/issue`, "POST", {}),
     getIncidentIssue: async (id) => readJson<GetIncidentIssueResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/issue`)),
     getIncidentCausalPath: async (id, evidenceId) => readJson<GetIncidentCausalPathResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/causal-path?evidenceId=${encodeURIComponent(evidenceId)}`)),
+    getIncidentEvidence: async (id) => readJson<GetIncidentEvidenceResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/evidence`)),
     startIncidentInvestigation: (id, input) => command<StartIncidentInvestigationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/investigation`, "POST", input),
     startIncidentRemediation: (id) => command<StartIncidentRemediationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`, "POST", {}),
     getIncidentRemediation: async (id) => readJson<GetIncidentRemediationResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`)),

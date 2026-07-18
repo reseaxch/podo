@@ -63,6 +63,10 @@ export interface TelemetryEventInput {
   metric?: TelemetryMetricInput
 }
 
+export interface NormalizedTelemetryEvent extends TelemetryEventInput {
+  id: string
+}
+
 export interface RejectedTelemetryEvent {
   index: number
   reason: string
@@ -81,6 +85,11 @@ export interface IncidentEvidence {
   observedAt: string
   service: string
   deploymentId: string
+}
+
+export interface IncidentEvidenceRecord {
+  evidence: IncidentEvidence
+  event: NormalizedTelemetryEvent
 }
 
 export interface IncidentDiagnosisConfidence {
@@ -575,6 +584,10 @@ export interface ListIncidentsResponse {
 
 export interface GetIncidentResponse {
   incident: DetectedIncident
+}
+
+export interface GetIncidentEvidenceResponse {
+  records: IncidentEvidenceRecord[]
 }
 
 export const PODO_CAUSAL_PATH_SCHEMA_VERSION = "podo.causal-path.v1" as const

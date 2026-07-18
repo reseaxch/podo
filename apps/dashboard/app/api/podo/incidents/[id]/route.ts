@@ -1,42 +1,35 @@
-import type {
-  IncidentDelivery,
-  IncidentIssueDelivery,
-  IncidentRemediation,
-} from "@podo/contracts"
 import { NextResponse } from "next/server"
 
 import {
   createDashboardClient,
   incidentWorkingDirectory,
 } from "../../../../lib/dashboard-client"
+import {
+  getIncidentCausalPath,
+  getIncidentEvidenceRecords,
+  getIncidentWorkflow,
+  toCoreIncidentWorkspace,
+} from "../../../../lib/incident-data"
 
 type Context = { params: Promise<{ id: string }> }
-
-async function optional<T>(operation: () => Promise<T>): Promise<T | null> {
-  try {
-    return await operation()
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("(404)")) return null
-    throw error
-  }
-}
 
 export async function GET(_request: Request, context: Context) {
   const { id } = await context.params
   const client = createDashboardClient()
-  const [{ incident }, remediationResult, deliveryResult, issueResult] =
-    await Promise.all([
-      client.getIncident(id),
-      optional(() => client.getIncidentRemediation(id)),
-      optional(() => client.getIncidentDelivery(id)),
-      optional(() => client.getIncidentIssue(id)),
-    ])
+  const { incident } = await client.getIncident(id)
+  const [workflow, causalPath, records] = await Promise.all([
+    getIncidentWorkflow(id, client),
+    getIncidentCausalPath(incident, client),
+    getIncidentEvidenceRecords(id, client),
+  ])
 
   return NextResponse.json({
-    incident,
-    remediation: remediationResult?.remediation ?? null,
-    delivery: deliveryResult?.delivery ?? null,
-    issueDelivery: issueResult?.issueDelivery ?? null,
+    workspace: toCoreIncidentWorkspace({
+      incident,
+      records,
+      causalPath,
+      ...workflow,
+    }),
   })
 }
 
@@ -97,8 +90,5 @@ export async function POST(request: Request, context: Context) {
 }
 
 export type IncidentWorkflowResponse = {
-  incident: import("@podo/contracts").DetectedIncident
-  remediation: IncidentRemediation | null
-  delivery: IncidentDelivery | null
-  issueDelivery: IncidentIssueDelivery | null
+  workspace: import("../../../../lib/incident-types").IncidentWorkspaceViewModel
 }

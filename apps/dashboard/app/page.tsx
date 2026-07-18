@@ -4,8 +4,10 @@ import { ProductionIncidentWorkspace } from "./components/production-incident-wo
 import {
   getDemoIncidentWorkspace,
   getIncidentCausalPath,
+  getIncidentEvidenceRecords,
   getIncidentWorkflow,
   getIncidentWorkspace,
+  toCoreIncidentWorkspace,
 } from "./lib/incident-data"
 import type { IncidentTab } from "./lib/incident-types"
 import { isDemoDashboard } from "./lib/dashboard-client"
@@ -50,15 +52,20 @@ export default async function Page({ searchParams }: PageProps) {
     incidentId ? { incidentId } : undefined,
   )
   if (!incident) return <IncidentPageState kind="empty" />
-  const [workflow, causalPath] = await Promise.all([
+  const [workflow, causalPath, records] = await Promise.all([
     getIncidentWorkflow(incident.id),
     getIncidentCausalPath(incident),
+    getIncidentEvidenceRecords(incident.id),
   ])
   return (
     <ProductionIncidentWorkspace
-      incident={incident}
-      causalPath={causalPath}
-      {...workflow}
+      initialTab={initialTab}
+      workspace={toCoreIncidentWorkspace({
+        incident,
+        records,
+        causalPath,
+        ...workflow,
+      })}
     />
   )
 }

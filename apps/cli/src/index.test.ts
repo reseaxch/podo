@@ -22,6 +22,7 @@ function client(
     ingestTelemetry: async () => { throw new Error("unused") },
     listIncidents: async () => ({ incidents: [] }),
     getIncident: async () => { throw new Error("unused") },
+    getIncidentEvidence: async () => { throw new Error("unused") },
     getIncidentCausalPath: async () => { throw new Error("unused") },
     startIncidentInvestigation: async () => { throw new Error("unused") },
     startIncidentRemediation: async () => { throw new Error("unused") },
