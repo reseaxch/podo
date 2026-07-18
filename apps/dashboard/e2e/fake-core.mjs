@@ -10,6 +10,24 @@ const evidence = {
   service: "checkout-service",
   deploymentId: "deploy-1042",
 }
+const evidenceRecord = {
+  evidence,
+  event: {
+    id: evidence.sourceEventId,
+    timestamp: evidence.observedAt,
+    kind: evidence.sourceType,
+    service: evidence.service,
+    severity: "warn",
+    message: "process heap sample",
+    deploymentId: evidence.deploymentId,
+    containerId: "checkout-container",
+    metric: {
+      name: "process.heap.used",
+      value: 620 * 1024 * 1024,
+      unit: "By",
+    },
+  },
+}
 let incident
 let remediation = null
 let delivery = null
@@ -90,6 +108,11 @@ createServer(async (request, response) => {
     request.method === "GET"
   )
     return send(response, { incident })
+  if (
+    /^\/api\/incidents\/[^/]+\/evidence$/.test(url.pathname) &&
+    request.method === "GET"
+  )
+    return send(response, { records: [evidenceRecord] })
   if (
     url.pathname === "/api/incidents/incident_live/investigation" &&
     request.method === "POST"
