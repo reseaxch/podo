@@ -3,7 +3,7 @@ import { assertCodexRuntimeCompatibility, parseCodexVersion } from "./index"
 
 describe("parseCodexVersion", () => {
   test("parses the Codex CLI version", () => {
-    expect(parseCodexVersion("codex-cli 0.144.1\n")).toBe("0.144.1")
+    expect(parseCodexVersion("codex-cli 0.144.5\n")).toBe("0.144.5")
   })
 
   test("rejects unrecognized output", () => {
@@ -18,8 +18,8 @@ describe("parseCodexVersion", () => {
     })).toThrow("does not match pinned upstream")
     expect(assertCodexRuntimeCompatibility({
       binary: "codex",
-      version: "0.144.1",
-      rawVersion: "codex-cli 0.144.1",
-    })).toBe("0.144.1")
+      version: "0.144.5",
+      rawVersion: "codex-cli 0.144.5",
+    })).toBe("0.144.5")
   })
 })

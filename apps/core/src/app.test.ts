@@ -60,8 +60,8 @@ describe("Podo core handler", () => {
     const handler = createCoreHandler({
       inspectCodex: async () => ({
         binary: "codex",
-        version: "0.144.1",
-        rawVersion: "codex-cli 0.144.1",
+        version: "0.144.5",
+        rawVersion: "codex-cli 0.144.5",
       }),
     })
 
@@ -73,7 +73,7 @@ describe("Podo core handler", () => {
       codex: {
         available: true,
         transport: "stdio",
-        version: "0.144.1",
+        version: "0.144.5",
       },
     })
   })

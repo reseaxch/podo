@@ -331,7 +331,7 @@ to `main`:
 - `Workspace`: frozen Bun install followed by all workspace typechecks, tests,
   and builds;
 - `Dashboard`: formatting, lint, component tests, and Chromium Playwright flows;
-- `Codex compatibility`: installs Codex CLI `0.144.1`, matching the generated
+- `Codex compatibility`: installs Codex CLI `0.144.5`, matching the generated
   protocol metadata, and performs the live App Server handshake.
 
 Production deployment is intentionally not automated yet. Durable Core state,

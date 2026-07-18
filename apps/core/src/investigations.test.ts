@@ -385,7 +385,7 @@ describe("investigation orchestration", () => {
     const fresh = new FakeRuntime()
     let factoryCalls = 0
     const handler = createCoreHandler({
-      inspectCodex: async () => ({ binary: "codex", version: "0.144.1", rawVersion: "codex-cli 0.144.1" }),
+      inspectCodex: async () => ({ binary: "codex", version: "0.144.5", rawVersion: "codex-cli 0.144.5" }),
       runtime: crashed,
       createRuntime: async () => { factoryCalls += 1; return fresh },
     })

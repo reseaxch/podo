@@ -50,8 +50,8 @@ function fixture() {
       available: true,
       binary: "/usr/bin/codex",
       transport: "stdio",
-      version: "0.144.1",
-      rawVersion: "codex-cli 0.144.1",
+      version: "0.144.5",
+      rawVersion: "codex-cli 0.144.5",
     }),
   })
   const client = createPodoClient({
@@ -66,7 +66,7 @@ describe("agent chat", () => {
     const disabled = createPodoClient({
       baseUrl: "http://podo.test",
       fetch: (input, init) => createCoreHandler({
-        inspectCodex: async () => ({ available: true, binary: "/usr/bin/codex", transport: "stdio", version: "0.144.1", rawVersion: "codex-cli 0.144.1" }),
+        inspectCodex: async () => ({ available: true, binary: "/usr/bin/codex", transport: "stdio", version: "0.144.5", rawVersion: "codex-cli 0.144.5" }),
       })(new Request(input, init)),
     })
     await expect(disabled.agentReadiness()).resolves.toEqual({
@@ -84,7 +84,7 @@ describe("agent chat", () => {
 
     const unavailableHandler = createCoreHandler({
       agentChat: { cwd: "/operator/repository" },
-      inspectCodex: async () => ({ available: true, binary: "/usr/bin/codex", transport: "stdio", version: "0.144.1", rawVersion: "codex-cli 0.144.1" }),
+      inspectCodex: async () => ({ available: true, binary: "/usr/bin/codex", transport: "stdio", version: "0.144.5", rawVersion: "codex-cli 0.144.5" }),
       createRuntime: async () => { throw new Error("private transport error") },
     })
     const unavailable = createPodoClient({
@@ -243,7 +243,7 @@ describe("agent chat", () => {
       runtime,
       agentChat: { cwd: "/operator/repository" },
       sseHeartbeatMs: 5,
-      inspectCodex: async () => ({ binary: "codex", version: "0.144.1", rawVersion: "codex-cli 0.144.1" }),
+      inspectCodex: async () => ({ binary: "codex", version: "0.144.5", rawVersion: "codex-cli 0.144.5" }),
     })
     const client = createPodoClient({ baseUrl: "http://podo.test", fetch: (input, init) => handler(new Request(input, init)) })
     const created = await client.createAgentChat()
@@ -311,7 +311,7 @@ describe("agent chat", () => {
     const handler = createCoreHandler({
       runtime,
       agentChat: { cwd: "/operator/repository", turnTimeoutMs: 5 },
-      inspectCodex: async () => ({ binary: "codex", version: "0.144.1", rawVersion: "codex-cli 0.144.1" }),
+      inspectCodex: async () => ({ binary: "codex", version: "0.144.5", rawVersion: "codex-cli 0.144.5" }),
     })
     const client = createPodoClient({ baseUrl: "http://podo.test", fetch: (input, init) => handler(new Request(input, init)) })
     const created = await client.createAgentChat()

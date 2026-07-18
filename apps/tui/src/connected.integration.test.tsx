@@ -25,7 +25,7 @@ const readySystem = {
   service: "podo-core" as const,
   status: "ready" as const,
   version: "0.0.0",
-  codex: { available: true, binary: "codex", transport: "stdio" as const, version: "0.144.1" },
+  codex: { available: true, binary: "codex", transport: "stdio" as const, version: "0.144.5" },
   remediation: { configured: false },
 }
 
