@@ -178,7 +178,7 @@ describe("ProductionIncidentWorkspace", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole("button", {
-        name: /Affected code CheckoutCache\.set cache\.ts/i,
+        name: /Affected code\s*CheckoutCache\.set\s*cache\.ts/i,
       }),
     ).toBeInTheDocument()
   })
