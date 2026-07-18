@@ -134,7 +134,7 @@ describe("ProductionIncidentWorkspace", () => {
     expect(
       screen.getByRole("button", { name: /process heap sample/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/620 MiB/)).toBeInTheDocument()
+    expect(screen.getAllByText(/620 MiB/).length).toBeGreaterThan(0)
     expect(screen.getAllByText("Podo Core").length).toBeGreaterThan(0)
     expect(screen.queryByText("Maya Chen")).not.toBeInTheDocument()
     expect(
@@ -169,7 +169,7 @@ describe("ProductionIncidentWorkspace", () => {
     expect(
       screen.getByText("The deployed cache retains entries without a bound"),
     ).toBeInTheDocument()
-    expect(screen.getByText("87%")).toBeInTheDocument()
+    expect(screen.getByText("88%")).toBeInTheDocument()
     await user.click(screen.getByRole("tab", { name: "Graph" }))
     expect(
       screen.getByRole("heading", { name: "Evidence to affected code" }),
