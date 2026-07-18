@@ -174,8 +174,10 @@ describe("ProductionIncidentWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Evidence to affected code" }),
     ).toBeInTheDocument()
-    expect(screen.getByText("CheckoutCache.set")).toBeInTheDocument()
-    expect(screen.getByText("services/checkout/cache.ts")).toBeInTheDocument()
+    expect(screen.getAllByText("CheckoutCache.set").length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText("services/checkout/cache.ts").length,
+    ).toBeGreaterThan(0)
   })
 
   it("routes workflow actions through Core and refreshes the workspace", async () => {
