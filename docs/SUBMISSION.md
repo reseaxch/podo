@@ -109,12 +109,14 @@ Failed validation exposes issue fallback and never enables PR delivery.
 
 ## What Podo does
 
-Podo is an incident-to-fix developer tool. It connects runtime telemetry,
-deployments, commits, code, and GitHub Actions into one evidence graph. From a
-memory-growth or build incident, Podo identifies the affected service, selects
-the relevant evidence, validates a structured diagnosis, and prepares a small
-tested remediation in an isolated Git worktree. Human approval is required
-before remediation and again before pull-request delivery.
+Podo is an incident-to-fix developer tool. For runtime incidents, it connects
+telemetry, deployments, commits, and code in an evidence graph. GitHub Actions
+failures use a separate evidence-backed build-incident flow bound to the exact
+run, head, jobs, and steps. From either incident type, Podo selects relevant
+evidence, validates a structured diagnosis, and can prepare a small tested
+remediation in an isolated Git worktree. An explicit local operator approval
+boundary is required before remediation and again before pull-request delivery;
+authenticated actor identity remains post-hackathon hardening.
 
 The canonical proof is:
 
@@ -167,8 +169,9 @@ That makes the demo repeatable and offline after readiness while still testing
 the production Core orchestration, approval, worktree, regression, diff, and
 delivery boundaries. It does **not** claim that the deterministic remediation
 turns are live GPT-5.6 inference. `PODO_DEMO_MODE=live bun run demo` exercises
-the configured live Codex model and may correctly stop at issue fallback when
-the available evidence is insufficient.
+the production default `gpt-5.6-sol` model and may correctly stop without a
+verified remediation or pull request when the available evidence is
+insufficient. GitHub delivery and issue writes remain disabled in that mode.
 
 ## Devpost copy
 
@@ -178,13 +181,14 @@ Podo
 
 ### Tagline
 
-Evidence-backed incident response from runtime signal to a human-approved,
+Evidence-backed incident response from runtime signal to an operator-approved,
 tested pull request.
 
 ### Built with
 
-Codex, GPT-5.6, TypeScript, Bun, React, Next.js, OpenTUI, OpenTelemetry,
-GitHub Actions, Vitest, and Playwright.
+Codex, GPT-5.6, TypeScript, Bun, React, Next.js, OpenTUI,
+OpenTelemetry-compatible normalized telemetry replay, GitHub Actions, Vitest,
+and Playwright.
 
 ### Project description
 
@@ -197,23 +201,24 @@ produce a plausible answer without proving it.
 
 #### What it does
 
-Podo builds a living evidence graph across those systems. It detects a runtime
-or GitHub Actions incident, traces the symptom to the affected deployment,
-commit, file, and function, and returns a structured diagnosis whose material
-claims cite validated evidence. After explicit approval, Codex prepares a
-minimal patch and regression test in an isolated worktree. Podo independently
-requires red-before-green behavior and package validation, seals the exact Git
-tree, and requires a second approval before producing the matching pull request
-or preview. Failed validation goes to issue fallback, never delivery.
+For a runtime incident, Podo builds a living evidence graph from telemetry
+through deployment, commit, file, and function. For a GitHub Actions incident,
+it separately binds evidence to the exact workflow run, head, jobs, and steps.
+Both flows return a structured diagnosis whose material claims cite validated
+evidence. After explicit approval, Codex prepares a minimal patch and regression
+test in an isolated worktree. Podo independently requires red-before-green
+behavior and package validation, seals the exact Git tree, and requires a
+second approval before producing the matching pull request or preview. Failed
+validation can enter the separately gated issue fallback, never delivery.
 
 #### How we built it
 
 Podo is a Bun and TypeScript monorepo. Core owns incidents, evidence,
 investigations, approvals, remediation, delivery, and audit history. The
-Dashboard, CLI, and OpenTUI consume the same typed client. OpenTelemetry replay,
-Graphify import, and GitHub are replaceable adapters. Codex App Server is the
-supervised execution runtime, with generated protocol types pinned to Codex CLI
-`0.144.5`.
+Dashboard, CLI, and OpenTUI consume the same typed client. Normalized
+OpenTelemetry-compatible replay, Graphify import, and GitHub are replaceable
+adapters. Codex App Server is the supervised execution runtime, with generated
+protocol types pinned to Codex CLI `0.144.5`.
 
 The deterministic judge scenario reproduces a cache-growth defect across
 checkout, inventory, and notification services. It proves the full path from
@@ -228,14 +233,14 @@ security boundaries, and integrate the product into one vertical flow. Inside
 Podo, the same Codex App Server architecture powers investigation and
 remediation behind Core-owned approval and validation gates. For judging, Podo
 performs a live App Server handshake and uses deterministic remediation turns
-so the result is reproducible; an optional live mode exercises the configured
-model directly.
+so the result is reproducible; an optional live mode exercises the production
+default `gpt-5.6-sol` model directly.
 
 #### Challenges
 
 The hard part was not generating a patch. It was preserving evidence integrity
 and authority across every boundary: untrusted telemetry and model output,
-private Codex protocol state, human approvals, isolated Git worktrees,
+private Codex protocol state, explicit local approvals, isolated Git worktrees,
 red-before-green tests, exact-tree delivery, retries, crashes, and stale client
 state.
 
