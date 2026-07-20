@@ -17,8 +17,10 @@ import styles from "./operations-overview.module.css"
 
 export function OperationsOverview({
   overview,
+  source = "demo",
 }: {
   overview: OperationsOverviewViewModel
+  source?: "demo" | "core"
 }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
@@ -71,6 +73,7 @@ export function OperationsOverview({
         searchLabel="Search overview"
         searchPlaceholder="Search incidents and services..."
         section="Overview"
+        source={source}
       />
 
       <section className={styles.page}>

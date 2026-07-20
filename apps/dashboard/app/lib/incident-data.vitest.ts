@@ -146,7 +146,7 @@ describe("toCoreIncidentWorkspace", () => {
       },
     }
     const records: IncidentEvidenceRecord[] = cited.map(
-      ([id, kind, message, mebibytes], index) => ({
+      ([, kind, message, mebibytes], index) => ({
         evidence: selected.evidence[index]!,
         event: {
           id: `event-${index}`,

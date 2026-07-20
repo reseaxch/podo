@@ -1,7 +1,6 @@
 import type { createPodoClient } from "@podo/client"
 import type { IncidentDelivery, IncidentRemediation } from "@podo/contracts"
 
-import { incidentOverviewMock } from "../mocks/incidents"
 import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
 import type {
   IncidentOverviewStatus,
@@ -40,7 +39,10 @@ function workflowStatus(
 export async function getIncidentOverview(
   options: { client?: DashboardClient } = {},
 ): Promise<IncidentOverviewViewModel> {
-  if (isDemoDashboard()) return structuredClone(incidentOverviewMock)
+  if (isDemoDashboard()) {
+    const { incidentOverviewMock } = await import("../mocks/incidents")
+    return structuredClone(incidentOverviewMock)
+  }
 
   const client = options.client ?? createDashboardClient()
   const { incidents } = await client.listIncidents()
@@ -62,7 +64,7 @@ export async function getIncidentOverview(
       return {
         id: incident.id,
         title: `${incident.affectedService} ${incident.detector.replaceAll("_", " ")} incident`,
-        severity: "Unclassified",
+        severity: "Unknown",
         status,
         service: incident.affectedService,
         diagnosis:
@@ -76,7 +78,7 @@ export async function getIncidentOverview(
           dateStyle: "medium",
           timeStyle: "short",
         }).format(new Date(incident.updatedAt)),
-        owner: { name: "Unassigned", initials: "—" },
+        owner: { name: "Not provided by Core", initials: "—" },
         hasWorkspace: true,
         ...(status === "Awaiting approval"
           ? { attentionReason: "Needs approval" as const }
@@ -86,7 +88,7 @@ export async function getIncidentOverview(
   )
 
   return {
-    owner: { name: "Podo Core", avatar: "/icon.svg" },
+    owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
     generatedAt: "Updated from Core",
     incidents: summaries,
   }

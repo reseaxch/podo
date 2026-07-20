@@ -8,8 +8,10 @@ import { Topbar } from "../components/shell/topbar"
 
 export function ProductionSettingsWorkspace({
   initial,
+  mutationsEnabled = false,
 }: {
   initial: PodoSettings
+  mutationsEnabled?: boolean
 }) {
   const [saved, setSaved] = useState(initial)
   const [draft, setDraft] = useState(initial)
@@ -52,11 +54,12 @@ export function ProductionSettingsWorkspace({
         current="Settings"
         onNotify={setStatus}
         onQueryChange={() => undefined}
-        owner={{ name: "Podo Core", avatar: "/icon.svg" }}
+        owner={{ name: "Podo Core", avatar: "/brand/podo-logo.png" }}
         query=""
         searchLabel="Search settings"
         searchPlaceholder="Core settings"
         section="Settings"
+        source="core"
       />
       <section className="core-settings-page">
         <header>
@@ -130,7 +133,7 @@ export function ProductionSettingsWorkspace({
           <footer>
             <button
               className="secondary-button"
-              disabled={!dirty || saving}
+              disabled={!dirty || saving || !mutationsEnabled}
               onClick={() => setDraft(saved)}
               type="button"
             >
@@ -138,13 +141,18 @@ export function ProductionSettingsWorkspace({
             </button>
             <button
               className="primary-button"
-              disabled={!dirty || saving}
+              disabled={!dirty || saving || !mutationsEnabled}
               onClick={() => void save()}
               type="button"
             >
               {saving ? "Saving…" : "Save changes"}
             </button>
           </footer>
+          {!mutationsEnabled ? (
+            <p role="note">
+              Read-only: trusted operator mode is disabled for this deployment.
+            </p>
+          ) : null}
         </section>
       </section>
     </main>

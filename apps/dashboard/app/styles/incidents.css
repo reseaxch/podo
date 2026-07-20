@@ -63,9 +63,15 @@
   color: var(--text-subtle);
   font-size: 9px;
 }
-.incidents-heading .secondary-button {
+.incidents-heading .secondary-button,
+.incidents-heading .secondary-button:visited {
   min-height: 38px;
   padding: 0 14px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.incidents-heading .secondary-button:hover {
+  color: var(--text);
 }
 .overview-toggle {
   color: var(--muted);

@@ -9,6 +9,16 @@ vi.mock("next/navigation", () => ({
 }))
 
 describe("IconRail utilities", () => {
+  it("uses the Podo brand as the home destination", () => {
+    render(<IconRail />)
+
+    expect(screen.getByRole("link", { name: "Podo home" })).toHaveAttribute(
+      "href",
+      "/overview",
+    )
+    expect(screen.getByText("Podo")).toBeVisible()
+  })
+
   it("opens the mobile navigation, exposes every primary route, and restores focus", async () => {
     const user = userEvent.setup()
     render(<IconRail />)

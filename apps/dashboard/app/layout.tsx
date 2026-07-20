@@ -6,6 +6,11 @@ export const metadata: Metadata = {
   title: "Podo · Incident Workspace",
   description:
     "Evidence-backed incident investigation and Podo AI remediation.",
+  icons: {
+    icon: "/brand/podo-logo.png",
+    shortcut: "/brand/podo-logo.png",
+    apple: "/brand/podo-logo.png",
+  },
 }
 
 export default function RootLayout({

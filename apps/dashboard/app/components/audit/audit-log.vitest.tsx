@@ -32,6 +32,21 @@ describe("AuditLog", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("does not claim integrity or retention guarantees absent from Core", () => {
+    render(<AuditLog audit={auditLogMock} source="core" />)
+
+    expect(
+      screen.getByText("Integrity verification not provided"),
+    ).toBeVisible()
+    expect(
+      screen.getByText(/Retention policy is not supplied by Core/),
+    ).toBeVisible()
+    expect(screen.queryByText("Audit chain verified")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/All event hashes are intact/),
+    ).not.toBeInTheDocument()
+  })
+
   it("searches event payload context from the shared topbar", async () => {
     const user = userEvent.setup()
     render(<AuditLog audit={auditLogMock} />)

@@ -1,4 +1,3 @@
-import { evidenceSourceRecordsMock } from "../mocks/evidence-sources"
 import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
 import type {
   EvidenceSource,
@@ -56,7 +55,7 @@ export async function getEvidenceSources(): Promise<EvidenceSourcesViewModel> {
     const evidence = incidents.flatMap((incident) => incident.evidence)
     const kinds = Array.from(new Set(evidence.map((item) => item.sourceType)))
     return {
-      owner: { name: "Podo Core", avatar: "/icon.svg" },
+      owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
       generatedAt: "Updated from Core",
       sources: [
         {
@@ -89,6 +88,8 @@ export async function getEvidenceSources(): Promise<EvidenceSourcesViewModel> {
       ],
     }
   }
+  const { evidenceSourceRecordsMock } =
+    await import("../mocks/evidence-sources")
   return {
     owner: { name: "Maya Chen", avatar: "/maya-chen.jpg" },
     sources: evidenceSourceRecordsMock.map(adaptEvidenceSource),

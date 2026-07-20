@@ -228,4 +228,29 @@ describe("SafetyApprovals decision boundary", () => {
     expect(screen.getByText("No direct production mutations")).toBeVisible()
     expect(screen.queryByText("Verified pull requests")).not.toBeInTheDocument()
   })
+
+  it("explains Core metadata that is not available instead of inventing it", async () => {
+    const user = userEvent.setup()
+    render(
+      <SafetyApprovals
+        controller={controller()}
+        initial={{
+          ...safetyApprovalsMock,
+          currentActor: "Not provided by Core",
+          history: [],
+          policies: [],
+        }}
+        source="core"
+      />,
+    )
+
+    await user.click(screen.getByRole("tab", { name: /Decision history/ }))
+    expect(
+      screen.getByText("Decision history is not provided by Core"),
+    ).toBeVisible()
+    await user.click(screen.getByRole("tab", { name: /Policies/ }))
+    expect(
+      screen.getByText("Policy metadata is not provided by Core"),
+    ).toBeVisible()
+  })
 })

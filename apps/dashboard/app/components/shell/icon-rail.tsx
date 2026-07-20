@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { AgentPanel } from "../agent/agent-panel"
 import { Icon } from "../ui/pictogram"
+import { PodoLogo } from "./podo-logo"
 import { ShellOverlay, type ShellOverlayMode } from "./shell-overlay"
 
 export function IconRail() {
@@ -23,6 +24,7 @@ export function IconRail() {
     pathname === "/" ||
     pathname === "/demo" ||
     pathname.startsWith("/incidents")
+  const buildIncidentsActive = pathname.startsWith("/build-incidents")
   const auditActive = pathname.startsWith("/audit")
   const evidenceActive = pathname.startsWith("/evidence-sources")
   const graphActive = pathname.startsWith("/system-graph")
@@ -109,7 +111,10 @@ export function IconRail() {
     <>
       <aside className="icon-rail" aria-label="Primary navigation">
         <Link className="brand-mark" aria-label="Podo home" href="/overview">
-          <Icon name="cube" size={21} />
+          <PodoLogo className="brand-logo" size={26} />
+          <span aria-hidden="true" className="brand-name">
+            Podo
+          </span>
         </Link>
         <nav>
           <div aria-label="Operations" className="rail-section" role="group">
@@ -138,6 +143,17 @@ export function IconRail() {
                   <Icon name="trend-up" />
                 </span>
                 <span className="rail-label">Incidents</span>
+              </Link>
+              <Link
+                aria-current={buildIncidentsActive ? "page" : undefined}
+                aria-label="Build incidents"
+                className={buildIncidentsActive ? "active" : undefined}
+                href="/build-incidents"
+              >
+                <span className="rail-icon">
+                  <Icon name="wrench" />
+                </span>
+                <span className="rail-label">Build incidents</span>
               </Link>
               <Link
                 aria-current={evidenceActive ? "page" : undefined}
@@ -267,7 +283,7 @@ export function IconRail() {
           >
             <header>
               <span>
-                <Icon name="cube" size={18} />
+                <PodoLogo className="mobile-brand-logo" size={22} />
                 <strong>Navigate Podo</strong>
               </span>
               <button
@@ -306,6 +322,14 @@ export function IconRail() {
                 onClick={() => closeMobileNavigation(false)}
               >
                 <Icon name="trend-up" /> Incidents
+              </Link>
+              <Link
+                aria-current={buildIncidentsActive ? "page" : undefined}
+                className={buildIncidentsActive ? "active" : undefined}
+                href="/build-incidents"
+                onClick={() => closeMobileNavigation(false)}
+              >
+                <Icon name="wrench" /> Build incidents
               </Link>
               <Link
                 aria-current={evidenceActive ? "page" : undefined}

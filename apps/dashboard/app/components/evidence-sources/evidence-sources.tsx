@@ -166,6 +166,7 @@ export function EvidenceSources({
         query={query}
         searchLabel="Search evidence sources"
         searchPlaceholder="Search sources..."
+        source={readOnly ? "core" : "demo"}
       />
 
       <section className={styles.page}>

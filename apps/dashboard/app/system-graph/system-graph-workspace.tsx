@@ -70,8 +70,10 @@ function graphPath(from: SystemGraphNode, to: SystemGraphNode) {
 
 export function SystemGraphWorkspace({
   graph,
+  source = "demo",
 }: {
   graph: SystemGraphViewModel
+  source?: "demo" | "core"
 }) {
   const [query, setQuery] = useState("")
   const [layer, setLayer] = useState<LayerFilter>("all")
@@ -330,6 +332,7 @@ export function SystemGraphWorkspace({
         query={query}
         searchLabel="Search system graph"
         searchPlaceholder="Search services, commits, owners..."
+        source={source}
       />
 
       <section className={styles.page}>

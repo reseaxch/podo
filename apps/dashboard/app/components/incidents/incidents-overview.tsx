@@ -37,8 +37,10 @@ function isVisibleForFilter(incident: IncidentSummary, filter: ViewFilter) {
 
 export function IncidentsOverview({
   overview,
+  source = "demo",
 }: {
   overview: IncidentOverviewViewModel
+  source?: "demo" | "core"
 }) {
   const router = useRouter()
   const [filter, setFilter] = useState<ViewFilter>("Active")
@@ -99,6 +101,7 @@ export function IncidentsOverview({
         query={query}
         searchLabel="Search incidents"
         searchPlaceholder="Search incidents..."
+        source={source}
       />
       <section className="incidents-page">
         <header className="incidents-heading">

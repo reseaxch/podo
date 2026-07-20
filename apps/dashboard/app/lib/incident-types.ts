@@ -28,6 +28,7 @@ export type IconName =
   | "git-branch"
   | "git-diff"
   | "git-fork"
+  | "github"
   | "graph"
   | "list-bullets"
   | "magnifying-glass"

@@ -31,6 +31,7 @@ const evidenceRecord = {
 let incident
 let remediation = null
 let delivery = null
+let buildIncident
 const unsafeIssues = new Map()
 
 function unsafeIncident(id) {
@@ -76,6 +77,63 @@ function reset() {
   }
   remediation = null
   delivery = null
+  buildIncident = {
+    id: "build:reseaxch/podo:1042:1",
+    status: "awaiting_action",
+    detector: "github_actions_failure",
+    provider: "github_actions",
+    repository: "reseaxch/podo",
+    affectedService: "dashboard",
+    workflow: { id: 81, name: "CI", path: ".github/workflows/ci.yml" },
+    sourceRun: {
+      id: 1042,
+      workflowId: 81,
+      workflowName: "CI",
+      workflowPath: ".github/workflows/ci.yml",
+      runNumber: 52,
+      attempt: 1,
+      event: "push",
+      headBranch: "main",
+      headSha: "abcdef1234567890",
+      status: "completed",
+      conclusion: "failure",
+      createdAt: now,
+      updatedAt: now,
+      url: "https://github.com/reseaxch/podo/actions/runs/1042",
+    },
+    evidence: [
+      {
+        id: "build-evidence-step",
+        sourceId: "step:4",
+        sourceType: "github_actions_step",
+        observedAt: now,
+        repository: "reseaxch/podo",
+        runId: 1042,
+        runAttempt: 1,
+        headSha: "abcdef1234567890",
+        summary: "Dashboard typecheck failed",
+        jobId: 77,
+        jobName: "dashboard",
+        stepNumber: 4,
+        stepName: "Typecheck",
+        status: "completed",
+        conclusion: "failure",
+      },
+    ],
+    diagnosis: {
+      status: "validated",
+      schemaVersion: "podo.diagnosis.v1",
+      summary: "The dashboard typecheck failed after the latest commit.",
+      affectedService: "dashboard",
+      probableRootCause: "A route imports a missing component.",
+      confidence: { value: 9100, scale: "basis_points" },
+      evidenceIds: ["build-evidence-step"],
+      recommendedAction: "Retry the exact failed run once.",
+      safeToAttemptFix: true,
+    },
+    createdAt: now,
+    updatedAt: now,
+  }
 }
 reset()
 
@@ -98,6 +156,70 @@ createServer(async (request, response) => {
   }
   if (url.pathname === "/api/incidents" && request.method === "GET")
     return send(response, { incidents: [incident] })
+  if (url.pathname === "/api/build-incidents" && request.method === "GET")
+    return send(response, { incidents: [buildIncident] })
+  const buildMatch = url.pathname.match(/^\/api\/build-incidents\/([^/]+)$/)
+  if (buildMatch?.[1] && request.method === "GET")
+    return send(response, { incident: buildIncident })
+  const buildAuditMatch = url.pathname.match(
+    /^\/api\/build-incidents\/([^/]+)\/audit$/,
+  )
+  if (buildAuditMatch?.[1] && request.method === "GET")
+    return send(response, {
+      events: [
+        {
+          sequence: 1,
+          occurredAt: now,
+          incidentId: buildIncident.id,
+          kind: "build.incident_created",
+        },
+      ],
+    })
+  const buildRetryMatch = url.pathname.match(
+    /^\/api\/build-incidents\/([^/]+)\/retry$/,
+  )
+  if (buildRetryMatch?.[1] && request.method === "POST") {
+    buildIncident = {
+      ...buildIncident,
+      status: "retry_pending_approval",
+      retry: {
+        id: "retry-1",
+        status: "pending_approval",
+        approval: { id: "approval-1", status: "pending" },
+        sourceRun: {
+          id: 1042,
+          attempt: 1,
+          headSha: buildIncident.sourceRun.headSha,
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+    }
+    return send(
+      response,
+      { incident: buildIncident, retry: buildIncident.retry },
+      201,
+    )
+  }
+  const buildRetryApprovalMatch = url.pathname.match(
+    /^\/api\/build-incidents\/([^/]+)\/retry\/approvals\/([^/]+)$/,
+  )
+  if (buildRetryApprovalMatch?.[1] && request.method === "POST") {
+    buildIncident = {
+      ...buildIncident,
+      status: "awaiting_ci_result",
+      retry: {
+        ...buildIncident.retry,
+        status: "awaiting_ci_result",
+        approval: { id: "approval-1", status: "approved" },
+        updatedAt: now,
+      },
+    }
+    return send(response, {
+      incident: buildIncident,
+      retry: buildIncident.retry,
+    })
+  }
   const unsafeIncidentMatch = url.pathname.match(
     /^\/api\/incidents\/(incident_unsafe_[^/]+)$/,
   )
