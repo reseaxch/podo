@@ -40,6 +40,7 @@ The canonical product documents are:
 - [MVP plan](docs/MVP_PLAN.md)
 - [Use cases](docs/USE_CASES.md)
 - [Workstream ownership](docs/WORKSTREAMS.md)
+- [Submission and judge guide](docs/SUBMISSION.md)
 
 ## POC completion path
 
@@ -60,9 +61,10 @@ canonical graph + telemetry replay
 The deterministic POC keeps state in memory and uses a fake pull-request
 delivery port so `bun run poc` remains offline and reproducible. The same sealed
 artifact now has an opt-in real GitHub delivery composition for operator runs.
-The MVP still needs durable operations and reconciliation, authenticated actor
-identity, complete audit persistence, judge setup, eval baselines, benchmarks,
-and final submission artifacts. Failed validation must never reach either path.
+Post-hackathon hardening still needs durable operations and reconciliation,
+authenticated actor identity, and complete audit persistence. External
+submission artifacts such as the final video and `/feedback` session ID remain
+owner-provided. Failed validation must never reach either path.
 
 ## System shape
 
@@ -324,12 +326,30 @@ Before starting a task, read [AGENTS.md](AGENTS.md), the MVP plan, and the relev
 
 ## Getting started
 
-Clone the repository with the pinned Codex upstream checkout and install the Bun workspace:
+The exact judge setup, supported platforms, submission copy, and video plan are
+in the [submission and judge guide](docs/SUBMISSION.md).
+
+Install the pinned runtime versions:
 
 ```sh
-git clone --recurse-submodules git@github.com:reseaxch/podo.git
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"
+npm install --global @openai/codex@0.144.5
+```
+
+Clone the repository over HTTPS with the pinned Codex upstream checkout and
+install the locked Bun workspace:
+
+```sh
+git clone --recurse-submodules https://github.com/reseaxch/podo.git
 cd podo
-bun install
+bun install --frozen-lockfile
+```
+
+Run the finite judge preflight, then the interactive demo:
+
+```sh
+bun run demo:verify
+bun run demo
 ```
 
 To connect Podo to your own repository, follow the

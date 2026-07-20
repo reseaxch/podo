@@ -132,4 +132,57 @@ describe("IncidentMonitor", () => {
       expect(result.incident).toBeNull()
     }
   })
+
+  test("binds comparison telemetry to one later deployment by absolute instant", () => {
+    const monitor = new IncidentMonitor()
+    const detected = monitor.ingest(cacheGrowth)
+    if (!detected.incident) throw new Error("expected cache-growth incident")
+
+    const trustedAfter = [{
+      ...metric(5, 180, "deploy-fixed"),
+      timestamp: "2026-07-14T10:01:15.000+01:00",
+      commitId: "fixed-head",
+    }]
+
+    const windows = monitor.getTelemetryComparisonWindows(
+      detected.incident.id,
+      {
+        commitId: "fixed-head",
+        events: trustedAfter,
+      },
+    )
+    expect(windows?.before).toHaveLength(cacheGrowth.length)
+    expect(windows?.after).toHaveLength(1)
+    expect(windows?.after[0]?.deploymentId).toBe("deploy-fixed")
+
+    expect(
+      monitor.getTelemetryComparisonWindows(
+        detected.incident.id,
+        {
+          commitId: "fixed-head",
+          events: [{
+            ...metric(6, 181, "deploy-fixed"),
+            timestamp: "2026-07-14T08:01:00.000-01:00",
+            commitId: "fixed-head",
+          }],
+        },
+      ),
+    ).toBeNull()
+
+    expect(
+      monitor.getTelemetryComparisonWindows(
+        detected.incident.id,
+        {
+          commitId: "fixed-head",
+          events: [
+            trustedAfter[0]!,
+            {
+              ...metric(7, 182, "deploy-other"),
+              commitId: "fixed-head",
+            },
+          ],
+        },
+      ),
+    ).toBeNull()
+  })
 })

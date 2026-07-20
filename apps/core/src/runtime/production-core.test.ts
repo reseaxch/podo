@@ -2,6 +2,12 @@ import { expect, test } from "bun:test"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import type {
+  CodexRuntime,
+  CodexRuntimeEvent,
+  StartCodexThreadInput,
+} from "@podo/codex-app-server-client"
+
 import { createProductionCoreHandler } from "./production-core"
 
 const configuredRepository = resolve("/configured/repository")
@@ -65,6 +71,36 @@ test("production composition keeps the incident graph disabled by default", asyn
   })
 
   expect(receivedIncidentGraph).toBeUndefined()
+})
+
+test("production composition supplies a model-selecting runtime factory", async () => {
+  let receivedCreateRuntime: (() => Promise<CodexRuntime>) | undefined
+  const started: StartCodexThreadInput[] = []
+  const baseRuntime: CodexRuntime = {
+    async startThread(input) {
+      started.push(input)
+      return { threadId: "thread-1" }
+    },
+    async resumeThread(threadId) { return { threadId } },
+    async startTurn() { return { turnId: "turn-1" } },
+    async steerTurn() { return { turnId: "turn-1" } },
+    async interruptTurn() {},
+    async resolveApproval() {},
+    onEvent(_listener: (event: CodexRuntimeEvent) => void) { return () => {} },
+    async close() {},
+  }
+
+  await createProductionCoreHandler({}, {
+    codexRuntime: { async connect() { return baseRuntime } },
+    createHandler(options) {
+      receivedCreateRuntime = options.createRuntime
+      return async () => new Response()
+    },
+  })
+
+  const runtime = await receivedCreateRuntime!()
+  await runtime.startThread({ cwd: "/repo", sandbox: "read-only" })
+  expect(started).toEqual([{ cwd: "/repo", sandbox: "read-only", model: "gpt-5.6-sol" }])
 })
 
 test("production composition injects the opt-in read-only agent chat", async () => {

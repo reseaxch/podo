@@ -1,5 +1,6 @@
 import {
   InMemoryTelemetryStore,
+  normalizeTelemetryEvent,
   stableId,
   type TelemetryEvent,
 } from "../telemetry"
@@ -18,6 +19,16 @@ export interface IncidentMonitorResult {
   ingestion: TelemetryIngestionResult
   reaction: IncidentReaction
   incident: DetectedIncident | null
+}
+
+export interface IncidentTelemetryComparisonWindows {
+  before: TelemetryEvent[]
+  after: TelemetryEvent[]
+}
+
+export interface IncidentTelemetryComparisonSelection {
+  commitId: string
+  events: readonly TelemetryEventInput[]
 }
 
 interface SignalGroup {
@@ -111,6 +122,55 @@ export class IncidentMonitor {
       })
     }
     return records
+  }
+
+  getTelemetryComparisonWindows(
+    id: string,
+    selection: IncidentTelemetryComparisonSelection,
+  ): IncidentTelemetryComparisonWindows | null {
+    const incident = this.incidents.get(id)
+    if (!incident) return null
+    const telemetry = this.telemetry.list()
+    const byId = new Map(telemetry.map((event) => [event.id, event]))
+    const before: TelemetryEvent[] = []
+    for (const evidence of incident.evidence) {
+      const event = byId.get(evidence.sourceEventId)
+      if (!event) return null
+      before.push(structuredClone(event))
+    }
+    const beforeInstants = before.map((event) => Date.parse(event.timestamp))
+    if (
+      beforeInstants.length === 0 ||
+      beforeInstants.some((instant) => !Number.isFinite(instant))
+    ) {
+      return null
+    }
+    const latestBeforeInstant = Math.max(...beforeInstants)
+    if (!Array.isArray(selection.events) || selection.events.length === 0) {
+      return null
+    }
+    const after: TelemetryEvent[] = []
+    for (const input of selection.events) {
+      const event = normalizeTelemetryEvent(input)
+      if (
+        typeof event === "string" ||
+        event.service !== incident.affectedService ||
+        Date.parse(event.timestamp) <= latestBeforeInstant ||
+        event.commitId !== selection.commitId ||
+        event.deploymentId === undefined ||
+        event.deploymentId === incident.deploymentId
+      ) {
+        return null
+      }
+      after.push(event)
+    }
+    if (new Set(after.map((event) => event.id)).size !== after.length) {
+      return null
+    }
+    if (new Set(after.map((event) => event.deploymentId)).size > 1) {
+      return null
+    }
+    return { before, after }
   }
 }
 

@@ -5,6 +5,7 @@ import type {
   ApprovalDecisionRequest,
   GitHubActionsWorkflowRunSignal,
   HealthResponse,
+  IncidentPostFixReplaySource,
   IncidentRemediationDecisionRequest,
   IngestTelemetryRequest,
   InvestigationEvent,
@@ -22,6 +23,9 @@ import {
 import { AgentChatService, type AgentChatConfig } from "./agent-chat"
 import { InvestigationService } from "./investigations"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
+import {
+  IncidentTelemetryComparisonService,
+} from "./modules/incidents/incident-telemetry-comparison"
 import { BuildIncidentRegistry } from "./modules/incidents/build-incident-registry"
 import {
   BuildIncidentActionService,
@@ -53,6 +57,7 @@ export interface CoreHandlerOptions {
   agentChat?: AgentChatConfig
   sseHeartbeatMs?: number
   githubActions?: CoreGitHubActionsConfig
+  postFixReplays?: IncidentPostFixReplaySource
 }
 
 export interface CoreGitHubActionsConfig extends BuildIncidentActionsPort {
@@ -183,6 +188,23 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
   }
   const incidentRemediations = new IncidentRemediationService(remediationSource, settings, remediationExecutor)
   const incidentDeliveries = new IncidentDeliveryService(incidentRemediations, settings, options.pullRequestDelivery)
+  const incidentTelemetryComparisons = new IncidentTelemetryComparisonService(
+    incidentMonitor,
+    {
+      getTrustedDelivery(incidentId) {
+        const result = incidentDeliveries.get(incidentId)
+        if (!result.ok || result.delivery.status !== "delivered") return null
+        const headSha = result.delivery.pullRequest?.headSha
+        if (!headSha) return null
+        return {
+          remediationId: result.delivery.remediationId,
+          artifactId: result.delivery.artifactId,
+          headSha,
+        }
+      },
+    },
+    options.postFixReplays,
+  )
   const incidentIssues = new IncidentIssueService(
     incidentMonitor,
     incidentInvestigations,
@@ -381,7 +403,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
       const incidentId = decodeURIComponent(buildIncidentAuditMatch[1])
       if (!buildIncidents?.get(incidentId)) return json({ error: "not_found" }, 404)
-      return json({ events: incidentAudit.getBuild(incidentId) })
+      return json(incidentAudit.readBuild(incidentId))
     }
 
     const buildIncidentRetryApprovalMatch = url.pathname.match(
@@ -463,7 +485,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
       const incidentId = decodeURIComponent(incidentAuditMatch[1])
       if (!incidentMonitor.getIncident(incidentId)) return json({ error: "not_found" }, 404)
-      return json({ events: incidentAudit.get(incidentId) })
+      return json(incidentAudit.read(incidentId))
     }
 
     const incidentInvestigationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/investigation$/)
@@ -617,6 +639,30 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
           error: "evidence_unavailable",
           message: "Incident evidence could not be resolved to normalized telemetry",
         }, 409)
+    }
+
+    const incidentTelemetryComparisonMatch = url.pathname.match(
+      /^\/api\/incidents\/([^/]+)\/telemetry-comparison$/,
+    )
+    if (incidentTelemetryComparisonMatch?.[1]) {
+      if (request.method !== "GET") {
+        return json({ error: "method_not_allowed" }, 405)
+      }
+      if ([...url.searchParams.keys()].length > 0) {
+        return json({ error: "invalid_request" }, 400)
+      }
+      const result = incidentTelemetryComparisons.read(
+        decodeURIComponent(incidentTelemetryComparisonMatch[1]),
+      )
+      return result.ok
+        ? json({
+            comparison: result.comparison,
+            provenance: result.provenance,
+          })
+        : json(
+            { error: result.error, message: result.message },
+            result.status,
+          )
     }
 
     const incidentMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)$/)

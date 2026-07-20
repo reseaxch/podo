@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "artifactKind": "reviewed_aggregate_baseline",
+  "evaluationKind": "deterministic_reference",
+  "modelBacked": false,
+  "suite": "podo-reaction-matrix",
+  "fixtureAdapterVersion": 2,
+  "scenarioFingerprint": "sha256:4aaf90e58ebf57f20dae14696d62fe1bada16bcd0676f2f6ccd31092f7237456",
+  "implementationFingerprint": "sha256:673abb55f5ef34ba394b4da3207b1226cf65e58a42b576798b33183a5f6a6aa1",
+  "aggregate": {
+    "status": "passed",
+    "summary": {
+      "caseCount": 15,
+      "passedCases": 15,
+      "failedCases": 0,
+      "hardFailureCount": 0,
+      "score": 1
+    },
+    "metrics": {
+      "incidentDetection": 1,
+      "evidenceSufficiency": 1,
+      "nextAction": 1,
+      "approvalPolicy": 1,
+      "deliverySafety": 1
+    },
+    "contractErrorCount": 0
+  }
+}

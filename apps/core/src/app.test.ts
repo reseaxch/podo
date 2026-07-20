@@ -193,6 +193,114 @@ describe("Podo core handler", () => {
     }
   })
 
+  test("fails incident telemetry comparison reads closed for invalid or incomplete state", async () => {
+    const handler = createCoreHandler()
+    const incident = await ingestCausalPathIncident(handler)
+    const path = `/api/incidents/${incident.id}/telemetry-comparison`
+    const controls = [
+      {
+        request: new Request(`http://podo.test${path}`),
+        status: 409,
+        error: "comparison_unavailable",
+      },
+      {
+        request: new Request(`http://podo.test${path}?unexpected=true`),
+        status: 400,
+        error: "invalid_request",
+      },
+      {
+        request: new Request(`http://podo.test${path}`, { method: "POST" }),
+        status: 405,
+        error: "method_not_allowed",
+      },
+      {
+        request: new Request(
+          "http://podo.test/api/incidents/unknown/telemetry-comparison",
+        ),
+        status: 404,
+        error: "not_found",
+      },
+    ]
+
+    for (const control of controls) {
+      const response = await handler(control.request)
+      const body = (await response.json()) as Record<string, unknown>
+      expect(response.status).toBe(control.status)
+      expect(body.error).toBe(control.error)
+      expect(body.comparison).toBeUndefined()
+    }
+
+    const invalidAfter = await handler(
+      new Request("http://podo.test/api/telemetry/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          events: [{
+            timestamp: "2026-07-14T10:00:00.000Z",
+            kind: "metric",
+            service: "checkout-service",
+            severity: "info",
+            message: "post-fix heap sample with an incompatible unit",
+            deploymentId: "deploy-1043",
+            metric: {
+              name: "process.heap.used",
+              value: 180,
+              unit: "MiB",
+            },
+          }],
+        }),
+      }),
+    )
+    expect(invalidAfter.status).toBe(200)
+
+    const invalidWindow = await handler(
+      new Request(`http://podo.test${path}`),
+    )
+    expect(invalidWindow.status).toBe(409)
+    expect(await invalidWindow.json()).toEqual({
+      error: "comparison_unavailable",
+      message:
+        "Comparable post-fix telemetry is not available for this incident",
+    })
+
+    const ambiguousHandler = createCoreHandler()
+    const ambiguousIncident = await ingestCausalPathIncident(ambiguousHandler)
+    const ambiguousAfter = await ambiguousHandler(
+      new Request("http://podo.test/api/telemetry/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          events: ["deploy-1043", "deploy-1044"].map(
+            (deploymentId, index) => ({
+              timestamp: `2026-07-14T10:00:0${index}.000Z`,
+              kind: "metric",
+              service: "checkout-service",
+              severity: "info",
+              message: "post-fix heap sample",
+              deploymentId,
+              metric: {
+                name: "process.heap.used",
+                value: 180 * 1024 * 1024,
+                unit: "By",
+              },
+            }),
+          ),
+        }),
+      }),
+    )
+    expect(ambiguousAfter.status).toBe(200)
+
+    const ambiguousWindow = await ambiguousHandler(
+      new Request(
+        `http://podo.test/api/incidents/${ambiguousIncident.id}/telemetry-comparison`,
+      ),
+    )
+    expect(ambiguousWindow.status).toBe(409)
+    expect(await ambiguousWindow.json()).toMatchObject({
+      error: "comparison_unavailable",
+    })
+  })
+
   test("returns one stable unresolved error for missing or ambiguous trusted graph provenance", async () => {
     const correlation = {
       deploymentId: "deploy-1042",

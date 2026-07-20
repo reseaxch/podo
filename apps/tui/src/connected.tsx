@@ -4,6 +4,7 @@ import type {
   Investigation,
   InvestigationApproval,
   InvestigationEvent,
+  InvestigationToolKind,
   PodoSettings,
   SystemStatusResponse,
 } from "@podo/contracts"
@@ -20,6 +21,17 @@ import {
 
 const MAX_ACTIVITY_EVENTS = 32
 const DEFAULT_RECONNECT_DELAY_MS = 250
+const TOOL_ACTIVITY_LABELS: Record<InvestigationToolKind, string> = {
+  command: "Command",
+  file_change: "File change",
+  mcp: "MCP",
+  dynamic: "Dynamic",
+  collaboration: "Collaboration",
+  web_search: "Web search",
+  image_view: "Image view",
+  sleep: "Sleep",
+  image_generation: "Image generation",
+}
 
 interface CoreSnapshot {
   system: SystemStatusResponse
@@ -99,6 +111,8 @@ export function toTuiActivity(event: InvestigationEvent): TuiInvestigationActivi
       case "investigation.started": return "Investigation started"
       case "investigation.running": return "Investigation running"
       case "output.delta": return "Agent output received"
+      case "tool.step":
+        return `${TOOL_ACTIVITY_LABELS[event.payload.step.tool]} tool ${event.payload.step.status}`
       case "approval.requested": return "Approval requested"
       case "approval.resolved": return "Approval resolved"
       case "investigation.completed": return "Investigation completed"
@@ -274,6 +288,7 @@ function applyInvestigationEvent(
     case "investigation.running":
       return { ...next, status: "running", pendingApproval: null }
     case "output.delta":
+    case "tool.step":
       return next
     case "approval.requested":
       return {

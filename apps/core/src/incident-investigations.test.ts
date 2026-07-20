@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import type { CodexRuntime, CodexRuntimeEvent, StartCodexThreadInput } from "@podo/codex-app-server-client"
+import {
+  AppServerRuntime,
+  type CodexRuntime,
+  type CodexRuntimeEvent,
+  type StartCodexThreadInput,
+} from "@podo/codex-app-server-client"
 import { createPodoClient } from "../../../packages/client/src/index"
 import { createCoreHandler } from "./app"
 import { IncidentMonitor } from "./modules/incidents/incident-monitor"
@@ -48,6 +53,30 @@ class SynchronousApprovalRuntime extends RecordingRuntime {
   }
 }
 
+type RuntimeTransport = ConstructorParameters<typeof AppServerRuntime>[0]
+type ServerNotification = Parameters<Parameters<RuntimeTransport["onNotification"]>[0]>[0]
+type ServerRequest = Parameters<Parameters<RuntimeTransport["onServerRequest"]>[0]>[0]
+
+class NotificationTransport {
+  private notificationListener?: (notification: ServerNotification) => void
+
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") return { thread: { id: "private-thread-1" } }
+    if (method === "turn/start") return { turn: { id: "private-turn-1" } }
+    return {}
+  }
+  async respond() {}
+  async rejectServerRequest() {}
+  onNotification(listener: (notification: ServerNotification) => void) {
+    this.notificationListener = listener
+    return () => {}
+  }
+  onServerRequest(_listener: (request: ServerRequest) => void) { return () => {} }
+  onClose(_listener: (error: Error) => void) { return () => {} }
+  async close() {}
+  notify(notification: ServerNotification) { this.notificationListener?.(notification) }
+}
+
 function incidentTelemetry() {
   const base = Date.parse("2026-07-14T09:00:00.000Z")
   const metric = (step: number, value: number) => ({
@@ -86,7 +115,21 @@ async function openIncident(client: ReturnType<typeof createPodoClient>): Promis
   return result.incident.id
 }
 
-function testClient(runtime = new RecordingRuntime(), incidentMonitor?: IncidentMonitor) {
+interface TestClientResult<T extends CodexRuntime> {
+  client: ReturnType<typeof createPodoClient>
+  handler: ReturnType<typeof createCoreHandler>
+  runtime: T
+}
+
+function testClient(): TestClientResult<RecordingRuntime>
+function testClient<T extends CodexRuntime>(
+  runtime: T,
+  incidentMonitor?: IncidentMonitor,
+): TestClientResult<T>
+function testClient(
+  runtime: CodexRuntime = new RecordingRuntime(),
+  incidentMonitor?: IncidentMonitor,
+): TestClientResult<CodexRuntime> {
   const handler = createCoreHandler({ runtime, ...(incidentMonitor ? { incidentMonitor } : {}) })
   const client = createPodoClient({
     baseUrl: "http://podo.test",
@@ -132,6 +175,163 @@ function complete(runtime: RecordingRuntime, output: string): void {
 }
 
 describe("incident-scoped investigation", () => {
+  test("audits ordered App Server tool lifecycle without exposing provider input or output", async () => {
+    const transport = new NotificationTransport()
+    const runtime = new AppServerRuntime(transport)
+    const { client } = testClient(runtime)
+    const incidentId = await openIncident(client)
+    await client.updateSettings({ autonomyMode: "recommend" })
+    const started = await client.startIncidentInvestigation(incidentId, { cwd: "/repo" })
+    const command = "curl -H 'Authorization: Bearer private-command-token' https://private.example"
+    const commandOutput = "response private-output-token"
+    const mcpArguments = { apiKey: "private-mcp-token", query: "secret customer" }
+    const mcpResult = { content: ["private-mcp-output"], structuredContent: null, _meta: null }
+
+    transport.notify({
+      method: "item/started",
+      params: {
+        threadId: "private-thread-1",
+        turnId: "private-turn-1",
+        startedAtMs: 1,
+        item: {
+          type: "commandExecution",
+          id: "private-command-item",
+          command,
+          cwd: "/private/repository",
+          processId: null,
+          source: "agent",
+          status: "inProgress",
+          commandActions: [],
+          aggregatedOutput: null,
+          exitCode: null,
+          durationMs: null,
+        },
+      },
+    } as ServerNotification)
+    transport.notify({
+      method: "item/started",
+      params: {
+        threadId: "private-thread-1",
+        turnId: "private-turn-1",
+        startedAtMs: 2,
+        item: {
+          type: "mcpToolCall",
+          id: "private-mcp-item",
+          server: "private-server",
+          tool: "private-tool",
+          status: "inProgress",
+          arguments: mcpArguments,
+          appContext: null,
+          pluginId: null,
+          result: null,
+          error: null,
+          durationMs: null,
+        },
+      },
+    } as ServerNotification)
+    transport.notify({
+      method: "item/completed",
+      params: {
+        threadId: "private-thread-1",
+        turnId: "private-turn-1",
+        completedAtMs: 3,
+        item: {
+          type: "commandExecution",
+          id: "private-command-item",
+          command,
+          cwd: "/private/repository",
+          processId: null,
+          source: "agent",
+          status: "failed",
+          commandActions: [],
+          aggregatedOutput: commandOutput,
+          exitCode: 22,
+          durationMs: 5,
+        },
+      },
+    } as ServerNotification)
+    transport.notify({
+      method: "item/completed",
+      params: {
+        threadId: "private-thread-1",
+        turnId: "private-turn-1",
+        completedAtMs: 4,
+        item: {
+          type: "mcpToolCall",
+          id: "private-mcp-item",
+          server: "private-server",
+          tool: "private-tool",
+          status: "completed",
+          arguments: mcpArguments,
+          appContext: null,
+          pluginId: null,
+          result: mcpResult,
+          error: null,
+          durationMs: 7,
+        },
+      },
+    } as ServerNotification)
+
+    const audit = await client.getIncidentAudit(incidentId)
+    const toolSteps = audit.events.filter((event) => event.kind === "investigation.tool_step")
+    expect(toolSteps).toEqual([
+      {
+        sequence: 3,
+        occurredAt: expect.any(String),
+        incidentId,
+        kind: "investigation.tool_step",
+        investigationId: started.investigation.id,
+        stepId: expect.any(String),
+        tool: "command",
+        status: "started",
+        inputSummary: `Command content withheld (${command.length} characters).`,
+      },
+      {
+        sequence: 4,
+        occurredAt: expect.any(String),
+        incidentId,
+        kind: "investigation.tool_step",
+        investigationId: started.investigation.id,
+        stepId: expect.any(String),
+        tool: "mcp",
+        status: "started",
+        inputSummary: "MCP arguments withheld.",
+      },
+      {
+        sequence: 5,
+        occurredAt: expect.any(String),
+        incidentId,
+        kind: "investigation.tool_step",
+        investigationId: started.investigation.id,
+        stepId: expect.any(String),
+        tool: "command",
+        status: "failed",
+        inputSummary: `Command content withheld (${command.length} characters).`,
+        outputSummary: `Process output withheld (${commandOutput.length} characters); exit code 22.`,
+      },
+      {
+        sequence: 6,
+        occurredAt: expect.any(String),
+        incidentId,
+        kind: "investigation.tool_step",
+        investigationId: started.investigation.id,
+        stepId: expect.any(String),
+        tool: "mcp",
+        status: "completed",
+        inputSummary: "MCP arguments withheld.",
+        outputSummary: "MCP result content withheld.",
+      },
+    ])
+    expect(toolSteps[0]?.stepId).toBe(toolSteps[2]?.stepId)
+    expect(toolSteps[1]?.stepId).toBe(toolSteps[3]?.stepId)
+    expect(JSON.stringify(audit)).not.toContain("private-command-token")
+    expect(JSON.stringify(audit)).not.toContain("private-output-token")
+    expect(JSON.stringify(audit)).not.toContain("private-mcp-token")
+    expect(JSON.stringify(audit)).not.toContain("private-mcp-output")
+    expect(JSON.stringify(audit)).not.toContain("private-command-item")
+    expect(JSON.stringify(audit)).not.toContain("private-thread-1")
+  })
+
   test("starts one read-only investigation from core-owned prompt and evidence", async () => {
     const { client, runtime } = testClient()
     const incidentId = await openIncident(client)

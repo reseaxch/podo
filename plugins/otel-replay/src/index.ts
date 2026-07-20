@@ -1,17 +1,24 @@
 import { createHash } from "node:crypto"
-import type { IngestTelemetryResponse, TelemetryEventInput } from "@podo/contracts"
+import type {
+  IncidentPostFixReplayBinding,
+  IncidentPostFixReplaySource,
+  IngestTelemetryResponse,
+  ReplaySummary,
+  TelemetryEventInput,
+  VerifiedIncidentPostFixReplay,
+} from "@podo/contracts"
 import type { PluginManifest } from "@podo/plugin-sdk"
 import { parseTelemetryInstant } from "./instant"
 
 export {
   TelemetryComparisonInputError,
   compareTelemetryWindows,
-} from "./comparison"
+} from "@podo/domain"
 export type {
   TelemetryComparisonOptions,
   TelemetryComparisonReport,
   TelemetryWindowMeasurements,
-} from "./comparison"
+} from "@podo/contracts"
 
 export const otelReplayPluginManifest = {
   id: "podo.otel-replay",
@@ -35,24 +42,7 @@ export interface ReplayOptions {
   signal?: AbortSignal
 }
 
-export interface ReplayRejection {
-  batch: number
-  inputIndex: number
-  reason: string
-}
-
-export interface ReplaySummary {
-  status: "completed" | "aborted" | "failed"
-  replayId: string
-  totalEvents: number
-  attempted: number
-  accepted: number
-  duplicates: number
-  rejected: number
-  batches: number
-  scheduledDurationMs: number
-  rejections: ReplayRejection[]
-}
+export type { ReplayRejection, ReplaySummary } from "@podo/contracts"
 
 export interface ReplayInputIssue {
   inputIndex: number
@@ -223,6 +213,143 @@ export async function replayTelemetry(
   return snapshot("completed")
 }
 
+const MAX_POST_FIX_REPLAY_EVENTS = 1_000
+
+export class InMemoryIncidentPostFixReplayRegistry
+implements IncidentPostFixReplaySource {
+  private readonly byIncident = new Map<
+    string,
+    VerifiedIncidentPostFixReplay
+  >()
+
+  async runAndSeal(
+    binding: IncidentPostFixReplayBinding,
+    inputs: readonly unknown[],
+    options: ReplayOptions = {},
+  ): Promise<VerifiedIncidentPostFixReplay | null> {
+    try {
+      if (
+        !isReplayBinding(binding) ||
+        !Array.isArray(inputs) ||
+        inputs.length === 0 ||
+        inputs.length > MAX_POST_FIX_REPLAY_EVENTS ||
+        this.byIncident.has(binding.incidentId)
+      ) {
+        return null
+      }
+      const normalized: TelemetryEventInput[] = []
+      const identities = new Set<string>()
+      for (const input of inputs) {
+        const event = normalizePostFixReplayEvent(input, binding.headSha)
+        if (!event) return null
+        const identity = stableSerialize(event)
+        if (identities.has(identity)) return null
+        identities.add(identity)
+        normalized.push(event)
+      }
+      const sink = new SealedPostFixReplaySink(binding.headSha)
+      let summary: ReplaySummary
+      try {
+        summary = await replayTelemetry(normalized, sink, options)
+      } catch {
+        return null
+      }
+      const accepted = sink.complete(summary)
+      if (!accepted || this.byIncident.has(binding.incidentId)) return null
+      const replay = {
+        replayId: summary.replayId,
+        ...structuredClone(binding),
+        events: accepted,
+      }
+      this.byIncident.set(binding.incidentId, structuredClone(replay))
+      return structuredClone(replay)
+    } catch {
+      return null
+    }
+  }
+
+  getVerifiedReplay(incidentId: string): VerifiedIncidentPostFixReplay | null {
+    const replay = this.byIncident.get(incidentId)
+    return replay ? structuredClone(replay) : null
+  }
+}
+
+class SealedPostFixReplaySink {
+  private readonly events: TelemetryEventInput[] = []
+  private readonly identities = new Set<string>()
+  private attempted = 0
+  private batches = 0
+  private invalid = false
+
+  constructor(private readonly headSha: string) {}
+
+  async ingestTelemetry(
+    inputs: TelemetryEventInput[],
+    options?: { signal?: AbortSignal },
+  ): Promise<IngestTelemetryResponse> {
+    if (
+      this.invalid ||
+      options?.signal?.aborted ||
+      !Array.isArray(inputs) ||
+      inputs.length === 0 ||
+      this.attempted + inputs.length > MAX_POST_FIX_REPLAY_EVENTS
+    ) {
+      this.invalid = true
+      throw new Error("post_fix_replay_sink_rejected")
+    }
+    this.attempted += inputs.length
+    this.batches += 1
+    const rejected: Array<{ index: number; reason: string }> = []
+    for (const [index, input] of inputs.entries()) {
+      const normalized = normalizePostFixReplayEvent(input, this.headSha)
+      const identity = normalized ? stableSerialize(normalized) : null
+      if (
+        !normalized ||
+        JSON.stringify(normalized) !== JSON.stringify(input) ||
+        !identity ||
+        this.identities.has(identity)
+      ) {
+        rejected.push({
+          index,
+          reason: "event is not valid for the sealed post-fix replay",
+        })
+        continue
+      }
+      this.identities.add(identity)
+      this.events.push(normalized)
+    }
+    if (rejected.length > 0) this.invalid = true
+    return {
+      ingestion: {
+        accepted: inputs.length - rejected.length,
+        duplicates: 0,
+        rejected,
+      },
+      reaction: {
+        action: "ignore_healthy",
+        detector: "cache_growth",
+        reason: "Post-fix replay evidence is isolated until sealed",
+      },
+      incident: null,
+    }
+  }
+
+  complete(summary: ReplaySummary): TelemetryEventInput[] | null {
+    if (
+      this.invalid ||
+      !isCompleteReplaySummary(
+        summary,
+        this.attempted,
+        this.events.length,
+        this.batches,
+      )
+    ) {
+      return null
+    }
+    return structuredClone(this.events)
+  }
+}
+
 function validateConfiguration(acceleration: number, batchSize: number): void {
   if (!Number.isFinite(acceleration) || acceleration <= 0) {
     throw new ReplayConfigurationError("acceleration must be a finite number greater than zero")
@@ -270,6 +397,139 @@ function validateAndOrder(inputs: readonly unknown[]): OrderedEvent[] {
 
 function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
+}
+
+function isReplayBinding(
+  value: IncidentPostFixReplayBinding,
+): boolean {
+  return isSafeIdentity(value?.incidentId) &&
+    isSafeIdentity(value?.remediationId) &&
+    isSafeIdentity(value?.artifactId) &&
+    typeof value?.headSha === "string" &&
+    /^[a-f0-9]{40,64}$/.test(value.headSha)
+}
+
+function normalizePostFixReplayEvent(
+  value: unknown,
+  headSha: string,
+): TelemetryEventInput | null {
+  if (!isPlainRecord(value)) return null
+  const allowed = new Set([
+    "timestamp",
+    "kind",
+    "service",
+    "severity",
+    "message",
+    "deploymentId",
+    "commitId",
+    "traceId",
+    "containerId",
+    "metric",
+  ])
+  if (Object.keys(value).some((key) => !allowed.has(key))) return null
+  if (
+    !isRawBoundedText(value.timestamp, 64) ||
+    !["log", "trace", "metric"].includes(String(value.kind)) ||
+    !isRawBoundedText(value.service, 200) ||
+    !["debug", "info", "warn", "error", "critical"].includes(
+      String(value.severity),
+    ) ||
+    !isRawBoundedText(value.message, 2_000) ||
+    !isRawBoundedText(value.deploymentId, 200) ||
+    !isRawBoundedText(value.commitId, 64) ||
+    value.commitId.trim() !== headSha ||
+    !isOptionalRawBoundedText(value.traceId, 200) ||
+    !isOptionalRawBoundedText(value.containerId, 200)
+  ) {
+    return null
+  }
+  const instantMs = parseTelemetryInstant(value.timestamp)
+  if (instantMs === null) return null
+  let metric: TelemetryEventInput["metric"]
+  if (value.metric !== undefined) {
+    if (
+      !isPlainRecord(value.metric) ||
+      Object.keys(value.metric).some(
+        (key) => !["name", "value", "unit"].includes(key),
+      ) ||
+      !isRawBoundedText(value.metric.name, 200) ||
+      typeof value.metric.value !== "number" ||
+      !Number.isFinite(value.metric.value) ||
+      value.metric.value < 0 ||
+      !isOptionalRawBoundedText(value.metric.unit, 32)
+    ) {
+      return null
+    }
+    metric = {
+      name: value.metric.name.trim(),
+      value: value.metric.value,
+      ...(value.metric.unit === undefined
+        ? {}
+        : { unit: value.metric.unit.trim() }),
+    }
+  }
+  if (value.kind === "metric" && !metric) return null
+  return {
+    timestamp: new Date(instantMs).toISOString(),
+    kind: value.kind as TelemetryEventInput["kind"],
+    service: value.service.trim(),
+    severity: value.severity as TelemetryEventInput["severity"],
+    message: value.message.trim(),
+    deploymentId: value.deploymentId.trim(),
+    commitId: value.commitId.trim(),
+    ...(value.traceId === undefined ? {} : { traceId: value.traceId.trim() }),
+    ...(value.containerId === undefined
+      ? {}
+      : { containerId: value.containerId.trim() }),
+    ...(metric ? { metric } : {}),
+  }
+}
+
+function isCompleteReplaySummary(
+  value: ReplaySummary,
+  attempted: number,
+  accepted: number,
+  batches: number,
+): boolean {
+  return value.status === "completed" &&
+    /^replay_[a-f0-9]{24}$/.test(value.replayId) &&
+    Number.isInteger(value.totalEvents) &&
+    value.totalEvents > 0 &&
+    value.totalEvents <= MAX_POST_FIX_REPLAY_EVENTS &&
+    value.attempted === value.totalEvents &&
+    value.accepted === value.totalEvents &&
+    value.duplicates === 0 &&
+    value.rejected === 0 &&
+    Number.isInteger(value.batches) &&
+    value.batches > 0 &&
+    value.batches <= value.totalEvents &&
+    value.batches <= MAX_POST_FIX_REPLAY_EVENTS &&
+    Number.isFinite(value.scheduledDurationMs) &&
+    value.scheduledDurationMs >= 0 &&
+    Array.isArray(value.rejections) &&
+    value.rejections.length === 0 &&
+    attempted === value.totalEvents &&
+    accepted === value.totalEvents &&
+    batches === value.batches
+}
+
+function isSafeIdentity(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(value)
+}
+
+function isRawBoundedText(value: unknown, maximum: number): value is string {
+  return typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maximum &&
+    value.trim().length > 0
+}
+
+function isOptionalRawBoundedText(
+  value: unknown,
+  maximum: number,
+): value is string | undefined {
+  return value === undefined || isRawBoundedText(value, maximum)
 }
 
 function stableSerialize(value: unknown, ancestors = new Set<object>()): string {

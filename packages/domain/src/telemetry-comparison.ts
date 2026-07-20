@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto"
-import { parseTelemetryInstant } from "./instant"
 
-export interface TelemetryComparisonOptions {
+export const PODO_TELEMETRY_COMPARISON_SCHEMA_VERSION =
+  "podo.telemetry-comparison.v1" as const
+
+interface TelemetryComparisonOptions {
   service: string
   metricName: string
   metricUnit: string
   stableChangeLimit: number
 }
 
-export interface TelemetryWindowMeasurements {
+interface TelemetryWindowMeasurements {
   eventCount: number
   metricSamples: number
   firstValue: number
@@ -19,8 +21,8 @@ export interface TelemetryWindowMeasurements {
   deploymentIds: string[]
 }
 
-export interface TelemetryComparisonReport {
-  schemaVersion: "podo.telemetry-comparison.v1"
+interface TelemetryComparisonReport {
+  schemaVersion: typeof PODO_TELEMETRY_COMPARISON_SCHEMA_VERSION
   comparisonId: string
   service: string
   metric: {
@@ -91,7 +93,7 @@ export function compareTelemetryWindows(
       ? "stabilized"
       : "unchanged"
   const identity = {
-    schemaVersion: "podo.telemetry-comparison.v1",
+    schemaVersion: PODO_TELEMETRY_COMPARISON_SCHEMA_VERSION,
     service: options.service,
     metric: {
       name: options.metricName,
@@ -215,4 +217,36 @@ function isBoundedText(value: unknown, maximum: number): value is string {
 
 function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
+}
+
+/** Parses a complete ISO-8601 instant and rejects normalized calendar overflow. */
+function parseTelemetryInstant(value: unknown): number | null {
+  if (typeof value !== "string") return null
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value)
+  if (!match || !isValidCalendarDateTime(match)) return null
+  const instantMs = Date.parse(value)
+  return Number.isFinite(instantMs) ? instantMs : null
+}
+
+function isValidCalendarDateTime(match: RegExpExecArray): boolean {
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, offsetHourText, offsetMinuteText] = match
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const hour = Number(hourText)
+  const minute = Number(minuteText)
+  const second = Number(secondText)
+  const offsetHour = offsetHourText === undefined ? 0 : Number(offsetHourText)
+  const offsetMinute = offsetMinuteText === undefined ? 0 : Number(offsetMinuteText)
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
+
+  return daysInMonth !== undefined
+    && day >= 1
+    && day <= daysInMonth
+    && hour <= 23
+    && minute <= 59
+    && second <= 59
+    && offsetHour <= 23
+    && offsetMinute <= 59
 }

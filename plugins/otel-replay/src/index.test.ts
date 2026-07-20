@@ -4,12 +4,43 @@ import {
   ReplayAbortedError,
   ReplayInputError,
   ReplaySinkError,
+  TelemetryComparisonInputError,
+  compareTelemetryWindows,
   replayTelemetry,
   type ReplayScheduler,
   type TelemetryReplaySink,
 } from "."
 
 const immediateScheduler: ReplayScheduler = { wait: async () => {} }
+
+test("keeps the deterministic telemetry comparison API backward compatible", () => {
+  const metric = (hour: number, value: number) => ({
+    timestamp: `2026-07-14T${String(hour).padStart(2, "0")}:00:00.000Z`,
+    kind: "metric",
+    service: "checkout-service",
+    severity: "info",
+    message: "heap sample",
+    deploymentId: `deploy-${hour}`,
+    metric: { name: "process.heap.used", value, unit: "By" },
+  })
+
+  expect(
+    compareTelemetryWindows([metric(9, 200)], [metric(10, 100)], {
+      service: "checkout-service",
+      metricName: "process.heap.used",
+      metricUnit: "By",
+      stableChangeLimit: 0,
+    }).schemaVersion,
+  ).toBe("podo.telemetry-comparison.v1")
+  expect(() =>
+    compareTelemetryWindows([], [metric(10, 100)], {
+      service: "checkout-service",
+      metricName: "process.heap.used",
+      metricUnit: "By",
+      stableChangeLimit: 0,
+    }),
+  ).toThrow(TelemetryComparisonInputError)
+})
 
 function event(timestamp: string, message: string, extra: Partial<TelemetryEventInput> = {}): TelemetryEventInput {
   return {

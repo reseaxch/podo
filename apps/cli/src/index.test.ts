@@ -24,6 +24,7 @@ function client(
     getIncident: async () => { throw new Error("unused") },
     getIncidentEvidence: async () => { throw new Error("unused") },
     getIncidentCausalPath: async () => { throw new Error("unused") },
+    getIncidentTelemetryComparison: async () => { throw new Error("unused") },
     startIncidentInvestigation: async () => { throw new Error("unused") },
     startIncidentRemediation: async () => { throw new Error("unused") },
     getIncidentRemediation: async () => { throw new Error("unused") },
@@ -60,6 +61,7 @@ describe("Podo CLI config", () => {
     expect(stdout[0]).toContain("podo incidents delivery <incidentId>")
     expect(stdout[0]).toContain("podo incidents approve-delivery <incidentId> <approvalId>")
     expect(stdout[0]).toContain("podo incidents deny-delivery <incidentId> <approvalId>")
+    expect(stdout[0]).toContain("podo incidents comparison <incidentId>")
   })
 
   test("prints settings as JSON", async () => {
@@ -234,6 +236,74 @@ describe("Podo CLI incidents", () => {
     expect(stdout).toEqual([JSON.stringify({ causalPath }, null, 2)])
   })
 
+  test("prints the Core-owned telemetry comparison as stable JSON", async () => {
+    const calls: string[] = []
+    const stdout: string[] = []
+    const comparison = {
+      schemaVersion: "podo.telemetry-comparison.v1" as const,
+      comparisonId: "telemetry_comparison_0123456789abcdef01234567",
+      service: "checkout-service",
+      metric: {
+        name: "process.heap.used",
+        unit: "By",
+        stableChangeLimit: 16 * 1024 * 1024,
+      },
+      before: {
+        eventCount: 22,
+        metricSamples: 15,
+        firstValue: 180,
+        lastValue: 642,
+        peakValue: 642,
+        changeValue: 462,
+        errorEvents: 6,
+        deploymentIds: ["deploy-1041", "deploy-1042"],
+      },
+      after: {
+        eventCount: 13,
+        metricSamples: 12,
+        firstValue: 180,
+        lastValue: 180,
+        peakValue: 180,
+        changeValue: 0,
+        errorEvents: 0,
+        deploymentIds: ["deploy-1043"],
+      },
+      verdict: {
+        status: "stabilized" as const,
+        heapGrowthStable: true,
+        peakDidNotIncrease: true,
+        errorsDidNotIncrease: true,
+        improved: true,
+      },
+    }
+    const provenance = {
+      replayId: "replay_post_fix_1",
+      remediationId: "remediation_1",
+      artifactId: "artifact_1",
+      headSha: "d".repeat(40),
+      afterEventCount: 13,
+    }
+
+    const exitCode = await runCli(
+      ["incidents", "comparison", "incident/1"],
+      {
+        client: client({
+          getIncidentTelemetryComparison: async (incidentId) => {
+            calls.push(incidentId)
+            return { comparison, provenance }
+          },
+        }),
+        stdout: (line) => stdout.push(line),
+      },
+    )
+
+    expect(exitCode).toBe(0)
+    expect(calls).toEqual(["incident/1"])
+    expect(stdout).toEqual([
+      JSON.stringify({ comparison, provenance }, null, 2),
+    ])
+  })
+
   test("starts an incident investigation with the exact absolute cwd", async () => {
     const calls: Array<[string, { cwd: string }]> = []
     const stdout: string[] = []
@@ -392,6 +462,21 @@ describe("Podo CLI incidents", () => {
       "Invalid arguments. Usage: podo incidents path <incidentId> <evidenceId>",
     ],
     [
+      "comparison without an id",
+      ["incidents", "comparison"],
+      "Invalid arguments. Usage: podo incidents comparison <incidentId>",
+    ],
+    [
+      "comparison with a blank id",
+      ["incidents", "comparison", " "],
+      "Invalid arguments. Usage: podo incidents comparison <incidentId>",
+    ],
+    [
+      "comparison with extra args",
+      ["incidents", "comparison", "incident-1", "extra"],
+      "Invalid arguments. Usage: podo incidents comparison <incidentId>",
+    ],
+    [
       "investigate without cwd",
       ["incidents", "investigate", "incident-1"],
       "Invalid arguments. Usage: podo incidents investigate <incidentId> <absolute-cwd>",
@@ -533,6 +618,10 @@ describe("Podo CLI incidents", () => {
     const fake = client({
       getIncident: async () => { calls += 1; return { incident } },
       getIncidentCausalPath: async () => { calls += 1; return { causalPath } },
+      getIncidentTelemetryComparison: async () => {
+        calls += 1
+        throw new Error("unexpected")
+      },
       startIncidentInvestigation: async () => {
         calls += 1
         return { incident, investigation }

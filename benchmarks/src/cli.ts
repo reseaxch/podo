@@ -1,6 +1,7 @@
 import { inspectCodexRuntime } from "@podo/codex-app-server-client"
 import { measure } from "./index"
 import { runCacheGrowthPluginPathBenchmark } from "../incident-replay/cache-growth-plugin-path"
+import { runCanonicalCoreClientFlowBenchmark } from "../end-to-end/canonical-core-client-flow"
 
 const samples = []
 for (let iteration = 0; iteration < 3; iteration += 1) {
@@ -17,7 +18,19 @@ const codexVersion = {
 }
 
 const cacheGrowthPluginPath = await runCacheGrowthPluginPathBenchmark()
+const canonicalCoreClientFlow = await runCanonicalCoreClientFlowBenchmark()
 
 console.log(
-  JSON.stringify({ status: "ok", benchmarks: [codexVersion, cacheGrowthPluginPath] }, null, 2),
+  JSON.stringify(
+    {
+      status: "ok",
+      benchmarks: [
+        codexVersion,
+        cacheGrowthPluginPath,
+        canonicalCoreClientFlow,
+      ],
+    },
+    null,
+    2,
+  ),
 )

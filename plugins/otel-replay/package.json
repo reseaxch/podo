@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@podo/contracts": "workspace:*",
+    "@podo/domain": "workspace:*",
     "@podo/plugin-sdk": "workspace:*"
   },
   "scripts": {

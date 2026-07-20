@@ -71,8 +71,10 @@
       "name": "@podo/benchmarks",
       "version": "0.0.0",
       "dependencies": {
+        "@podo/client": "workspace:*",
         "@podo/codex-app-server-client": "workspace:*",
         "@podo/contracts": "workspace:*",
+        "@podo/core": "workspace:*",
         "@podo/plugin-graphify": "workspace:*",
         "@podo/plugin-otel-replay": "workspace:*",
       },
@@ -148,6 +150,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@podo/contracts": "workspace:*",
+        "@podo/domain": "workspace:*",
         "@podo/plugin-sdk": "workspace:*",
       },
     },

@@ -78,6 +78,44 @@ export interface TelemetryIngestionResult {
   rejected: RejectedTelemetryEvent[]
 }
 
+export interface ReplayRejection {
+  batch: number
+  inputIndex: number
+  reason: string
+}
+
+export interface ReplaySummary {
+  status: "completed" | "aborted" | "failed"
+  replayId: string
+  totalEvents: number
+  attempted: number
+  accepted: number
+  duplicates: number
+  rejected: number
+  batches: number
+  scheduledDurationMs: number
+  rejections: ReplayRejection[]
+}
+
+export interface IncidentPostFixReplayBinding {
+  incidentId: string
+  remediationId: string
+  artifactId: string
+  headSha: string
+}
+
+export interface VerifiedIncidentPostFixReplay
+extends IncidentPostFixReplayBinding {
+  replayId: string
+  events: TelemetryEventInput[]
+}
+
+export interface IncidentPostFixReplaySource {
+  getVerifiedReplay(
+    incidentId: string,
+  ): VerifiedIncidentPostFixReplay | null
+}
+
 export interface IncidentEvidence {
   id: string
   sourceEventId: string
@@ -388,6 +426,15 @@ export type BuildIncidentAuditEvent =
   | BuildIncidentAuditEventBase & { kind: "investigation.requested" }
   | BuildIncidentAuditEventBase & { kind: "investigation.started"; investigationId: string }
   | BuildIncidentAuditEventBase & {
+    kind: "investigation.tool_step"
+    investigationId: string
+    stepId: string
+    tool: InvestigationToolKind
+    status: InvestigationToolStep["status"]
+    inputSummary: string
+    outputSummary?: string
+  }
+  | BuildIncidentAuditEventBase & {
     kind: "investigation.approval_denied"
     investigationId: string
     approvalKind: InvestigationApproval["kind"]
@@ -541,6 +588,7 @@ export type BuildIncidentAuditEvent =
 
 export interface GetBuildIncidentAuditResponse {
   events: BuildIncidentAuditEvent[]
+  retention: IncidentAuditRetention
 }
 
 export interface DetectedIncident {
@@ -588,6 +636,58 @@ export interface GetIncidentResponse {
 
 export interface GetIncidentEvidenceResponse {
   records: IncidentEvidenceRecord[]
+}
+
+export const PODO_TELEMETRY_COMPARISON_SCHEMA_VERSION =
+  "podo.telemetry-comparison.v1" as const
+
+export interface TelemetryComparisonOptions {
+  service: string
+  metricName: string
+  metricUnit: string
+  stableChangeLimit: number
+}
+
+export interface TelemetryWindowMeasurements {
+  eventCount: number
+  metricSamples: number
+  firstValue: number
+  lastValue: number
+  peakValue: number
+  changeValue: number
+  errorEvents: number
+  deploymentIds: string[]
+}
+
+export interface TelemetryComparisonReport {
+  schemaVersion: typeof PODO_TELEMETRY_COMPARISON_SCHEMA_VERSION
+  comparisonId: string
+  service: string
+  metric: {
+    name: string
+    unit: string
+    stableChangeLimit: number
+  }
+  before: TelemetryWindowMeasurements
+  after: TelemetryWindowMeasurements
+  verdict: {
+    status: "stabilized" | "unchanged" | "regressed"
+    heapGrowthStable: boolean
+    peakDidNotIncrease: boolean
+    errorsDidNotIncrease: boolean
+    improved: boolean
+  }
+}
+
+export interface GetIncidentTelemetryComparisonResponse {
+  comparison: TelemetryComparisonReport
+  provenance: {
+    replayId: string
+    remediationId: string
+    artifactId: string
+    headSha: string
+    afterEventCount: number
+  }
 }
 
 export const PODO_CAUSAL_PATH_SCHEMA_VERSION = "podo.causal-path.v1" as const
@@ -768,6 +868,15 @@ export type IncidentAuditEvent =
   | IncidentAuditEventBase & { kind: "investigation.requested" }
   | IncidentAuditEventBase & { kind: "investigation.started"; investigationId: string }
   | IncidentAuditEventBase & {
+    kind: "investigation.tool_step"
+    investigationId: string
+    stepId: string
+    tool: InvestigationToolKind
+    status: InvestigationToolStep["status"]
+    inputSummary: string
+    outputSummary?: string
+  }
+  | IncidentAuditEventBase & {
     kind: "investigation.approval_denied"
     investigationId: string
     approvalKind: InvestigationApproval["kind"]
@@ -791,6 +900,11 @@ export type IncidentAuditEvent =
 
 export interface GetIncidentAuditResponse {
   events: IncidentAuditEvent[]
+  retention: IncidentAuditRetention
+}
+
+export interface IncidentAuditRetention {
+  truncatedToolSteps: number
 }
 
 export type IncidentIssueFallbackReason = "remediation_not_safe" | "remediation_denied" | "remediation_failed"
@@ -940,6 +1054,25 @@ export interface Investigation {
   error?: string
 }
 
+export type InvestigationToolKind =
+  | "command"
+  | "file_change"
+  | "mcp"
+  | "dynamic"
+  | "collaboration"
+  | "web_search"
+  | "image_view"
+  | "sleep"
+  | "image_generation"
+
+export interface InvestigationToolStep {
+  id: string
+  tool: InvestigationToolKind
+  status: "started" | "completed" | "failed"
+  inputSummary: string
+  outputSummary?: string
+}
+
 export interface StartInvestigationResponse {
   investigation: Investigation
 }
@@ -966,6 +1099,7 @@ type InvestigationEventData =
   | { kind: "investigation.started"; payload: { status: "starting" } }
   | { kind: "investigation.running"; payload: { status: "running" } }
   | { kind: "output.delta"; payload: { text: string } }
+  | { kind: "tool.step"; payload: { step: InvestigationToolStep } }
   | { kind: "approval.requested"; payload: { approval: InvestigationApproval } }
   | { kind: "approval.resolved"; payload: { approval: InvestigationApproval } }
   | { kind: "investigation.completed"; payload: { status: "completed" } }

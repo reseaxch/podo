@@ -333,6 +333,62 @@ describe("investigation orchestration", () => {
     expect(timer.delays).toEqual([])
   })
 
+  test("bounds tracked tool steps and interrupts a noisy turn on overflow", async () => {
+    const runtime = new FakeRuntime()
+    const service = new InvestigationService({ runtime, eventLogLimit: 2 })
+    const observed: InvestigationEvent[] = []
+    const started = await service.start(
+      { prompt: "tool-heavy investigation", cwd: "/repo", sandbox: "read-only" },
+      { onEvent: (event) => observed.push(event) },
+    )
+
+    for (let index = 0; index < 300; index += 1) {
+      runtime.emit({
+        kind: "tool.started",
+        threadId: "internal-thread-1",
+        turnId: "internal-turn-1",
+        itemId: `item-${index}`,
+        tool: "command",
+        inputSummary: "Command content withheld (42 characters).",
+      })
+    }
+    await Promise.resolve()
+
+    expect(service.get(started.investigation.id)?.investigation).toMatchObject({
+      status: "failed",
+      error: "Investigation tool step tracking exceeded configured limit",
+    })
+    expect(observed.filter(({ kind }) => kind === "tool.step")).toHaveLength(2)
+    expect(runtime.interrupts).toEqual([{ threadId: "internal-thread-1", turnId: "internal-turn-1" }])
+  })
+
+  test("rejects an unbounded runtime item id before tracking it", async () => {
+    const runtime = new FakeRuntime()
+    const service = new InvestigationService({ runtime, eventLogLimit: 2 })
+    const observed: InvestigationEvent[] = []
+    const started = await service.start(
+      { prompt: "unsafe item id", cwd: "/repo", sandbox: "read-only" },
+      { onEvent: (event) => observed.push(event) },
+    )
+
+    runtime.emit({
+      kind: "tool.started",
+      threadId: "internal-thread-1",
+      turnId: "internal-turn-1",
+      itemId: "x".repeat(257),
+      tool: "command",
+      inputSummary: "Command content withheld (42 characters).",
+    })
+    await Promise.resolve()
+
+    expect(service.get(started.investigation.id)?.investigation).toMatchObject({
+      status: "failed",
+      error: "Investigation tool step identifier was invalid",
+    })
+    expect(observed.filter(({ kind }) => kind === "tool.step")).toEqual([])
+    expect(runtime.interrupts).toEqual([{ threadId: "internal-thread-1", turnId: "internal-turn-1" }])
+  })
+
   test("clears the supervised deadline on every non-timeout terminal path", async () => {
     const terminalCases: Array<{
       name: string

@@ -73,14 +73,14 @@ without fixture state:
 PODO_DEMO_MODE=live bun run demo
 ```
 
-This mode uses the production Core, real Codex runtime, scenario-owned graph
-bootstrap, and approval-gated production remediation. A live model may
-correctly decide that telemetry alone is
-insufficient for a code fix and stop at the issue-fallback state; therefore it
-is a diagnostic mode, not the deterministic judge presentation. GitHub writes
-remain disabled. `PODO_DEMO_CORE_PORT`, `PODO_DEMO_SCRATCH_PARENT`, and
-`PODO_DEMO_BASE_REF` configure this mode; judge runs should keep the default
-deterministic mode.
+This mode uses the production Core, the real Codex runtime with its default
+`gpt-5.6-sol` model, scenario-owned graph bootstrap, and approval-gated
+production remediation. A live model may correctly decide that the available
+evidence is insufficient for a verified code fix and stop without remediation
+or a pull request; therefore it is a diagnostic mode, not the deterministic
+judge presentation. GitHub delivery and issue writes remain disabled.
+`PODO_DEMO_CORE_PORT`, `PODO_DEMO_SCRATCH_PARENT`, and `PODO_DEMO_BASE_REF`
+configure this mode; judge runs should keep the default deterministic mode.
 
 ## Live service lab
 

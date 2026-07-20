@@ -16,6 +16,40 @@ Prefer deterministic checks for evidence references, graph paths, output schemas
 
 `bun run eval` loads the five canonical definitions from `../scenarios` and expands each one across `observe`, `recommend`, and `act_with_approval`. The built-in reference adapter makes the default command a deterministic harness smoke test; it does not duplicate scenario data.
 
+The default command also verifies its aggregate against
+`baselines/reaction-matrix.reference-v2.json`. Missing, malformed, or drifted
+baseline data fails the command closed. A successful report includes:
+
+```json
+{
+  "baseline": {
+    "status": "matched",
+    "artifactKind": "reviewed_aggregate_baseline",
+    "evaluationKind": "deterministic_reference",
+    "modelBacked": false
+  }
+}
+```
+
+This baseline is a deterministic drift gate, not a model-quality result. Along
+with the scenario fingerprint, `implementationFingerprint` hashes the exact
+repository bytes of `fixtures.ts`, `model.ts`, and `scorer.ts`, including the
+reference decision adapter and scoring policy. A source change therefore fails
+the committed comparison even when the copy-of-expected reference aggregate
+would still score `1`. The reference metadata keeps `model: null`, uses no
+Codex runtime, tokens, or tool calls, and must never be presented as a GPT
+evaluation.
+
+Reproduce the exact committed aggregate with the same public command:
+
+```sh
+bun run eval -- --print-baseline
+```
+
+For an intentional scenario or scorer change, review that output and its reason
+for drift before replacing the committed artifact. Running plain
+`bun run eval` remains the required fail-closed verification.
+
 The report is JSON using `schemaVersion: 1`. It contains a scenario fingerprint, run metadata, trusted approval provenance, per-case expectations and actual decisions, and five deterministic metrics:
 
 - `incidentDetection`;
