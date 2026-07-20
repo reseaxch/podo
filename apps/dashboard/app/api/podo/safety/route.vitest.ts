@@ -22,7 +22,8 @@ vi.mock("../../../lib/dashboard-client", () => ({
   createDashboardClient,
   isTrustedOperatorMode: () =>
     process.env.PODO_DASHBOARD_MODE === "live" &&
-    process.env.PODO_TRUSTED_OPERATOR_MODE === "true",
+    process.env.PODO_TRUSTED_OPERATOR_MODE === "true" &&
+    Boolean(process.env.PODO_DASHBOARD_ORIGIN),
   trustedMutationRequestError: () => null,
 }))
 
@@ -34,6 +35,7 @@ describe("safety API operator boundary", () => {
     createDashboardClient.mockReset()
     delete process.env.PODO_DASHBOARD_MODE
     delete process.env.PODO_TRUSTED_OPERATOR_MODE
+    delete process.env.PODO_DASHBOARD_ORIGIN
   })
 
   it("serves the read-only Core approval queue", async () => {
@@ -74,6 +76,7 @@ describe("safety API operator boundary", () => {
   it("dispatches an encoded approval target in trusted live mode", async () => {
     process.env.PODO_DASHBOARD_MODE = "live"
     process.env.PODO_TRUSTED_OPERATOR_MODE = "true"
+    process.env.PODO_DASHBOARD_ORIGIN = "http://dashboard.test"
     const client = { approveIncidentRemediation: vi.fn() }
     createDashboardClient.mockReturnValue(client)
     getSafetyApprovals

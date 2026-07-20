@@ -59,9 +59,12 @@ Demo routes use local fixtures and never require Core. Live reads use
 `@podo/client`; the browser does not connect directly to Core, storage, GitHub,
 or Codex. State-changing routes are fail-closed by default. A private,
 single-operator installation may set the server-only
-`PODO_TRUSTED_OPERATOR_MODE=true` flag. This is a deployment trust boundary,
-not authentication: do not expose this composition to the public internet or
-use it for a multi-user deployment.
+`PODO_TRUSTED_OPERATOR_MODE=true` flag together with the exact public origin in
+`PODO_DASHBOARD_ORIGIN`. Mutation routes reject requests whose browser origin
+is missing or does not exactly match this configured origin; they never derive
+trust from the incoming `Host` header. This is a deployment trust boundary, not
+authentication: do not expose this composition to the public internet or use
+it for a multi-user deployment.
 
 `?mode=live` can be used by the E2E fake-Core suite to exercise the production
 boundary while the rest of the browser suite remains deterministic.
@@ -73,6 +76,7 @@ For the self-hosted UI:
 ```sh
 PODO_DASHBOARD_MODE=live \
 PODO_TRUSTED_OPERATOR_MODE=true \
+PODO_DASHBOARD_ORIGIN=http://127.0.0.1:3000 \
 PODO_CORE_URL=http://127.0.0.1:4100 \
 NEXT_PUBLIC_PODO_AGENT_MODE=demo \
 bun run dev:dashboard

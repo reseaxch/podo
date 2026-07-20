@@ -8,7 +8,8 @@ vi.mock("../../../../lib/dashboard-client", () => ({
   isDemoDashboard: () => process.env.PODO_DASHBOARD_MODE === "demo",
   isTrustedOperatorMode: () =>
     process.env.PODO_DASHBOARD_MODE === "live" &&
-    process.env.PODO_TRUSTED_OPERATOR_MODE === "true",
+    process.env.PODO_TRUSTED_OPERATOR_MODE === "true" &&
+    Boolean(process.env.PODO_DASHBOARD_ORIGIN),
   trustedMutationRequestError: () => null,
 }))
 vi.mock("../../../../lib/build-incidents-data", () => ({
@@ -35,6 +36,7 @@ describe("build incident mutation boundary", () => {
     vi.clearAllMocks()
     delete process.env.PODO_DASHBOARD_MODE
     delete process.env.PODO_TRUSTED_OPERATOR_MODE
+    delete process.env.PODO_DASHBOARD_ORIGIN
   })
 
   it("rejects demo mutations before creating a Core client", async () => {
@@ -152,6 +154,7 @@ describe("build incident mutation boundary", () => {
     async (_label, command, method, args) => {
       process.env.PODO_DASHBOARD_MODE = "live"
       process.env.PODO_TRUSTED_OPERATOR_MODE = "true"
+      process.env.PODO_DASHBOARD_ORIGIN = "http://dashboard.test"
       const operation = vi.fn()
       const client = { [method]: operation }
       createDashboardClient.mockReturnValue(client)

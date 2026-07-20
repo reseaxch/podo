@@ -34,6 +34,7 @@ export default defineConfig({
         PODO_CORE_URL: coreURL,
         PODO_DASHBOARD_MODE: "live",
         PODO_TRUSTED_OPERATOR_MODE: "true",
+        PODO_DASHBOARD_ORIGIN: baseURL,
         PODO_INCIDENT_CWD: "/tmp/podo-dashboard-core-e2e/repository",
       },
       url: baseURL,
