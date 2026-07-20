@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@podo/client": "workspace:*",
     "@podo/codex-app-server-client": "workspace:*",
     "@podo/contracts": "workspace:*",
+    "@podo/core": "workspace:*",
     "@podo/plugin-graphify": "workspace:*",
     "@podo/plugin-otel-replay": "workspace:*"
   },
