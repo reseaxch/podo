@@ -140,6 +140,31 @@ describe("connected TUI adapter", () => {
     expect(JSON.stringify(activity)).not.toContain("untrusted raw model output")
   })
 
+  test("turns a tool step into a categorical activity without rendering summaries", () => {
+    const activity = toTuiActivity({
+      investigationId: "investigation-1",
+      sequence: 10,
+      timestamp: "2026-07-14T09:10:00.000Z",
+      kind: "tool.step",
+      payload: {
+        step: {
+          id: "step-1",
+          tool: "command",
+          status: "failed",
+          inputSummary: "untrusted command summary",
+          outputSummary: "untrusted output summary",
+        },
+      },
+    })
+
+    expect(activity).toEqual({
+      sequence: 10,
+      occurredAt: "2026-07-14T09:10:00.000Z",
+      label: "Command tool failed",
+    })
+    expect(JSON.stringify(activity)).not.toContain("untrusted")
+  })
+
   test("keeps a newer SSE approval when a delayed approval response has an older sequence", () => {
     const current = {
       id: "investigation-1",

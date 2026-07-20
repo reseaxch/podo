@@ -37,6 +37,61 @@ describe("IncidentAuditStore", () => {
     expect(store.get("incident-attacker")).toEqual([])
   })
 
+  test("accepts only bounded redacted tool summaries", () => {
+    const store = new IncidentAuditStore()
+    store.append("incident-owned", {
+      kind: "investigation.tool_step",
+      investigationId: "investigation-owned",
+      stepId: "step-owned",
+      tool: "command",
+      status: "started",
+      inputSummary: "Command content withheld (42 characters).",
+    })
+
+    expect(() => store.append("incident-owned", {
+      kind: "investigation.tool_step",
+      investigationId: "investigation-owned",
+      stepId: "step-private",
+      tool: "command",
+      status: "failed",
+      inputSummary: "Authorization: Bearer private-token",
+      outputSummary: "private provider output",
+    } as never)).toThrow("invalid_incident_audit_event")
+    expect(JSON.stringify(store.get("incident-owned"))).not.toContain("private")
+  })
+
+  test("tool noise preserves investigation milestones and reports bounded history loss", () => {
+    const store = new IncidentAuditStore()
+    store.append("incident-owned", { kind: "investigation.requested" })
+    store.append("incident-owned", {
+      kind: "investigation.started",
+      investigationId: "investigation-owned",
+    })
+    for (let index = 0; index < 260; index += 1) {
+      store.append("incident-owned", {
+        kind: "investigation.tool_step",
+        investigationId: "investigation-owned",
+        stepId: `step-${index}`,
+        tool: "command",
+        status: "started",
+        inputSummary: "Command content withheld (42 characters).",
+      })
+    }
+    store.append("incident-owned", {
+      kind: "investigation.completed",
+      investigationId: "investigation-owned",
+    })
+
+    const audit = store.read("incident-owned")
+    expect(audit.events).toHaveLength(256)
+    expect(audit.events.filter(({ kind }) => kind === "investigation.requested")).toHaveLength(1)
+    expect(audit.events.filter(({ kind }) => kind === "investigation.started")).toHaveLength(1)
+    expect(audit.events.filter(({ kind }) => kind === "investigation.completed")).toHaveLength(1)
+    expect(audit.retention).toEqual({ truncatedToolSteps: 7 })
+    expect(audit.events.at(-1)?.sequence).toBe(263)
+    expect(audit.events.every((event, index, events) => index === 0 || event.sequence > events[index - 1]!.sequence)).toBe(true)
+  })
+
   test("keeps one immutable monotonic audit for Build Incident evidence and CI verification", () => {
     const store = new IncidentAuditStore()
     const evidenceIds = ["build_evidence_a", "build_evidence_b"]

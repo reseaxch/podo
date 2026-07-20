@@ -14,6 +14,10 @@ import {
   createProductionGitHubActions,
   type ProductionGitHubActionsDependencies,
 } from "./production-github-actions"
+import {
+  createProductionCodexRuntimeFactory,
+  type ProductionCodexRuntimeDependencies,
+} from "./production-codex-runtime"
 
 type Environment = Readonly<Record<string, string | undefined>>
 
@@ -22,6 +26,7 @@ export interface ProductionCoreDependencies {
   incidentGraph?: ProductionIncidentGraphDependencies
   githubIssue?: ProductionGitHubIssueDependencies
   githubActions?: ProductionGitHubActionsDependencies
+  codexRuntime?: ProductionCodexRuntimeDependencies
   createHandler?: (options: CoreHandlerOptions) => ReturnType<typeof createCoreHandler>
 }
 
@@ -29,6 +34,7 @@ export async function createProductionCoreHandler(
   environment: Environment,
   dependencies: ProductionCoreDependencies = {},
 ): Promise<ReturnType<typeof createCoreHandler>> {
+  const createRuntime = createProductionCodexRuntimeFactory(environment, dependencies.codexRuntime)
   const incidentGraph = await loadProductionIncidentGraph(environment, dependencies.incidentGraph)
   const agentChat = await loadProductionAgentChat(environment, dependencies.agentChat)
   const remediationExecutorFactory = createProductionRemediationExecutorFactory(environment)
@@ -38,6 +44,7 @@ export async function createProductionCoreHandler(
   const createHandler = dependencies.createHandler ?? createCoreHandler
 
   return createHandler({
+    createRuntime,
     ...(agentChat ? { agentChat } : {}),
     ...(incidentGraph ? { incidentGraph } : {}),
     ...(remediationExecutorFactory ? { remediationExecutorFactory } : {}),

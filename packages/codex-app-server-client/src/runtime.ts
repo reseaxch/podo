@@ -6,21 +6,36 @@ import type { ThreadStartParams } from "@podo/codex-protocol/generated/v2/Thread
 import type { TurnStartParams } from "@podo/codex-protocol/generated/v2/TurnStartParams.ts"
 import type { TurnSteerParams } from "@podo/codex-protocol/generated/v2/TurnSteerParams.ts"
 import type { ToolRequestUserInputResponse } from "@podo/codex-protocol/generated/v2/ToolRequestUserInputResponse.ts"
+import type { ThreadItem } from "@podo/codex-protocol/generated/v2/ThreadItem.ts"
 import { AppServerConnection, type AppServerConnectionOptions, type RequestOptions } from "./transport"
 
 export type CodexApprovalKind = "command" | "file_change" | "permissions" | "user_input"
+
+export type CodexToolKind =
+  | "command"
+  | "file_change"
+  | "mcp"
+  | "dynamic"
+  | "collaboration"
+  | "web_search"
+  | "image_view"
+  | "sleep"
+  | "image_generation"
 
 export type CodexRuntimeEvent =
   | { kind: "thread.started"; threadId: string }
   | { kind: "turn.started"; threadId: string; turnId: string }
   | { kind: "turn.completed"; threadId: string; turnId: string; status: "completed" | "interrupted" | "failed"; error?: string }
   | { kind: "output.delta"; threadId: string; turnId: string; text: string }
+  | { kind: "tool.started"; threadId: string; turnId: string; itemId: string; tool: CodexToolKind; inputSummary: string }
+  | { kind: "tool.completed"; threadId: string; turnId: string; itemId: string; tool: CodexToolKind; status: "completed" | "failed"; inputSummary: string; outputSummary: string }
   | { kind: "approval.requested"; requestId: RequestId; approvalKind: CodexApprovalKind; threadId: string; turnId: string; itemId: string; reason?: string; command?: string; questions?: unknown[] }
   | { kind: "runtime.error"; message: string; threadId?: string; turnId?: string }
 
 export interface StartCodexThreadInput {
   cwd: string
   sandbox: "read-only" | "workspace-write"
+  model?: string
   developerInstructions?: string
 }
 
@@ -71,6 +86,7 @@ export class AppServerRuntime implements CodexRuntime {
       approvalPolicy: "on-request",
       approvalsReviewer: "user",
       ephemeral: false,
+      ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.developerInstructions === undefined ? {} : { developerInstructions: input.developerInstructions }),
     }
     const response = await this.transport.request("thread/start", params, options) as { thread: { id: string } }
@@ -84,6 +100,7 @@ export class AppServerRuntime implements CodexRuntime {
       sandbox: input.sandbox,
       approvalPolicy: "on-request",
       approvalsReviewer: "user",
+      ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.developerInstructions === undefined ? {} : { developerInstructions: input.developerInstructions }),
     }
     const response = await this.transport.request("thread/resume", params, options) as { thread: { id: string } }
@@ -174,6 +191,36 @@ export class AppServerRuntime implements CodexRuntime {
         })
         break
       }
+      case "item/started": {
+        const summary = summarizeToolItem(notification.params.item)
+        if (summary) {
+          this.emit({
+            kind: "tool.started",
+            threadId: notification.params.threadId,
+            turnId: notification.params.turnId,
+            itemId: notification.params.item.id,
+            tool: summary.tool,
+            inputSummary: summary.inputSummary,
+          })
+        }
+        break
+      }
+      case "item/completed": {
+        const summary = summarizeToolItem(notification.params.item)
+        if (summary) {
+          this.emit({
+            kind: "tool.completed",
+            threadId: notification.params.threadId,
+            turnId: notification.params.turnId,
+            itemId: notification.params.item.id,
+            tool: summary.tool,
+            status: completedToolStatus(notification.params.item),
+            inputSummary: summary.inputSummary,
+            outputSummary: summary.outputSummary,
+          })
+        }
+        break
+      }
       case "item/agentMessage/delta":
         this.emit({ kind: "output.delta", threadId: notification.params.threadId, turnId: notification.params.turnId, text: notification.params.delta })
         break
@@ -214,4 +261,134 @@ export class AppServerRuntime implements CodexRuntime {
   private emit(event: CodexRuntimeEvent): void {
     for (const listener of this.listeners) listener(event)
   }
+}
+
+interface ToolItemSummary {
+  tool: CodexToolKind
+  inputSummary: string
+  outputSummary: string
+}
+
+function summarizeToolItem(item: ThreadItem): ToolItemSummary | null {
+  switch (item.type) {
+    case "commandExecution":
+      return {
+        tool: "command",
+        inputSummary: `Command content withheld (${item.command.length} characters).`,
+        outputSummary: item.aggregatedOutput === null
+          ? `Process output unavailable; exit code ${safeExitCode(item.exitCode)}.`
+          : `Process output withheld (${item.aggregatedOutput.length} characters); exit code ${safeExitCode(item.exitCode)}.`,
+      }
+    case "fileChange":
+      return {
+        tool: "file_change",
+        inputSummary: `File change content withheld (${item.changes.length} changes).`,
+        outputSummary: `File change result content withheld (${item.changes.length} changes).`,
+      }
+    case "mcpToolCall":
+      return {
+        tool: "mcp",
+        inputSummary: "MCP arguments withheld.",
+        outputSummary: item.result === null
+          ? "MCP result content unavailable."
+          : "MCP result content withheld.",
+      }
+    case "dynamicToolCall":
+      return {
+        tool: "dynamic",
+        inputSummary: "Dynamic tool arguments withheld.",
+        outputSummary: item.contentItems === null
+          ? "Dynamic tool result content unavailable."
+          : `Dynamic tool result content withheld (${item.contentItems.length} items).`,
+      }
+    case "collabAgentToolCall":
+      return {
+        tool: "collaboration",
+        inputSummary: item.prompt === null
+          ? "Collaboration prompt unavailable."
+          : `Collaboration prompt withheld (${item.prompt.length} characters).`,
+        outputSummary: "Collaboration result details withheld.",
+      }
+    case "webSearch":
+      return {
+        tool: "web_search",
+        inputSummary: `Search query withheld (${item.query.length} characters).`,
+        outputSummary: "Search result details unavailable in item lifecycle.",
+      }
+    case "imageView":
+      return {
+        tool: "image_view",
+        inputSummary: "Image path withheld.",
+        outputSummary: "Image content unavailable in item lifecycle.",
+      }
+    case "sleep":
+      return {
+        tool: "sleep",
+        inputSummary: `Sleep duration ${safeDuration(item.durationMs)} ms.`,
+        outputSummary: "Sleep completed.",
+      }
+    case "imageGeneration":
+      return {
+        tool: "image_generation",
+        inputSummary: "Image generation prompt unavailable in item lifecycle.",
+        outputSummary: item.result.length === 0
+          ? "Generated image content unavailable."
+          : `Generated image content withheld (${item.result.length} characters).`,
+      }
+    case "userMessage":
+    case "hookPrompt":
+    case "agentMessage":
+    case "plan":
+    case "reasoning":
+    case "subAgentActivity":
+    case "enteredReviewMode":
+    case "exitedReviewMode":
+    case "contextCompaction":
+      return null
+    default:
+      return assertNever(item)
+  }
+}
+
+function completedToolStatus(item: ThreadItem): "completed" | "failed" {
+  switch (item.type) {
+    case "commandExecution":
+    case "fileChange":
+    case "mcpToolCall":
+    case "dynamicToolCall":
+    case "collabAgentToolCall":
+      return item.status === "completed" ? "completed" : "failed"
+    case "imageGeneration":
+      return item.status === "completed" ? "completed" : "failed"
+    case "webSearch":
+    case "imageView":
+    case "sleep":
+      return "completed"
+    case "userMessage":
+    case "hookPrompt":
+    case "agentMessage":
+    case "plan":
+    case "reasoning":
+    case "subAgentActivity":
+    case "enteredReviewMode":
+    case "exitedReviewMode":
+    case "contextCompaction":
+      throw new Error(`Non-tool Codex item has no tool completion status: ${item.type}`)
+    default:
+      return assertNever(item)
+  }
+}
+
+function assertNever(_value: never): never {
+  throw new Error("Unsupported Codex ThreadItem variant")
+}
+
+function safeExitCode(value: number | null): string {
+  return Number.isSafeInteger(value) ? String(value) : "unavailable"
+}
+
+function safeDuration(value: number): string {
+  return Number.isSafeInteger(value) && value >= 0 && value <= 300_000
+    ? String(value)
+    : "unavailable"
 }

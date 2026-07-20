@@ -258,6 +258,20 @@ export class IncidentInvestigationCoordinator {
       this.audit.append(incidentId, { kind: "investigation.started", investigationId: event.investigationId })
       return
     }
+    if (event.kind === "tool.step") {
+      this.audit.append(incidentId, {
+        kind: "investigation.tool_step",
+        investigationId: event.investigationId,
+        stepId: event.payload.step.id,
+        tool: event.payload.step.tool,
+        status: event.payload.step.status,
+        inputSummary: event.payload.step.inputSummary,
+        ...(event.payload.step.outputSummary === undefined
+          ? {}
+          : { outputSummary: event.payload.step.outputSummary }),
+      })
+      return
+    }
     if (this.terminalAuditByIncident.has(incidentId)) return
     if (event.kind === "investigation.completed" || event.kind === "investigation.failed" || event.kind === "investigation.cancelled") {
       this.terminalAuditByIncident.add(incidentId)

@@ -388,6 +388,15 @@ export type BuildIncidentAuditEvent =
   | BuildIncidentAuditEventBase & { kind: "investigation.requested" }
   | BuildIncidentAuditEventBase & { kind: "investigation.started"; investigationId: string }
   | BuildIncidentAuditEventBase & {
+    kind: "investigation.tool_step"
+    investigationId: string
+    stepId: string
+    tool: InvestigationToolKind
+    status: InvestigationToolStep["status"]
+    inputSummary: string
+    outputSummary?: string
+  }
+  | BuildIncidentAuditEventBase & {
     kind: "investigation.approval_denied"
     investigationId: string
     approvalKind: InvestigationApproval["kind"]
@@ -541,6 +550,7 @@ export type BuildIncidentAuditEvent =
 
 export interface GetBuildIncidentAuditResponse {
   events: BuildIncidentAuditEvent[]
+  retention: IncidentAuditRetention
 }
 
 export interface DetectedIncident {
@@ -768,6 +778,15 @@ export type IncidentAuditEvent =
   | IncidentAuditEventBase & { kind: "investigation.requested" }
   | IncidentAuditEventBase & { kind: "investigation.started"; investigationId: string }
   | IncidentAuditEventBase & {
+    kind: "investigation.tool_step"
+    investigationId: string
+    stepId: string
+    tool: InvestigationToolKind
+    status: InvestigationToolStep["status"]
+    inputSummary: string
+    outputSummary?: string
+  }
+  | IncidentAuditEventBase & {
     kind: "investigation.approval_denied"
     investigationId: string
     approvalKind: InvestigationApproval["kind"]
@@ -791,6 +810,11 @@ export type IncidentAuditEvent =
 
 export interface GetIncidentAuditResponse {
   events: IncidentAuditEvent[]
+  retention: IncidentAuditRetention
+}
+
+export interface IncidentAuditRetention {
+  truncatedToolSteps: number
 }
 
 export type IncidentIssueFallbackReason = "remediation_not_safe" | "remediation_denied" | "remediation_failed"
@@ -940,6 +964,25 @@ export interface Investigation {
   error?: string
 }
 
+export type InvestigationToolKind =
+  | "command"
+  | "file_change"
+  | "mcp"
+  | "dynamic"
+  | "collaboration"
+  | "web_search"
+  | "image_view"
+  | "sleep"
+  | "image_generation"
+
+export interface InvestigationToolStep {
+  id: string
+  tool: InvestigationToolKind
+  status: "started" | "completed" | "failed"
+  inputSummary: string
+  outputSummary?: string
+}
+
 export interface StartInvestigationResponse {
   investigation: Investigation
 }
@@ -966,6 +1009,7 @@ type InvestigationEventData =
   | { kind: "investigation.started"; payload: { status: "starting" } }
   | { kind: "investigation.running"; payload: { status: "running" } }
   | { kind: "output.delta"; payload: { text: string } }
+  | { kind: "tool.step"; payload: { step: InvestigationToolStep } }
   | { kind: "approval.requested"; payload: { approval: InvestigationApproval } }
   | { kind: "approval.resolved"; payload: { approval: InvestigationApproval } }
   | { kind: "investigation.completed"; payload: { status: "completed" } }

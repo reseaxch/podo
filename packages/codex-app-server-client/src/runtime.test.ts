@@ -33,10 +33,22 @@ describe("AppServerRuntime", () => {
     await expect(runtime.startThread({
       cwd: "/repo",
       sandbox: "workspace-write",
+      model: "gpt-5.6-sol",
       developerInstructions: "core-owned policy",
     })).resolves.toEqual({ threadId: "thread-1" })
     await expect(runtime.startTurn("thread-1", "investigate")).resolves.toEqual({ turnId: "turn-1" })
-    expect(transport.requests[0]).toMatchObject({ method: "thread/start", params: { cwd: "/repo", sandbox: "workspace-write", approvalPolicy: "on-request", approvalsReviewer: "user", developerInstructions: "core-owned policy" } })
+    expect(transport.requests[0]).toEqual({
+      method: "thread/start",
+      params: {
+        cwd: "/repo",
+        sandbox: "workspace-write",
+        model: "gpt-5.6-sol",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        ephemeral: false,
+        developerInstructions: "core-owned policy",
+      },
+    })
     transport.notifications?.({ method: "turn/completed", params: { threadId: "thread-1", turn: { id: "turn-1", status: "completed", items: [], itemsView: "full", error: null, startedAt: 1, completedAt: 2, durationMs: 1000 } } } as ServerNotification)
     expect(events).toEqual([{ kind: "turn.completed", threadId: "thread-1", turnId: "turn-1", status: "completed" }])
   })
@@ -48,6 +60,7 @@ describe("AppServerRuntime", () => {
     await runtime.resumeThread("thread-1", {
       cwd: "/repo",
       sandbox: "read-only",
+      model: "gpt-5.6-sol",
       developerInstructions: "resumed core policy",
     })
 
@@ -57,9 +70,136 @@ describe("AppServerRuntime", () => {
         threadId: "thread-1",
         cwd: "/repo",
         sandbox: "read-only",
+        model: "gpt-5.6-sol",
         developerInstructions: "resumed core policy",
       },
     })
+  })
+
+  test("keeps model selection optional for existing callers", async () => {
+    const transport = new FakeTransport()
+    const runtime = new AppServerRuntime(transport)
+
+    await runtime.startThread({ cwd: "/repo", sandbox: "read-only" })
+
+    expect(transport.requests[0]).toEqual({
+      method: "thread/start",
+      params: {
+        cwd: "/repo",
+        sandbox: "read-only",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        ephemeral: false,
+      },
+    })
+  })
+
+  test("maps every generated tool item kind to a safe observable lifecycle", () => {
+    const transport = new FakeTransport()
+    const runtime = new AppServerRuntime(transport)
+    const events: CodexRuntimeEvent[] = []
+    runtime.onEvent((event) => events.push(event))
+    type StartedItem = Extract<ServerNotification, { method: "item/started" }>["params"]["item"]
+    const privateValue = "private-provider-payload"
+    const items: StartedItem[] = [
+      {
+        type: "commandExecution",
+        id: "command",
+        command: privateValue,
+        cwd: "/private",
+        processId: null,
+        source: "agent",
+        status: "inProgress",
+        commandActions: [],
+        aggregatedOutput: null,
+        exitCode: null,
+        durationMs: null,
+      },
+      {
+        type: "fileChange",
+        id: "file",
+        changes: [{ path: "/private/file", kind: { type: "add" }, diff: privateValue }],
+        status: "inProgress",
+      },
+      {
+        type: "mcpToolCall",
+        id: "mcp",
+        server: privateValue,
+        tool: privateValue,
+        status: "inProgress",
+        arguments: { secret: privateValue },
+        appContext: null,
+        pluginId: null,
+        result: null,
+        error: null,
+        durationMs: null,
+      },
+      {
+        type: "dynamicToolCall",
+        id: "dynamic",
+        namespace: privateValue,
+        tool: privateValue,
+        arguments: { secret: privateValue },
+        status: "inProgress",
+        contentItems: null,
+        success: null,
+        durationMs: null,
+      },
+      {
+        type: "collabAgentToolCall",
+        id: "collaboration",
+        tool: "spawnAgent",
+        status: "inProgress",
+        senderThreadId: privateValue,
+        receiverThreadIds: [],
+        prompt: privateValue,
+        model: null,
+        reasoningEffort: null,
+        agentsStates: {},
+      },
+      {
+        type: "webSearch",
+        id: "web",
+        query: privateValue,
+        action: { type: "search", query: privateValue, queries: null },
+      },
+      { type: "imageView", id: "image-view", path: "/private/image.png" },
+      { type: "sleep", id: "sleep", durationMs: 10 },
+      {
+        type: "imageGeneration",
+        id: "image-generation",
+        status: "inProgress",
+        revisedPrompt: privateValue,
+        result: privateValue,
+      },
+    ]
+
+    for (const [index, item] of items.entries()) {
+      transport.notifications?.({
+        method: "item/started",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          startedAtMs: index + 1,
+          item,
+        },
+      })
+    }
+
+    const toolEvents = events.filter((event) => event.kind === "tool.started")
+    expect(toolEvents.map((event) => event.tool)).toEqual([
+      "command",
+      "file_change",
+      "mcp",
+      "dynamic",
+      "collaboration",
+      "web_search",
+      "image_view",
+      "sleep",
+      "image_generation",
+    ])
+    expect(JSON.stringify(toolEvents)).not.toContain(privateValue)
+    expect(JSON.stringify(toolEvents)).not.toContain("/private")
   })
 
   test("holds approval until an explicit decision and fails unsupported requests closed", async () => {

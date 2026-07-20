@@ -2,6 +2,20 @@
 
 `@podo/core` is the authoritative service boundary. It owns investigation lifecycle, approval state, ordered runtime events, readiness, and the mapping between Podo investigations and Codex threads/turns.
 
+## Production Codex model
+
+The production Core composition explicitly sends `model: "gpt-5.6-sol"` on
+every Codex `thread/start` and `thread/resume`. Set `PODO_CODEX_MODEL` to
+`gpt-5.6-sol` or `gpt-5.6-terra` to select the supported GPT-5.6 runtime model.
+Any other value aborts composition with the sanitized error
+`invalid_production_codex_model_config`.
+
+The generic runtime contract keeps `model` optional for backward compatibility.
+Deterministic tests and demos that inject a `CodexRuntime` directly through
+`createCoreHandler` are intentionally not decorated with a production model and
+must not be cited as evidence that GPT-5.6 ran. Only the production composition
+and App Server `thread/start` request provide that evidence.
+
 ## Current foundation
 
 - health and Codex readiness endpoints;
@@ -127,6 +141,14 @@ diagnosis outcome, and sanitized verification or delivery success/failure.
 diagnosis, and issue lifecycle with evidence attribution. It omits raw prompts,
 model output, commands, diffs, and provider errors. The in-memory POC retains
 the latest 256 immutable events per incident with monotonic sequence numbers.
+Observable Codex tool calls are derived only from App Server `item/started` and
+`item/completed` notifications. Each public audit step has a Core-owned ID,
+ordered `started`, `completed`, or `failed` status, a categorical tool kind, and
+bounded content-withheld summaries; raw commands, paths, arguments, patches,
+provider results, and Codex item IDs are never copied into the audit. The
+generated lifecycle does not provide result content for web search or image
+view items, so those terminal summaries explicitly say that details are
+unavailable rather than inventing output.
 `GET /api/incidents/:id/remediation/audit`
 returns the ordered typed events. It records stable Core identifiers, decisions,
 sanitized failure codes, and the stable full-artifact ID; it never records raw

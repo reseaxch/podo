@@ -1,4 +1,9 @@
-import type { BuildIncidentAuditEvent, IncidentAuditEvent } from "@podo/contracts"
+import type {
+  BuildIncidentAuditEvent,
+  GetBuildIncidentAuditResponse,
+  GetIncidentAuditResponse,
+  IncidentAuditEvent,
+} from "@podo/contracts"
 
 type AnyIncidentAuditEvent = IncidentAuditEvent | BuildIncidentAuditEvent
 
@@ -12,6 +17,8 @@ export const INCIDENT_AUDIT_EVENT_LOG_LIMIT = 256
 
 export class IncidentAuditStore {
   private readonly eventsByIncident = new Map<string, AnyIncidentAuditEvent[]>()
+  private readonly truncatedToolStepsByIncident = new Map<string, number>()
+  private readonly lastSequenceByIncident = new Map<string, number>()
 
   constructor(private readonly eventLogLimit = INCIDENT_AUDIT_EVENT_LOG_LIMIT) {
     if (!Number.isSafeInteger(eventLogLimit) || eventLogLimit < 1) {
@@ -22,13 +29,26 @@ export class IncidentAuditStore {
   append(incidentId: string, input: IncidentAuditInput): void {
     const events = this.eventsByIncident.get(incidentId) ?? []
     const payload = validateInput(input)
+    const sequence = (this.lastSequenceByIncident.get(incidentId) ?? 0) + 1
+    this.lastSequenceByIncident.set(incidentId, sequence)
     events.push({
       ...payload,
-      sequence: (events.at(-1)?.sequence ?? 0) + 1,
+      sequence,
       occurredAt: new Date().toISOString(),
       incidentId,
     } as AnyIncidentAuditEvent)
-    if (events.length > this.eventLogLimit) events.splice(0, events.length - this.eventLogLimit)
+    while (events.length > this.eventLogLimit) {
+      const toolStepIndex = events.findIndex((event) => event.kind === "investigation.tool_step")
+      if (toolStepIndex === -1) {
+        events.shift()
+      } else {
+        events.splice(toolStepIndex, 1)
+        this.truncatedToolStepsByIncident.set(
+          incidentId,
+          (this.truncatedToolStepsByIncident.get(incidentId) ?? 0) + 1,
+        )
+      }
+    }
     this.eventsByIncident.set(incidentId, events)
   }
 
@@ -38,6 +58,20 @@ export class IncidentAuditStore {
 
   getBuild(incidentId: string): BuildIncidentAuditEvent[] {
     return structuredClone(this.eventsByIncident.get(incidentId) ?? []) as BuildIncidentAuditEvent[]
+  }
+
+  read(incidentId: string): GetIncidentAuditResponse {
+    return {
+      events: this.get(incidentId),
+      retention: { truncatedToolSteps: this.truncatedToolStepsByIncident.get(incidentId) ?? 0 },
+    }
+  }
+
+  readBuild(incidentId: string): GetBuildIncidentAuditResponse {
+    return {
+      events: this.getBuild(incidentId),
+      retention: { truncatedToolSteps: this.truncatedToolStepsByIncident.get(incidentId) ?? 0 },
+    }
   }
 }
 
@@ -68,6 +102,21 @@ function validateInput(input: unknown): IncidentAuditInput {
     case "investigation.cancelled":
       if (!hasExactKeys(value, ["kind", "investigationId"]) || !isIdentifier(value.investigationId)) throw invalidEvent()
       break
+    case "investigation.tool_step": {
+      const expectedKeys = value.outputSummary === undefined
+        ? ["kind", "investigationId", "stepId", "tool", "status", "inputSummary"]
+        : ["kind", "investigationId", "stepId", "tool", "status", "inputSummary", "outputSummary"]
+      if (!hasExactKeys(value, expectedKeys)
+        || !isIdentifier(value.investigationId)
+        || !isIdentifier(value.stepId)
+        || !isToolKind(value.tool)
+        || !isToolStatus(value.status)
+        || !isSafeToolSummary(value.inputSummary)
+        || (value.outputSummary !== undefined && !isSafeToolSummary(value.outputSummary))
+        || (value.status === "started" && value.outputSummary !== undefined)
+        || (value.status !== "started" && value.outputSummary === undefined)) throw invalidEvent()
+      break
+    }
     case "investigation.approval_denied":
       if (!hasExactKeys(value, ["kind", "investigationId", "approvalKind"])
         || !isIdentifier(value.investigationId)
@@ -321,6 +370,57 @@ function isBoundedTextList(
       && item.length <= maximumLength
       && item === item.trim()
       && !item.includes("\0"))
+}
+
+const safeToolSummaryPatterns = [
+  /^Command content withheld \(\d{1,16} characters\)\.$/,
+  /^Process output unavailable; exit code (?:-?\d{1,10}|unavailable)\.$/,
+  /^Process output withheld \(\d{1,16} characters\); exit code (?:-?\d{1,10}|unavailable)\.$/,
+  /^File change content withheld \(\d{1,16} changes\)\.$/,
+  /^File change result content withheld \(\d{1,16} changes\)\.$/,
+  /^MCP arguments withheld\.$/,
+  /^MCP result content (?:unavailable|withheld)\.$/,
+  /^Dynamic tool arguments withheld\.$/,
+  /^Dynamic tool result content unavailable\.$/,
+  /^Dynamic tool result content withheld \(\d{1,16} items\)\.$/,
+  /^Collaboration prompt unavailable\.$/,
+  /^Collaboration prompt withheld \(\d{1,16} characters\)\.$/,
+  /^Collaboration result details withheld\.$/,
+  /^Search query withheld \(\d{1,16} characters\)\.$/,
+  /^Search result details unavailable in item lifecycle\.$/,
+  /^Image path withheld\.$/,
+  /^Image content unavailable in item lifecycle\.$/,
+  /^Sleep duration (?:\d{1,9}|unavailable) ms\.$/,
+  /^Sleep completed\.$/,
+  /^Image generation prompt unavailable in item lifecycle\.$/,
+  /^Generated image content unavailable\.$/,
+  /^Generated image content withheld \(\d{1,16} characters\)\.$/,
+  /^Tool (?:input|output) summary unavailable\.$/,
+] as const
+
+function isSafeToolSummary(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 160
+    && safeToolSummaryPatterns.some((pattern) => pattern.test(value))
+}
+
+function isToolKind(value: unknown): boolean {
+  return typeof value === "string" && [
+    "command",
+    "file_change",
+    "mcp",
+    "dynamic",
+    "collaboration",
+    "web_search",
+    "image_view",
+    "sleep",
+    "image_generation",
+  ].includes(value)
+}
+
+function isToolStatus(value: unknown): boolean {
+  return value === "started" || value === "completed" || value === "failed"
 }
 
 function isPositiveInteger(value: unknown): value is number {

@@ -381,7 +381,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
       const incidentId = decodeURIComponent(buildIncidentAuditMatch[1])
       if (!buildIncidents?.get(incidentId)) return json({ error: "not_found" }, 404)
-      return json({ events: incidentAudit.getBuild(incidentId) })
+      return json(incidentAudit.readBuild(incidentId))
     }
 
     const buildIncidentRetryApprovalMatch = url.pathname.match(
@@ -463,7 +463,7 @@ export function createCoreHandler(options: CoreHandlerOptions = {}): (request: R
       if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405)
       const incidentId = decodeURIComponent(incidentAuditMatch[1])
       if (!incidentMonitor.getIncident(incidentId)) return json({ error: "not_found" }, 404)
-      return json({ events: incidentAudit.get(incidentId) })
+      return json(incidentAudit.read(incidentId))
     }
 
     const incidentInvestigationMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/investigation$/)

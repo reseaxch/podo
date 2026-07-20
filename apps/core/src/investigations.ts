@@ -1,4 +1,9 @@
-import { AppServerRuntime, type CodexRuntime, type CodexRuntimeEvent } from "@podo/codex-app-server-client"
+import {
+  AppServerRuntime,
+  type CodexRuntime,
+  type CodexRuntimeEvent,
+  type CodexToolKind,
+} from "@podo/codex-app-server-client"
 import type {
   ApprovalDecisionRequest,
   ApprovalDecisionResponse,
@@ -7,6 +12,7 @@ import type {
   Investigation,
   InvestigationApproval,
   InvestigationEvent,
+  InvestigationToolKind,
   StartInvestigationRequest,
   StartInvestigationResponse,
 } from "@podo/contracts"
@@ -28,6 +34,7 @@ interface InternalInvestigation {
   bufferedTurnEvents: CodexRuntimeEvent[]
   events: InvestigationEvent[]
   outputDeltas: string[]
+  toolStepIds: Map<string, string>
   approval?: InternalApproval
   listeners: Set<(event: InvestigationEvent) => void>
   approvalPolicy: "interactive" | "deny_all"
@@ -106,6 +113,7 @@ export class InvestigationService {
       bufferedTurnEvents: [],
       events: [],
       outputDeltas: [],
+      toolStepIds: new Map(),
       listeners: new Set(),
       approvalPolicy: options.approvalPolicy ?? "interactive",
       ...(options.onEvent ? { onEvent: options.onEvent } : {}),
@@ -284,6 +292,54 @@ export class InvestigationService {
         investigation.outputDeltas.push(event.text)
         this.append(investigation, { kind: "output.delta", payload: { text: event.text } })
         break
+      case "tool.started": {
+        if (event.turnId !== investigation.turnId) return
+        if (!isBoundedRuntimeItemId(event.itemId)) {
+          this.failToolTracking(investigation, "Investigation tool step identifier was invalid")
+          return
+        }
+        if (investigation.toolStepIds.has(event.itemId)) return
+        if (investigation.toolStepIds.size >= this.eventLogLimit) {
+          this.failToolTracking(investigation, "Investigation tool step tracking exceeded configured limit")
+          return
+        }
+        const stepId = crypto.randomUUID()
+        investigation.toolStepIds.set(event.itemId, stepId)
+        this.append(investigation, {
+          kind: "tool.step",
+          payload: {
+            step: {
+              id: stepId,
+              tool: investigationToolKind(event.tool),
+              status: "started",
+              inputSummary: sanitizeToolSummary(event.inputSummary, "Tool input summary unavailable."),
+            },
+          },
+        })
+        break
+      }
+      case "tool.completed": {
+        if (event.turnId !== investigation.turnId) return
+        if (!isBoundedRuntimeItemId(event.itemId)) {
+          this.failToolTracking(investigation, "Investigation tool step identifier was invalid")
+          return
+        }
+        const stepId = investigation.toolStepIds.get(event.itemId) ?? crypto.randomUUID()
+        investigation.toolStepIds.delete(event.itemId)
+        this.append(investigation, {
+          kind: "tool.step",
+          payload: {
+            step: {
+              id: stepId,
+              tool: investigationToolKind(event.tool),
+              status: event.status,
+              inputSummary: sanitizeToolSummary(event.inputSummary, "Tool input summary unavailable."),
+              outputSummary: sanitizeToolSummary(event.outputSummary, "Tool output summary unavailable."),
+            },
+          },
+        })
+        break
+      }
       case "approval.requested": {
         if (event.turnId !== investigation.turnId) return
         if (investigation.approvalPolicy === "deny_all") {
@@ -318,6 +374,7 @@ export class InvestigationService {
           investigation.public.pendingApproval = null
           delete investigation.approval
         }
+        investigation.toolStepIds.clear()
         if (event.status === "completed") {
           this.clearTurnTimeout(investigation)
           investigation.public.status = "completed"
@@ -355,6 +412,16 @@ export class InvestigationService {
     void resolution.catch(() => undefined)
   }
 
+  private failToolTracking(investigation: InternalInvestigation, message: string): void {
+    const runtime = investigation.runtime
+    const threadId = investigation.threadId
+    const turnId = investigation.turnId
+    this.fail(investigation, message)
+    if (runtime && threadId && turnId) {
+      void runtime.interruptTurn(threadId, turnId).catch(() => undefined)
+    }
+  }
+
   private append(investigation: InternalInvestigation, data: Omit<InvestigationEvent, "investigationId" | "sequence" | "timestamp">): void {
     const event = {
       investigationId: investigation.public.id,
@@ -375,6 +442,7 @@ export class InvestigationService {
     this.clearTurnTimeout(investigation)
     investigation.public.status = "failed"
     investigation.outputDeltas.length = 0
+    investigation.toolStepIds.clear()
     investigation.public.error = message
     investigation.public.pendingApproval = null
     delete investigation.approval
@@ -439,9 +507,68 @@ function isTerminal(status: Investigation["status"]): boolean {
 }
 
 function isTurnEvent(event: CodexRuntimeEvent): event is Extract<CodexRuntimeEvent, {
-  kind: "output.delta" | "approval.requested" | "turn.completed"
+  kind: "output.delta" | "tool.started" | "tool.completed" | "approval.requested" | "turn.completed"
 }> {
-  return event.kind === "output.delta" || event.kind === "approval.requested" || event.kind === "turn.completed"
+  return event.kind === "output.delta"
+    || event.kind === "tool.started"
+    || event.kind === "tool.completed"
+    || event.kind === "approval.requested"
+    || event.kind === "turn.completed"
+}
+
+const safeToolSummaryPatterns = [
+  /^Command content withheld \(\d{1,16} characters\)\.$/,
+  /^Process output unavailable; exit code (?:-?\d{1,10}|unavailable)\.$/,
+  /^Process output withheld \(\d{1,16} characters\); exit code (?:-?\d{1,10}|unavailable)\.$/,
+  /^File change content withheld \(\d{1,16} changes\)\.$/,
+  /^File change result content withheld \(\d{1,16} changes\)\.$/,
+  /^MCP arguments withheld\.$/,
+  /^MCP result content (?:unavailable|withheld)\.$/,
+  /^Dynamic tool arguments withheld\.$/,
+  /^Dynamic tool result content unavailable\.$/,
+  /^Dynamic tool result content withheld \(\d{1,16} items\)\.$/,
+  /^Collaboration prompt unavailable\.$/,
+  /^Collaboration prompt withheld \(\d{1,16} characters\)\.$/,
+  /^Collaboration result details withheld\.$/,
+  /^Search query withheld \(\d{1,16} characters\)\.$/,
+  /^Search result details unavailable in item lifecycle\.$/,
+  /^Image path withheld\.$/,
+  /^Image content unavailable in item lifecycle\.$/,
+  /^Sleep duration (?:\d{1,9}|unavailable) ms\.$/,
+  /^Sleep completed\.$/,
+  /^Image generation prompt unavailable in item lifecycle\.$/,
+  /^Generated image content unavailable\.$/,
+  /^Generated image content withheld \(\d{1,16} characters\)\.$/,
+] as const
+
+function sanitizeToolSummary(value: string, fallback: string): string {
+  return value.length <= 160 && safeToolSummaryPatterns.some((pattern) => pattern.test(value))
+    ? value
+    : fallback
+}
+
+function isBoundedRuntimeItemId(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 256
+    && value === value.trim()
+    && !/[\u0000-\u001f\u007f]/.test(value)
+}
+
+const investigationToolKinds = {
+  command: "command",
+  file_change: "file_change",
+  mcp: "mcp",
+  dynamic: "dynamic",
+  collaboration: "collaboration",
+  web_search: "web_search",
+  image_view: "image_view",
+  sleep: "sleep",
+  image_generation: "image_generation",
+} as const satisfies Record<CodexToolKind, InvestigationToolKind>
+
+function investigationToolKind(value: CodexToolKind): InvestigationToolKind {
+  return investigationToolKinds[value]
 }
 
 function sanitizeQuestions(value: unknown[]): NonNullable<InvestigationApproval["questions"]> {
