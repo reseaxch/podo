@@ -136,6 +136,39 @@ test("typed client ingests telemetry and reads core-owned incidents", async () =
   })
 })
 
+test("typed client rejects an untrusted later deployment as post-fix telemetry", async () => {
+  const handler = createCoreHandler()
+  const client = createPodoClient({
+    baseUrl: "http://podo.test",
+    fetch: (input, init) => handler(new Request(input, init)),
+  })
+  const [before, after] = await Promise.all([
+    Bun.file(
+      new URL(
+        "../../../scenarios/cache-growth/fixtures/telemetry.json",
+        import.meta.url,
+      ),
+    ).json(),
+    Bun.file(
+      new URL(
+        "../../../scenarios/cache-growth/fixtures/telemetry-after-fix.json",
+        import.meta.url,
+      ),
+    ).json(),
+  ])
+
+  const ingested = await client.ingestTelemetry(before)
+  if (!ingested.incident) throw new Error("expected incident")
+  await expect(
+    client.getIncidentTelemetryComparison(ingested.incident.id),
+  ).rejects.toThrow("409")
+
+  await client.ingestTelemetry(after)
+  await expect(
+    client.getIncidentTelemetryComparison(ingested.incident.id),
+  ).rejects.toThrow("409")
+})
+
 test("typed client reads an evidence-specific production causal path", async () => {
   const commitSha = "0123456789abcdef0123456789abcdef01234567"
   const fileNodeId = "code:file:checkout-cache"

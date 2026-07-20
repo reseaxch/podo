@@ -23,6 +23,7 @@ export interface TelemetryEvent {
   severity: "debug" | "info" | "warn" | "error" | "critical"
   message: string
   deploymentId?: string
+  commitId?: string
   traceId?: string
   containerId?: string
   metric?: { name: string; value: number; unit?: string }
@@ -33,6 +34,7 @@ const CONTAINER = "checkout-service-7b9c"
 const HEALTHY_DEPLOY = "deploy-1041" // pre-defect
 const DEFECT_DEPLOY = "deploy-1042" // introduces the unbounded cache
 const FIXED_DEPLOY = "deploy-1043" // post-fix: bounds the cache again
+const FIXED_COMMIT = "d".repeat(40) // deterministic delivered PR head in the canonical demo
 const BASE_MS = Date.parse("2026-07-14T09:00:00.000Z")
 const STEP_MS = 15_000 // 15s between samples
 const HEALTHY_SAMPLES = 4 // heap samples before the defect deployment
@@ -148,6 +150,7 @@ export function buildAfterFixTelemetryEvents(): TelemetryEvent[] {
     severity: "info",
     message: `deployment ${FIXED_DEPLOY} rolled out`,
     deploymentId: FIXED_DEPLOY,
+    commitId: FIXED_COMMIT,
     containerId: CONTAINER,
   })
 
@@ -162,6 +165,7 @@ export function buildAfterFixTelemetryEvents(): TelemetryEvent[] {
       severity: "info",
       message: "process heap sample",
       deploymentId: FIXED_DEPLOY,
+      commitId: FIXED_COMMIT,
       containerId: CONTAINER,
       metric: { name: "process.heap.used", value: usedBytes, unit: "By" },
     })

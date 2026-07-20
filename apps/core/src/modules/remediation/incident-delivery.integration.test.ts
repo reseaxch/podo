@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { CodexRuntime, CodexRuntimeEvent } from "@podo/codex-app-server-client"
 
 import { createPodoClient } from "../../../../../packages/client/src/index"
+import { InMemoryIncidentPostFixReplayRegistry } from "../../../../../plugins/otel-replay/src/index"
 import { createCoreHandler } from "../../app"
 import type { PullRequestDeliveryInput } from "./incident-delivery"
 
@@ -98,10 +99,12 @@ function verifiedExecutorResult() {
 
 async function completedRemediationFixture(delivery: { deliver(input: unknown): Promise<unknown> }) {
   const runtime = new DiagnosisRuntime()
+  const postFixReplays = new InMemoryIncidentPostFixReplayRegistry()
   const remediationExecutor = { async execute() { return verifiedExecutorResult() } }
   const handler = createCoreHandler({
     runtime,
     remediationExecutor,
+    postFixReplays,
     pullRequestDelivery: {
       expectedRepository: "reseaxch/podo",
       operatorIdentity: "fixture-operator",
@@ -120,7 +123,13 @@ async function completedRemediationFixture(delivery: { deliver(input: unknown): 
   const remediation = await client.startIncidentRemediation(ingested.incident.id)
   const completed = await client.approveIncidentRemediation(ingested.incident.id, remediation.remediation.approval.id)
   if (!completed.remediation.artifact) throw new Error("expected verified artifact")
-  return { client, handler, incident: ingested.incident, remediation: completed.remediation }
+  return {
+    client,
+    handler,
+    incident: ingested.incident,
+    remediation: completed.remediation,
+    postFixReplays,
+  }
 }
 
 function deliveredResult(input: PullRequestDeliveryInput) {
@@ -234,6 +243,118 @@ describe("incident pull request delivery API", () => {
       { kind: "delivery.started" },
       { kind: "delivery.succeeded", artifactId, pullRequestUrl: "https://github.com/reseaxch/podo/pull/6" },
     ])
+  })
+
+  test("binds post-fix telemetry comparison to the exact delivered head", async () => {
+    const fixture = await completedRemediationFixture({
+      async deliver(raw) {
+        return deliveredResult(raw as PullRequestDeliveryInput)
+      },
+    })
+    const pending = await fixture.client.startIncidentDelivery(
+      fixture.incident.id,
+    )
+    const delivered = await fixture.client.approveIncidentDelivery(
+      fixture.incident.id,
+      pending.delivery.approval.id,
+    )
+    expect(delivered.delivery).toMatchObject({
+      status: "delivered",
+      pullRequest: { headSha: "d".repeat(40) },
+    })
+
+    await fixture.client.ingestTelemetry([{
+      timestamp: "2026-07-14T09:30:00.000Z",
+      kind: "metric",
+      service: "checkout-service",
+      severity: "info",
+      message: "healthy but unrelated deployment",
+      deploymentId: "deploy-untrusted",
+      commitId: "c".repeat(40),
+      metric: {
+        name: "process.heap.used",
+        value: 180 * 1024 * 1024,
+        unit: "By",
+      },
+    }])
+    await expect(
+      fixture.client.getIncidentTelemetryComparison(fixture.incident.id),
+    ).rejects.toThrow("409")
+
+    const after = await Bun.file(
+      new URL(
+        "../../../../../scenarios/cache-growth/fixtures/telemetry-after-fix.json",
+        import.meta.url,
+      ),
+    ).json()
+    await fixture.client.ingestTelemetry(after)
+    await expect(
+      fixture.client.getIncidentTelemetryComparison(fixture.incident.id),
+    ).rejects.toThrow("409")
+
+    const pullRequest = delivered.delivery.pullRequest
+    if (!pullRequest?.headSha) throw new Error("expected delivered head")
+    const replayBinding = {
+      incidentId: fixture.incident.id,
+      remediationId: delivered.delivery.remediationId,
+      artifactId: delivered.delivery.artifactId,
+      headSha: pullRequest.headSha,
+    }
+    expect("createSession" in fixture.postFixReplays).toBe(false)
+    expect("register" in fixture.postFixReplays).toBe(false)
+    expect("seal" in fixture.postFixReplays).toBe(false)
+
+    expect(await fixture.postFixReplays.runAndSeal(
+      replayBinding,
+      [{
+        ...after[0],
+        message: "x".repeat(2_001),
+      }],
+      { scheduler: { wait: async () => {} } },
+    )).toBeNull()
+    expect(await fixture.postFixReplays.runAndSeal(
+      replayBinding,
+      Array.from({ length: 1_001 }, () => after[0]),
+      { scheduler: { wait: async () => {} } },
+    )).toBeNull()
+
+    const replay = await fixture.postFixReplays.runAndSeal(
+      replayBinding,
+      after,
+      {
+      scheduler: { wait: async () => {} },
+      },
+    )
+    if (!replay) throw new Error("expected sealed post-fix replay")
+
+    expect(
+      await fixture.client.getIncidentTelemetryComparison(fixture.incident.id),
+    ).toMatchObject({
+      comparison: {
+        schemaVersion: "podo.telemetry-comparison.v1",
+        service: "checkout-service",
+        before: {
+          deploymentIds: ["deploy-1042"],
+          errorEvents: 2,
+        },
+        after: {
+          deploymentIds: ["deploy-1043"],
+          errorEvents: 0,
+        },
+        verdict: {
+          status: "stabilized",
+          heapGrowthStable: true,
+          improved: true,
+        },
+      },
+      provenance: {
+        replayId: replay.replayId,
+        remediationId: delivered.delivery.remediationId,
+        artifactId: delivered.delivery.artifactId,
+        headSha: "d".repeat(40),
+        afterEventCount: 13,
+      },
+    })
   })
 
   test("keeps denial mutation-free and fails delivery without exposing untrusted provider output", async () => {

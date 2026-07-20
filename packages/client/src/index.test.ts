@@ -130,6 +130,28 @@ describe("createPodoClient", () => {
     ])
   })
 
+  test("reads a Core-owned telemetry comparison for one incident", async () => {
+    const requestedUrls: string[] = []
+    const client = createPodoClient({
+      baseUrl: "http://podo.test/",
+      fetch: async (input) => {
+        requestedUrls.push(String(input))
+        return Response.json({
+          comparison: {
+            schemaVersion: "podo.telemetry-comparison.v1",
+            comparisonId: "telemetry_comparison_0123456789abcdef01234567",
+          },
+        })
+      },
+    })
+
+    await client.getIncidentTelemetryComparison("incident/1")
+
+    expect(requestedUrls).toEqual([
+      "http://podo.test/api/incidents/incident%2F1/telemetry-comparison",
+    ])
+  })
+
   test("uses the core-owned incident remediation lifecycle without caller-authored state", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = []
     const client = createPodoClient({

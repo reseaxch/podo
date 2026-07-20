@@ -28,6 +28,7 @@ Usage:
   podo incidents show <incidentId>         Show one incident
   podo incidents path <incidentId> <evidenceId>
                                             Show its evidence-specific causal path
+  podo incidents comparison <incidentId>     Show its Core-owned before/after telemetry comparison
   podo incidents investigate <incidentId> <absolute-cwd>
                                             Start its core-owned investigation
   podo incidents remediate <incidentId>     Request an approval-gated remediation
@@ -114,6 +115,20 @@ export async function runCli(args: string[], dependencies: CliDependencies = {})
     output(
       JSON.stringify(
         await client.getIncidentCausalPath(firstArgument, secondArgument),
+        null,
+        2,
+      ),
+    )
+    return 0
+  }
+  if (command === "incidents" && subcommand === "comparison") {
+    if (args.length !== 3 || !isNonBlank(firstArgument)) {
+      error("Invalid arguments. Usage: podo incidents comparison <incidentId>")
+      return 1
+    }
+    output(
+      JSON.stringify(
+        await client.getIncidentTelemetryComparison(firstArgument),
         null,
         2,
       ),

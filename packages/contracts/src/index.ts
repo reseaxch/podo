@@ -78,6 +78,44 @@ export interface TelemetryIngestionResult {
   rejected: RejectedTelemetryEvent[]
 }
 
+export interface ReplayRejection {
+  batch: number
+  inputIndex: number
+  reason: string
+}
+
+export interface ReplaySummary {
+  status: "completed" | "aborted" | "failed"
+  replayId: string
+  totalEvents: number
+  attempted: number
+  accepted: number
+  duplicates: number
+  rejected: number
+  batches: number
+  scheduledDurationMs: number
+  rejections: ReplayRejection[]
+}
+
+export interface IncidentPostFixReplayBinding {
+  incidentId: string
+  remediationId: string
+  artifactId: string
+  headSha: string
+}
+
+export interface VerifiedIncidentPostFixReplay
+extends IncidentPostFixReplayBinding {
+  replayId: string
+  events: TelemetryEventInput[]
+}
+
+export interface IncidentPostFixReplaySource {
+  getVerifiedReplay(
+    incidentId: string,
+  ): VerifiedIncidentPostFixReplay | null
+}
+
 export interface IncidentEvidence {
   id: string
   sourceEventId: string
@@ -598,6 +636,58 @@ export interface GetIncidentResponse {
 
 export interface GetIncidentEvidenceResponse {
   records: IncidentEvidenceRecord[]
+}
+
+export const PODO_TELEMETRY_COMPARISON_SCHEMA_VERSION =
+  "podo.telemetry-comparison.v1" as const
+
+export interface TelemetryComparisonOptions {
+  service: string
+  metricName: string
+  metricUnit: string
+  stableChangeLimit: number
+}
+
+export interface TelemetryWindowMeasurements {
+  eventCount: number
+  metricSamples: number
+  firstValue: number
+  lastValue: number
+  peakValue: number
+  changeValue: number
+  errorEvents: number
+  deploymentIds: string[]
+}
+
+export interface TelemetryComparisonReport {
+  schemaVersion: typeof PODO_TELEMETRY_COMPARISON_SCHEMA_VERSION
+  comparisonId: string
+  service: string
+  metric: {
+    name: string
+    unit: string
+    stableChangeLimit: number
+  }
+  before: TelemetryWindowMeasurements
+  after: TelemetryWindowMeasurements
+  verdict: {
+    status: "stabilized" | "unchanged" | "regressed"
+    heapGrowthStable: boolean
+    peakDidNotIncrease: boolean
+    errorsDidNotIncrease: boolean
+    improved: boolean
+  }
+}
+
+export interface GetIncidentTelemetryComparisonResponse {
+  comparison: TelemetryComparisonReport
+  provenance: {
+    replayId: string
+    remediationId: string
+    artifactId: string
+    headSha: string
+    afterEventCount: number
+  }
 }
 
 export const PODO_CAUSAL_PATH_SCHEMA_VERSION = "podo.causal-path.v1" as const

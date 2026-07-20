@@ -104,6 +104,7 @@ describe("cache-growth fixture integrity", () => {
     expect(afterFix.length).toBeGreaterThan(0)
     for (const event of afterFix) {
       expect(event.deploymentId).toBe("deploy-1043")
+      expect(event.commitId).toBe("d".repeat(40))
     }
 
     // No trace events, and no error signature in any message.

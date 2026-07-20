@@ -1,21 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import type { TelemetryEventInput } from "@podo/contracts"
 
 import {
   TelemetryComparisonInputError,
   compareTelemetryWindows,
-  type TelemetryComparisonOptions,
-} from "./comparison"
+} from "./telemetry-comparison"
 
 const MIB = 1024 * 1024
-const options: TelemetryComparisonOptions = {
+const options = {
   service: "checkout-service",
   metricName: "process.heap.used",
   metricUnit: "By",
   stableChangeLimit: 16 * MIB,
 }
 
-function metric(second: number, valueMib: number, deploymentId = "deploy-test", hour = 9): TelemetryEventInput {
+function metric(second: number, valueMib: number, deploymentId = "deploy-test", hour = 9) {
   return {
     timestamp: `2026-07-14T${String(hour).padStart(2, "0")}:00:${String(second).padStart(2, "0")}.000Z`,
     kind: "metric",
@@ -27,7 +25,7 @@ function metric(second: number, valueMib: number, deploymentId = "deploy-test", 
   }
 }
 
-function errorEvent(second: number, deploymentId = "deploy-test", hour = 9): TelemetryEventInput {
+function errorEvent(second: number, deploymentId = "deploy-test", hour = 9) {
   return {
     timestamp: `2026-07-14T${String(hour).padStart(2, "0")}:00:${String(second).padStart(2, "0")}.000Z`,
     kind: "trace",

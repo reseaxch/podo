@@ -20,6 +20,7 @@ import type {
   GetIncidentIssueResponse,
   GetIncidentDeliveryResponse,
   GetIncidentRemediationAuditResponse,
+  GetIncidentTelemetryComparisonResponse,
   GetSettingsResponse,
   HealthResponse,
   IngestTelemetryResponse,
@@ -88,6 +89,7 @@ export interface PodoIncidentClient extends PodoClient {
   startIncidentInvestigation(id: string, input: StartIncidentInvestigationRequest): Promise<StartIncidentInvestigationResponse>
   getIncidentCausalPath(id: string, evidenceId: string): Promise<GetIncidentCausalPathResponse>
   getIncidentEvidence(id: string): Promise<GetIncidentEvidenceResponse>
+  getIncidentTelemetryComparison(id: string): Promise<GetIncidentTelemetryComparisonResponse>
 }
 
 export interface PodoIncidentAuditClient {
@@ -190,6 +192,9 @@ export function createPodoClient(options: PodoClientOptions = {}): PodoClient
     getIncidentIssue: async (id) => readJson<GetIncidentIssueResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/issue`)),
     getIncidentCausalPath: async (id, evidenceId) => readJson<GetIncidentCausalPathResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/causal-path?evidenceId=${encodeURIComponent(evidenceId)}`)),
     getIncidentEvidence: async (id) => readJson<GetIncidentEvidenceResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/evidence`)),
+    getIncidentTelemetryComparison: async (id) => readJson<GetIncidentTelemetryComparisonResponse>(
+      await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/telemetry-comparison`),
+    ),
     startIncidentInvestigation: (id, input) => command<StartIncidentInvestigationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/investigation`, "POST", input),
     startIncidentRemediation: (id) => command<StartIncidentRemediationResponse>(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`, "POST", {}),
     getIncidentRemediation: async (id) => readJson<GetIncidentRemediationResponse>(await request(`${baseUrl}/api/incidents/${encodeURIComponent(id)}/remediation`)),
