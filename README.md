@@ -35,6 +35,8 @@ incident → evidence → root cause → tested fix → pull request
 
 The canonical product documents are:
 
+- [Integration guide](docs/INTEGRATION_GUIDE.md) — connect Podo to your own
+  repository, telemetry, Codex, and GitHub
 - [MVP plan](docs/MVP_PLAN.md)
 - [Use cases](docs/USE_CASES.md)
 - [Workstream ownership](docs/WORKSTREAMS.md)
@@ -349,6 +351,11 @@ Run the finite judge preflight, then the interactive demo:
 bun run demo:verify
 bun run demo
 ```
+
+To connect Podo to your own repository, follow the
+[integration guide](docs/INTEGRATION_GUIDE.md). It covers the supported local
+architecture, telemetry contract, code graph, Codex diagnosis, isolated
+red-green remediation, GitHub delivery, webhook setup, and troubleshooting.
 
 Verify the complete foundation:
 
