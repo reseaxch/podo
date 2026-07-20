@@ -41,7 +41,7 @@ const incident: BuildIncident = {
 }
 
 describe("BuildIncidentsOverview", () => {
-  it("uses the shared showcase chrome in demo mode", () => {
+  it("keeps demo operator actions interactive without calling Core", async () => {
     render(
       <BuildIncidentsOverview
         incidents={[incident]}
@@ -61,13 +61,27 @@ describe("BuildIncidentsOverview", () => {
   })
 
   it("exposes Core build failures as navigable production records", () => {
-    render(<BuildIncidentsOverview incidents={[incident]} />)
+    const diagnosedIncident: BuildIncident = {
+      ...incident,
+      diagnosis: {
+        status: "validated",
+        schemaVersion: "podo.diagnosis.v1",
+        summary: "Dashboard typecheck failed in the build route.",
+        affectedService: "dashboard",
+        probableRootCause: "A route imports a missing component.",
+        confidence: { value: 9100, scale: "basis_points" },
+        evidenceIds: [],
+        recommendedAction: "Retry the exact failed run once.",
+        safeToAttemptFix: true,
+      },
+    }
+    render(<BuildIncidentsOverview incidents={[diagnosedIncident]} />)
 
     expect(
       screen.getByRole("heading", { name: "Build incidents" }),
     ).toBeVisible()
     expect(screen.getByText("reseaxch/podo")).toBeVisible()
-    expect(screen.getByText("Awaiting action")).toBeVisible()
+    expect(screen.getAllByText("Awaiting action")).toHaveLength(2)
     expect(
       screen.getByRole("link", { name: /Open build incident/ }),
     ).toHaveAttribute(
@@ -86,6 +100,20 @@ describe("BuildIncidentsOverview", () => {
     expect(
       screen.getByRole("heading", { name: "GitHub Actions incidents" }),
     ).toBeVisible()
+    expect(screen.getByText("1 record in the current view")).toBeVisible()
+    expect(screen.queryByText("1 records")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Action summary" }),
+    ).toBeVisible()
+    expect(
+      screen.getByText("A route imports a missing component."),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole("tablist", { name: "Build incident status" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("tab", { name: "In progress (0)" }),
+    ).not.toBeInTheDocument()
   })
 
   it("filters the operational queue by workflow state", async () => {
@@ -105,9 +133,10 @@ describe("BuildIncidentsOverview", () => {
       screen.queryByText("reseaxch/verified-service"),
     ).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole("tab", { name: "In progress (0)" }))
-    expect(screen.getByText("No build incidents in this view")).toBeVisible()
     expect(screen.getByRole("tab", { name: "All builds (2)" })).toBeVisible()
+    expect(
+      screen.queryByRole("tab", { name: "In progress (0)" }),
+    ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("tab", { name: "All builds (2)" }))
     expect(screen.getByText("reseaxch/podo")).toBeVisible()
@@ -127,7 +156,8 @@ describe("BuildIncidentsOverview", () => {
 })
 
 describe("BuildIncidentWorkspace", () => {
-  it("uses the shared showcase chrome in demo mode", () => {
+  it("keeps demo operator actions interactive without calling Core", async () => {
+    const user = userEvent.setup()
     render(
       <BuildIncidentWorkspace
         initial={{ incident, events: [] }}
@@ -144,12 +174,43 @@ describe("BuildIncidentWorkspace", () => {
       screen.getByText("Incidents", { selector: ".breadcrumbs span" }),
     ).toBeVisible()
     expect(screen.getByRole("img", { name: "Maya Chen" })).toBeVisible()
+    expect(screen.getByText("Operator actions")).toBeVisible()
+    await user.click(
+      screen.getByRole("button", { name: "Request exact retry" }),
+    )
+    expect(screen.getByText("Demo approval request")).toBeVisible()
+    expect(screen.getAllByText(/Run 1042 · attempt 1/)).toHaveLength(2)
+    expect(
+      screen.getByRole("button", { name: "Simulate approval" }),
+    ).toBeEnabled()
+    expect(
+      screen.getByText(/Connect authenticated operator access/),
+    ).toBeVisible()
   })
 
   it("requests only the exact failed workflow run retry", async () => {
     const user = userEvent.setup()
     const readyIncident: BuildIncident = {
       ...incident,
+      evidence: [
+        {
+          id: "build-evidence-step",
+          sourceId: "step:4",
+          sourceType: "github_actions_step",
+          observedAt: incident.updatedAt,
+          repository: incident.repository,
+          runId: incident.sourceRun.id,
+          runAttempt: incident.sourceRun.attempt,
+          headSha: incident.sourceRun.headSha,
+          summary: "Dashboard typecheck failed",
+          jobId: 77,
+          jobName: "dashboard",
+          stepNumber: 4,
+          stepName: "Typecheck",
+          status: "completed",
+          conclusion: "failure",
+        },
+      ],
       diagnosis: {
         status: "validated",
         schemaVersion: "podo.diagnosis.v1",
@@ -189,6 +250,11 @@ describe("BuildIncidentWorkspace", () => {
     expect(
       screen.getByRole("region", { name: "Build incident summary" }),
     ).toHaveTextContent("91%")
+    expect(
+      screen.getByRole("complementary", { name: "Next safe action" }),
+    ).toHaveTextContent("Retry the exact failed run once.")
+    expect(screen.getByText("1 evidence record")).toBeVisible()
+    expect(screen.queryByText(/1 records/)).not.toBeInTheDocument()
     await user.click(
       screen.getByRole("button", { name: "Request exact retry" }),
     )

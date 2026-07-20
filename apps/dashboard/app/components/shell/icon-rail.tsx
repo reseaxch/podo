@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { AgentPanel } from "../agent/agent-panel"
 import { Icon } from "../ui/pictogram"
+import { PodoLogo } from "./podo-logo"
 import { ShellOverlay, type ShellOverlayMode } from "./shell-overlay"
 
 export function IconRail() {
@@ -110,7 +111,10 @@ export function IconRail() {
     <>
       <aside className="icon-rail" aria-label="Primary navigation">
         <Link className="brand-mark" aria-label="Podo home" href="/overview">
-          <Icon name="cube" size={21} />
+          <PodoLogo className="brand-logo" size={26} />
+          <span aria-hidden="true" className="brand-name">
+            Podo
+          </span>
         </Link>
         <nav>
           <div aria-label="Operations" className="rail-section" role="group">
@@ -279,7 +283,7 @@ export function IconRail() {
           >
             <header>
               <span>
-                <Icon name="cube" size={18} />
+                <PodoLogo className="mobile-brand-logo" size={22} />
                 <strong>Navigate Podo</strong>
               </span>
               <button

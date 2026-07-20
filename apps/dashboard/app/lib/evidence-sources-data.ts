@@ -55,7 +55,7 @@ export async function getEvidenceSources(): Promise<EvidenceSourcesViewModel> {
     const evidence = incidents.flatMap((incident) => incident.evidence)
     const kinds = Array.from(new Set(evidence.map((item) => item.sourceType)))
     return {
-      owner: { name: "Podo Core", avatar: "/icon.svg" },
+      owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
       generatedAt: "Updated from Core",
       sources: [
         {

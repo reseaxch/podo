@@ -54,7 +54,7 @@ describe("getIncidentOverview", () => {
 
     expect(listIncidents).toHaveBeenCalledOnce()
     expect(overview).toMatchObject({
-      owner: { name: "Podo Core", avatar: "/icon.svg" },
+      owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
       generatedAt: "Updated from Core",
       incidents: [
         {

@@ -4,6 +4,7 @@ import Link from "next/link"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 
 import { Icon } from "../ui/pictogram"
+import { PodoLogo } from "../shell/podo-logo"
 import styles from "./auth-screen.module.css"
 
 type AuthMode = "signin" | "register"
@@ -426,7 +427,7 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
       >
         <header className={styles.brand}>
           <span className={styles.brandMark}>
-            <Icon name="cube" size={20} />
+            <PodoLogo size={24} />
           </span>
           <strong>Podo</strong>
           <span className={styles.demoBadge}>Interactive demo</span>

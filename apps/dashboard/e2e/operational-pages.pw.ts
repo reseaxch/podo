@@ -9,12 +9,9 @@ test("build incident stays read-only without an operator boundary", async ({
       name: "Build incident operational summary",
     }),
   ).toBeVisible()
-  await expect(
-    page.getByRole("tab", { name: "Needs action (1)" }),
-  ).toBeVisible()
   await page.getByRole("link", { name: /Open build incident/ }).click()
   await expect(
-    page.getByRole("heading", { name: /CI failed in reseaxch\/podo/ }),
+    page.getByRole("heading", { name: "CI #52 failed" }),
   ).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Run 1042 · attempt 1" }),
@@ -24,14 +21,19 @@ test("build incident stays read-only without an operator boundary", async ({
   ).toBeVisible()
 
   await expect(
-    page.getByLabel("Next safe action").getByText("Read-only workspace"),
+    page.getByLabel("Next safe action").getByText("Demo workspace"),
   ).toBeVisible()
   await expect(
-    page.getByText("Demo actions are disabled and never call Core."),
+    page.getByText(
+      "This view uses real UI states without dispatching mutations to Core.",
+    ),
   ).toBeVisible()
+  await page.getByRole("button", { name: "Request exact retry" }).click()
+  await expect(page.getByText("Demo approval request")).toBeVisible()
+  await page.getByRole("button", { name: "Simulate approval" }).click()
   await expect(
-    page.getByRole("button", { name: "Request exact retry" }),
-  ).toHaveCount(0)
+    page.getByText("Demo approval completed — no retry was dispatched"),
+  ).toBeVisible()
   await expect(
     page.getByRole("button", { name: "Refresh Core state" }),
   ).toBeVisible()

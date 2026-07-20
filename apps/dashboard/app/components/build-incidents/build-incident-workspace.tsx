@@ -67,6 +67,10 @@ function formatInstant(value: string) {
   }).format(new Date(value))
 }
 
+function formatCount(count: number, singular: string) {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`
+}
+
 async function decode(
   response: Response,
 ): Promise<BuildIncidentWorkspaceState> {
@@ -107,7 +111,7 @@ function apiController(): BuildIncidentWorkspaceController {
 
 const defaultController = apiController()
 const coreShell: DashboardShellContext = {
-  owner: { name: "Podo Core", avatar: "/icon.svg" },
+  owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
   source: "core",
 }
 
@@ -159,6 +163,9 @@ export function BuildIncidentWorkspace({
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
+  const [demoAction, setDemoAction] = useState<"retry" | "remediation" | null>(
+    null,
+  )
   const { toast, toastState, showToast } = useToast()
   const incident = state.incident
   const active = [
@@ -255,9 +262,13 @@ export function BuildIncidentWorkspace({
           <div>
             <span className="eyebrow">GitHub Actions failure</span>
             <h1>
-              {incident.workflow.name} failed in {incident.repository}
+              {incident.workflow.name} #{incident.sourceRun.runNumber} failed
             </h1>
-            <p>{incident.id}</p>
+            <p className="build-detail-repository">
+              <Icon name="github" size={14} />
+              <strong>{incident.repository}</strong>
+              <span>{incident.id}</span>
+            </p>
           </div>
           <span className={`build-status build-status-${incident.status}`}>
             {statusLabels[incident.status]}
@@ -284,8 +295,10 @@ export function BuildIncidentWorkspace({
           </div>
           <div>
             <span>Evidence</span>
-            <strong>{incident.evidence.length}</strong>
-            <small>Core records</small>
+            <strong>
+              {formatCount(incident.evidence.length, "evidence record")}
+            </strong>
+            <small>attached by Core</small>
           </div>
           <div
             data-tone={
@@ -379,7 +392,9 @@ export function BuildIncidentWorkspace({
                   </h2>
                 </div>
                 <span>
-                  {visibleEvidence.length} of {incident.evidence.length} records
+                  {visibleEvidence.length === incident.evidence.length
+                    ? formatCount(incident.evidence.length, "record")
+                    : `${visibleEvidence.length} of ${formatCount(incident.evidence.length, "record")}`}
                 </span>
               </header>
               {visibleEvidence.length ? (
@@ -407,7 +422,9 @@ export function BuildIncidentWorkspace({
                   <h2 id="build-audit-title">Build audit</h2>
                 </div>
                 <span>
-                  {visibleEvents.length} of {state.events.length} events
+                  {visibleEvents.length === state.events.length
+                    ? formatCount(state.events.length, "event")
+                    : `${visibleEvents.length} of ${formatCount(state.events.length, "event")}`}
                 </span>
               </header>
               {visibleEvents.length ? (
@@ -438,14 +455,33 @@ export function BuildIncidentWorkspace({
             className="build-decision-panel build-motion-panel"
             aria-labelledby="build-decision-title"
           >
-            <span className="eyebrow">Evidence-backed decision</span>
-            <h2 id="build-decision-title">Next safe action</h2>
+            <header className="build-decision-heading">
+              <div>
+                <span className="eyebrow">Evidence-backed decision</span>
+                <h2 id="build-decision-title">Next safe action</h2>
+              </div>
+              {diagnosis?.status === "validated" ? (
+                <span className="build-confidence-badge">
+                  {(diagnosis.confidence.value / 100).toFixed(0)}% confidence
+                </span>
+              ) : null}
+            </header>
             {diagnosis?.status === "validated" ? (
               <>
-                <p>{diagnosis.summary}</p>
-                <section>
+                <section className="build-diagnosis-summary">
+                  <span>Diagnosis</span>
+                  <p>{diagnosis.summary}</p>
+                </section>
+                <section className="build-root-cause">
                   <h3>Probable root cause</h3>
                   <p>{diagnosis.probableRootCause}</p>
+                </section>
+                <section className="build-recommended-action">
+                  <Icon name="caret-right" size={18} />
+                  <div>
+                    <h3>Recommended action</h3>
+                    <p>{diagnosis.recommendedAction}</p>
+                  </div>
                 </section>
                 <dl>
                   <div>
@@ -479,15 +515,95 @@ export function BuildIncidentWorkspace({
                     Open verified CI run
                   </a>
                 ) : (
-                  <div className="build-read-only-notice" role="status">
-                    <Icon name="shield-check" size={16} />
-                    <span>
-                      <strong>Read-only workspace</strong>
-                      {shell.source === "demo"
-                        ? "Demo actions are disabled and never call Core."
-                        : "Live actions stay unavailable until authenticated operator access is implemented."}
-                    </span>
-                  </div>
+                  <>
+                    <div className="build-read-only-notice" role="status">
+                      <Icon name="shield-check" size={16} />
+                      <span>
+                        <strong>
+                          {shell.source === "demo"
+                            ? "Demo workspace"
+                            : "Read-only workspace"}
+                        </strong>
+                        {shell.source === "demo"
+                          ? "This view uses real UI states without dispatching mutations to Core."
+                          : "Live actions stay unavailable until authenticated operator access is implemented."}
+                      </span>
+                    </div>
+                    {shell.source === "demo" ? (
+                      <section
+                        aria-labelledby="build-operator-actions-title"
+                        className="build-operator-preview"
+                      >
+                        <div>
+                          <span className="eyebrow">Action preview</span>
+                          <h3 id="build-operator-actions-title">
+                            Operator actions
+                          </h3>
+                          <p>
+                            Connect authenticated operator access to enable
+                            these approval-gated actions.
+                          </p>
+                        </div>
+                        <button
+                          className="primary-button"
+                          onClick={() => setDemoAction("retry")}
+                          type="button"
+                        >
+                          Request exact retry
+                        </button>
+                        {diagnosis?.status === "validated" &&
+                        diagnosis.safeToAttemptFix ? (
+                          <button
+                            className="secondary-button"
+                            onClick={() => setDemoAction("remediation")}
+                            type="button"
+                          >
+                            Prepare tested remediation
+                          </button>
+                        ) : null}
+                        {demoAction ? (
+                          <div className="build-demo-approval" role="status">
+                            <div>
+                              <span className="eyebrow">
+                                Demo approval request
+                              </span>
+                              <strong>
+                                {demoAction === "retry"
+                                  ? "Exact retry scope"
+                                  : "Tested remediation scope"}
+                              </strong>
+                              <span>
+                                {demoAction === "retry"
+                                  ? `Run ${incident.sourceRun.id} · attempt ${incident.sourceRun.attempt}`
+                                  : `Commit ${incident.sourceRun.headSha.slice(0, 12)}`}
+                              </span>
+                            </div>
+                            <button
+                              className="primary-button"
+                              onClick={() => {
+                                showToast(
+                                  demoAction === "retry"
+                                    ? "Demo approval completed — no retry was dispatched"
+                                    : "Demo approval completed — no remediation was dispatched",
+                                )
+                                setDemoAction(null)
+                              }}
+                              type="button"
+                            >
+                              Simulate approval
+                            </button>
+                            <button
+                              className="secondary-button"
+                              onClick={() => setDemoAction(null)}
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : null}
+                      </section>
+                    ) : null}
+                  </>
                 )
               ) : incident.status === "awaiting_action" ? (
                 <>

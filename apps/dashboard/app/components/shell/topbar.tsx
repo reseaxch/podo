@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import { useMenu } from "../../hooks/use-menu"
 import { useTheme } from "../../hooks/use-theme"
 import { Icon } from "../ui/pictogram"
+import { PodoLogo } from "./podo-logo"
 
 type TopbarProps = {
   owner: { name: string; avatar: string }
@@ -65,7 +66,7 @@ export function Topbar({
           aria-label="Live Core workspace"
           className="project-switcher live-core-context"
         >
-          <Icon name="cube" size={17} /> Podo Core
+          <PodoLogo className="topbar-brand-logo" size={20} /> Podo Core
         </div>
       ) : (
         <div
@@ -79,7 +80,7 @@ export function Topbar({
             onClick={(event) => toggleMenu("project", event.currentTarget)}
             type="button"
           >
-            <Icon name="cube" size={17} /> {project}{" "}
+            <PodoLogo className="topbar-brand-logo" size={20} /> {project}{" "}
             <Icon name="caret-down" size={14} />
           </button>
           {openMenu === "project" ? (
@@ -97,10 +98,11 @@ export function Topbar({
                   role="menuitem"
                   type="button"
                 >
-                  <Icon
-                    name={name === "podo-cloud" ? "cube" : "stack"}
-                    size={16}
-                  />
+                  {name === "podo-cloud" ? (
+                    <PodoLogo className="menu-brand-logo" size={19} />
+                  ) : (
+                    <Icon name="stack" size={16} />
+                  )}
                   <span>
                     <strong>{name}</strong>
                     <small>

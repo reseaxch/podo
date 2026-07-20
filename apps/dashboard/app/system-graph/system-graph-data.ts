@@ -638,7 +638,7 @@ export async function getSystemGraph(): Promise<SystemGraphViewModel> {
   }
 
   return {
-    owner: { name: "Podo Core", avatar: "/icon.svg" },
+    owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
     capturedAt: "Live · Core API",
     environment: "Core incident graph",
     stats: {

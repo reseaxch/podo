@@ -41,6 +41,28 @@ The contextual Agent is intentionally still a browser demo in both deployment
 modes. Setting `NEXT_PUBLIC_PODO_AGENT_MODE=live` is an explicit future opt-in,
 not part of the current UI readiness target.
 
+## Backend integration status
+
+| UI surface                  | Live Core integration                                                                    | Remaining boundary                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Overview and incident queue | Core incidents, workflow state, and system status                                        | Core does not provide severity or human ownership metadata yet                                  |
+| Incident workspace          | Evidence, causal path, investigation, remediation, delivery, issue fallback, and refresh | Writes require trusted operator mode; add authentication before public or multi-user deployment |
+| Build incidents             | List, detail, evidence, diagnosis, audit, retry, remediation, delivery, and verification | Writes require trusted operator mode; demo remains read-only                                    |
+| Safety & approvals          | Runtime approvals plus pending Build retry approvals and decisions                       | Writes require trusted operator mode; add actor identity before public deployment               |
+| Evidence sources            | Core-derived telemetry health and evidence kinds                                         | Core has no connector catalog or connector-management API yet                                   |
+| System graph                | Core incidents and trusted causal paths                                                  | Core exposes incident-scoped paths, not a complete topology/history API                         |
+| Audit log                   | Runtime, remediation, delivery, and Build incident audit events                          | Durable audit persistence and integrity hashes remain Core milestones                           |
+| Settings                    | Core settings read/update API                                                            | Authenticated actor identity is still required before remote multi-user deployment              |
+| Podo Agent                  | Core chat API exists behind explicit opt-in                                              | Default dashboard composition intentionally remains demo/read-only                              |
+
+Demo routes use local fixtures and never require Core. Live reads use
+`@podo/client`; the browser does not connect directly to Core, storage, GitHub,
+or Codex. State-changing routes are fail-closed by default. A private,
+single-operator installation may set the server-only
+`PODO_TRUSTED_OPERATOR_MODE=true` flag. This is a deployment trust boundary,
+not authentication: do not expose this composition to the public internet or
+use it for a multi-user deployment.
+
 `?mode=live` can be used by the E2E fake-Core suite to exercise the production
 boundary while the rest of the browser suite remains deterministic.
 Set `PODO_DASHBOARD_E2E_PORT` and `PODO_DASHBOARD_E2E_CORE_PORT` when the
@@ -50,6 +72,7 @@ For the self-hosted UI:
 
 ```sh
 PODO_DASHBOARD_MODE=live \
+PODO_TRUSTED_OPERATOR_MODE=true \
 PODO_CORE_URL=http://127.0.0.1:4100 \
 NEXT_PUBLIC_PODO_AGENT_MODE=demo \
 bun run dev:dashboard

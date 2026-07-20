@@ -11,6 +11,30 @@ export function isDemoDashboard() {
   return process.env.PODO_DASHBOARD_MODE === "demo"
 }
 
+/**
+ * Deployment-level capability for a single-operator, trusted-network install.
+ * This is deliberately server-only and is not a substitute for authentication.
+ */
+export function isTrustedOperatorMode() {
+  return (
+    process.env.PODO_DASHBOARD_MODE === "live" &&
+    process.env.PODO_TRUSTED_OPERATOR_MODE === "true"
+  )
+}
+
+export function trustedMutationRequestError(request: Request) {
+  if (
+    request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
+  )
+    return { status: 415, error: "json_required" } as const
+  const origin = request.headers.get("origin")
+  if (origin && origin !== new URL(request.url).origin)
+    return { status: 403, error: "cross_origin_request" } as const
+  if (request.headers.get("sec-fetch-site") === "cross-site")
+    return { status: 403, error: "cross_origin_request" } as const
+  return null
+}
+
 export function incidentWorkingDirectory() {
   return process.env.PODO_INCIDENT_CWD ?? process.cwd()
 }

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server"
 import {
   createDashboardClient,
   incidentWorkingDirectory,
+  isTrustedOperatorMode,
+  trustedMutationRequestError,
 } from "../../../../lib/dashboard-client"
 import {
   getIncidentCausalPath,
@@ -49,9 +51,59 @@ type Command =
       decision: "approve" | "deny"
     }
 
+function commandFrom(value: unknown): Command | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const input = value as Record<string, unknown>
+  if (
+    [
+      "start-investigation",
+      "start-remediation",
+      "start-delivery",
+      "start-issue",
+    ].includes(String(input.action))
+  )
+    return Object.keys(input).length === 1 ? (input as Command) : null
+  if (
+    input.action !== "decide-remediation" &&
+    input.action !== "decide-delivery"
+  )
+    return null
+  return Object.keys(input).length === 3 &&
+    typeof input.approvalId === "string" &&
+    input.approvalId.length > 0 &&
+    input.approvalId.length <= 256 &&
+    (input.decision === "approve" || input.decision === "deny")
+    ? (input as Command)
+    : null
+}
+
 export async function POST(request: Request, context: Context) {
+  if (!isTrustedOperatorMode())
+    return NextResponse.json(
+      {
+        error: "trusted_operator_mode_required",
+        message: "Mutations require an explicitly trusted private deployment.",
+      },
+      { status: 405, headers: { allow: "GET" } },
+    )
+  const requestError = trustedMutationRequestError(request)
+  if (requestError)
+    return NextResponse.json(
+      { error: requestError.error },
+      { status: requestError.status },
+    )
+  let command: Command | null = null
+  try {
+    command = commandFrom(await request.json())
+  } catch {
+    // Invalid JSON is handled as an invalid command.
+  }
+  if (!command)
+    return NextResponse.json(
+      { error: "invalid_action", message: "Unsupported incident action" },
+      { status: 400 },
+    )
   const { id } = await context.params
-  const command = (await request.json()) as Command
   const client = createDashboardClient()
 
   switch (command.action) {

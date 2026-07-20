@@ -12,7 +12,7 @@ export function getDashboardShellContext(): DashboardShellContext {
         source: "demo",
       }
     : {
-        owner: { name: "Podo Core", avatar: "/icon.svg" },
+        owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
         source: "core",
       }
 }
