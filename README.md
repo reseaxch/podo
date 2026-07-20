@@ -59,10 +59,10 @@ canonical graph + telemetry replay
 The deterministic POC keeps state in memory and uses a fake pull-request
 delivery port so `bun run poc` remains offline and reproducible. The same sealed
 artifact now has an opt-in real GitHub delivery composition for operator runs.
-The MVP still needs durable operations and reconciliation, authenticated actor
-identity, complete audit persistence, eval baselines, benchmarks, and external
-submission artifacts such as the final video and `/feedback` session ID. Failed
-validation must never reach either path.
+Post-hackathon hardening still needs durable operations and reconciliation,
+authenticated actor identity, and complete audit persistence. External
+submission artifacts such as the final video and `/feedback` session ID remain
+owner-provided. Failed validation must never reach either path.
 
 ## System shape
 
