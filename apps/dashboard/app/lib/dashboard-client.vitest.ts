@@ -15,6 +15,20 @@ describe("trusted mutation request boundary", () => {
     expect(trustedMutationRequestError(request)).toBeNull()
   })
 
+  it("uses the request host when Next normalizes its internal URL", () => {
+    const request = new Request("http://localhost:3020/api/podo/settings", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        host: "127.0.0.1:3020",
+        origin: "http://127.0.0.1:3020",
+        "sec-fetch-site": "same-origin",
+      },
+    })
+
+    expect(trustedMutationRequestError(request)).toBeNull()
+  })
+
   it("rejects simple and cross-origin requests", () => {
     expect(
       trustedMutationRequestError(

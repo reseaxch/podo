@@ -22,13 +22,20 @@ export function isTrustedOperatorMode() {
   )
 }
 
+function requestOrigin(request: Request) {
+  const host = request.headers.get("host")
+  if (!host) return new URL(request.url).origin
+  const protocol = new URL(request.url).protocol
+  return `${protocol}//${host}`
+}
+
 export function trustedMutationRequestError(request: Request) {
   if (
     request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
   )
     return { status: 415, error: "json_required" } as const
   const origin = request.headers.get("origin")
-  if (origin && origin !== new URL(request.url).origin)
+  if (origin && origin !== requestOrigin(request))
     return { status: 403, error: "cross_origin_request" } as const
   if (request.headers.get("sec-fetch-site") === "cross-site")
     return { status: 403, error: "cross_origin_request" } as const
