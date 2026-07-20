@@ -54,19 +54,19 @@ describe("getIncidentOverview", () => {
 
     expect(listIncidents).toHaveBeenCalledOnce()
     expect(overview).toMatchObject({
-      owner: { name: "Podo Core", avatar: "/icon.svg" },
+      owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
       generatedAt: "Updated from Core",
       incidents: [
         {
           id: "incident-42",
           title: "checkout-service cache growth incident",
-          severity: "Unclassified",
+          severity: "Unknown",
           status: "Awaiting approval",
           service: "checkout-service",
           diagnosis: "Cache entries are retained indefinitely",
           confidence: 87.65,
           evidenceCount: 1,
-          owner: { name: "Unassigned", initials: "—" },
+          owner: { name: "Not provided by Core", initials: "—" },
           hasWorkspace: true,
           attentionReason: "Needs approval",
         },

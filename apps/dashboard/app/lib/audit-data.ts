@@ -1,9 +1,9 @@
 import type {
+  BuildIncidentAuditEvent,
   IncidentAuditEvent,
   IncidentRemediationAuditEvent,
 } from "@podo/contracts"
 
-import { auditLogMock } from "../mocks/audit"
 import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
 import type {
   AuditCategory,
@@ -20,9 +20,11 @@ const actor = {
 }
 
 function category(kind: string): AuditCategory {
+  if (kind.includes("approval")) return "Approval"
+  if (kind.includes("evidence")) return "Evidence"
   if (kind.startsWith("investigation")) return "Investigation"
-  if (kind.startsWith("remediation")) return "Remediation"
-  if (kind.startsWith("delivery")) return "Delivery"
+  if (kind.includes("remediation")) return "Remediation"
+  if (kind.includes("delivery")) return "Delivery"
   return "System"
 }
 
@@ -40,8 +42,11 @@ function title(kind: string) {
     .join(" · ")
 }
 
-function adapt(
-  event: IncidentAuditEvent | IncidentRemediationAuditEvent,
+export function adaptCoreAuditEvent(
+  event:
+    | IncidentAuditEvent
+    | IncidentRemediationAuditEvent
+    | BuildIncidentAuditEvent,
   affectedService: string,
 ): AuditEvent {
   const occurredAt = event.occurredAt
@@ -62,7 +67,7 @@ function adapt(
     }).format(new Date(occurredAt)),
     category: category(event.kind),
     outcome: outcome(event.kind),
-    icon: event.kind.startsWith("delivery") ? "git-branch" : "activity",
+    icon: event.kind.includes("delivery") ? "git-branch" : "activity",
     title: title(event.kind),
     summary: `Authoritative Core event for ${event.incidentId}.`,
     actor,
@@ -77,16 +82,29 @@ function adapt(
       value: String(value),
     })),
     payload,
-    integrityHash: `${event.incidentId}:${event.sequence}`,
+    integrityHash: "Not provided by Core",
   }
 }
 
 export async function getAuditLog(): Promise<AuditLogViewModel> {
-  if (isDemoDashboard()) return structuredClone(auditLogMock)
+  if (isDemoDashboard()) {
+    const { auditLogMock } = await import("../mocks/audit")
+    return structuredClone(auditLogMock)
+  }
 
   const client = createDashboardClient()
-  const { incidents } = await client.listIncidents()
-  const events = (
+  const [{ incidents }, buildIncidents] = await Promise.all([
+    client.listIncidents(),
+    client.listBuildIncidents().catch((error: unknown) => {
+      if (
+        error instanceof Error &&
+        (error.message.includes("(404)") || error.message.includes("(503)"))
+      )
+        return { incidents: [] }
+      throw error
+    }),
+  ])
+  const incidentEvents = (
     await Promise.all(
       incidents.map(async (incident) => {
         const investigation = await client.getIncidentAudit(incident.id)
@@ -99,16 +117,27 @@ export async function getAuditLog(): Promise<AuditLogViewModel> {
             throw error
         }
         return [...investigation.events, ...remediation].map((event) =>
-          adapt(event, incident.affectedService),
+          adaptCoreAuditEvent(event, incident.affectedService),
         )
       }),
     )
+  ).flat()
+  const buildEvents = (
+    await Promise.all(
+      buildIncidents.incidents.map(async (incident) => {
+        const { events } = await client.getBuildIncidentAudit(incident.id)
+        return events.map((event) =>
+          adaptCoreAuditEvent(event, incident.affectedService),
+        )
+      }),
+    )
+  ).flat()
+  const events = [...incidentEvents, ...buildEvents].toSorted((left, right) =>
+    right.occurredAt.localeCompare(left.occurredAt),
   )
-    .flat()
-    .toSorted((left, right) => right.occurredAt.localeCompare(left.occurredAt))
 
   return {
-    owner: { name: "Podo Core", avatar: "/icon.svg" },
+    owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
     generatedAt: "Updated from Core",
     retentionDays: 0,
     events,

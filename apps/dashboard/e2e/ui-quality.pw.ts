@@ -3,6 +3,8 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 const routes = [
   "/overview",
   "/incidents",
+  "/build-incidents",
+  "/build-incidents/build%3Areseaxch%2Fpodo%3A1042%3A1",
   "/#workspace",
   "/audit",
   "/evidence-sources",

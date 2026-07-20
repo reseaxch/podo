@@ -1,35 +1,101 @@
 import { NextResponse } from "next/server"
 
-import { createDashboardClient } from "../../../lib/dashboard-client"
-import { getSafetyApprovals } from "../../../lib/safety-data"
-import type { ApprovalDecisionInput } from "../../../lib/safety-types"
+import {
+  createDashboardClient,
+  isTrustedOperatorMode,
+  trustedMutationRequestError,
+} from "../../../lib/dashboard-client"
+import {
+  decodeApprovalRequestId,
+  getSafetyApprovals,
+} from "../../../lib/safety-data"
 
 export async function GET() {
   return NextResponse.json(await getSafetyApprovals())
 }
 
 export async function POST(request: Request) {
-  const input = (await request.json()) as ApprovalDecisionInput
-  const [kind, incidentId, approvalId] = input.requestId.split(":")
-  if (!kind || !incidentId || !approvalId)
+  if (!isTrustedOperatorMode())
     return NextResponse.json(
-      { message: "Invalid approval request" },
-      { status: 400 },
+      {
+        error: "trusted_operator_mode_required",
+        message:
+          "Safety decisions require an explicitly trusted private deployment.",
+      },
+      { status: 405, headers: { allow: "GET" } },
+    )
+  const requestError = trustedMutationRequestError(request)
+  if (requestError)
+    return NextResponse.json(
+      { error: requestError.error },
+      { status: requestError.status },
+    )
+  let input: unknown
+  try {
+    input = await request.json()
+  } catch {
+    input = null
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 })
+  const body = input as Record<string, unknown>
+  const target =
+    typeof body.requestId === "string"
+      ? decodeApprovalRequestId(body.requestId)
+      : null
+  const decision = body.decision
+  if (
+    !target ||
+    (decision !== "approve" && decision !== "deny") ||
+    body.expectedStatus !== "pending" ||
+    !Number.isInteger(body.expectedRevision) ||
+    typeof body.reason !== "string" ||
+    body.reason.length > 2_000 ||
+    Object.keys(body).some(
+      (key) =>
+        ![
+          "requestId",
+          "decision",
+          "reason",
+          "expectedStatus",
+          "expectedRevision",
+        ].includes(key),
+    )
+  )
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 })
+  const current = await getSafetyApprovals()
+  const approval = current.requests.find((item) => item.id === body.requestId)
+  if (
+    !approval ||
+    approval.status !== "pending" ||
+    current.revision !== body.expectedRevision
+  )
+    return NextResponse.json(
+      {
+        error: "stale_approval",
+        message: "Approval state changed; refresh and review it again.",
+      },
+      { status: 409 },
+    )
+  if (!approval.canApprove)
+    return NextResponse.json(
+      { error: "approval_blocked", message: approval.blockedReason },
+      { status: 409 },
     )
   const client = createDashboardClient()
-  if (kind === "remediation") {
-    if (input.decision === "approve")
-      await client.approveIncidentRemediation(incidentId, approvalId)
-    else await client.denyIncidentRemediation(incidentId, approvalId)
-  } else if (kind === "delivery") {
-    if (input.decision === "approve")
-      await client.approveIncidentDelivery(incidentId, approvalId)
-    else await client.denyIncidentDelivery(incidentId, approvalId)
-  } else {
-    return NextResponse.json(
-      { message: "Unsupported approval request" },
-      { status: 400 },
+  if (target.kind === "build-retry")
+    await client.decideBuildIncidentRetry(
+      target.incidentId,
+      target.approvalId,
+      { decision },
     )
-  }
+  else if (target.kind === "remediation")
+    await (decision === "approve"
+      ? client.approveIncidentRemediation(target.incidentId, target.approvalId)
+      : client.denyIncidentRemediation(target.incidentId, target.approvalId))
+  else
+    await (decision === "approve"
+      ? client.approveIncidentDelivery(target.incidentId, target.approvalId)
+      : client.denyIncidentDelivery(target.incidentId, target.approvalId))
   return NextResponse.json(await getSafetyApprovals())
 }

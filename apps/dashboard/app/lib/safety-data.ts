@@ -1,7 +1,14 @@
-import type { IncidentDelivery, IncidentRemediation } from "@podo/contracts"
+import type {
+  BuildIncident,
+  IncidentDelivery,
+  IncidentRemediation,
+} from "@podo/contracts"
 
-import { safetyApprovalsMock } from "../mocks/safety"
-import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
+import {
+  createDashboardClient,
+  isDemoDashboard,
+  isTrustedOperatorMode,
+} from "./dashboard-client"
 import type { ApprovalRequest, SafetyApprovalsViewModel } from "./safety-types"
 
 async function optional<T>(operation: () => Promise<T>): Promise<T | null> {
@@ -19,7 +26,11 @@ function remediationRequest(
   remediation: IncidentRemediation,
 ): ApprovalRequest {
   return {
-    id: `remediation:${incidentId}:${remediation.approval.id}`,
+    id: encodeApprovalRequestId(
+      "remediation",
+      incidentId,
+      remediation.approval.id,
+    ),
     incidentId,
     title: "Approve tested remediation",
     summary: "Permit the verified remediation to run in an isolated checkout.",
@@ -44,8 +55,10 @@ function remediationRequest(
       },
     ],
     policyId: "human-review-required",
-    canApprove: true,
-    blockedReason: null,
+    canApprove: isTrustedOperatorMode(),
+    blockedReason: isTrustedOperatorMode()
+      ? null
+      : "Trusted operator mode is disabled.",
   }
 }
 
@@ -55,7 +68,7 @@ function deliveryRequest(
   delivery: IncidentDelivery,
 ): ApprovalRequest {
   return {
-    id: `delivery:${incidentId}:${delivery.approval.id}`,
+    id: encodeApprovalRequestId("delivery", incidentId, delivery.approval.id),
     incidentId,
     title: "Approve pull request delivery",
     summary:
@@ -81,16 +94,127 @@ function deliveryRequest(
       },
     ],
     policyId: "delivery-approval-required",
-    canApprove: true,
-    blockedReason: null,
+    canApprove: isTrustedOperatorMode(),
+    blockedReason: isTrustedOperatorMode()
+      ? null
+      : "Trusted operator mode is disabled.",
+  }
+}
+
+export function buildRetryRequest(
+  incident: BuildIncident,
+): ApprovalRequest | null {
+  const retry = incident.retry
+  if (!retry || retry.status !== "pending_approval") return null
+  return {
+    id: encodeApprovalRequestId("build-retry", incident.id, retry.approval.id),
+    incidentId: incident.id,
+    title: "Approve exact GitHub Actions retry",
+    summary:
+      "Permit Core to retry only the failed jobs from the sealed workflow run.",
+    kind: "command",
+    status: retry.approval.status,
+    risk: "medium",
+    environment: "production",
+    service: incident.affectedService,
+    requestedBy: { name: "Podo Core", initials: "PC" },
+    requestedAt: retry.createdAt,
+    age: "Core-managed",
+    expiresAt: null,
+    action: `Retry failed jobs for run #${incident.sourceRun.runNumber}`,
+    scope: [
+      incident.repository,
+      `${incident.workflow.name} · run #${incident.sourceRun.runNumber}`,
+      `Commit ${incident.sourceRun.headSha.slice(0, 12)}`,
+      `Exact next attempt after ${incident.sourceRun.attempt}`,
+    ],
+    evidence: incident.evidence.map((item) => item.id),
+    checks: [
+      {
+        id: "exact-run",
+        label: "Exact retry scope sealed",
+        detail:
+          "Core binds repository, workflow, run, head SHA, and next attempt.",
+        status: "passed",
+      },
+      {
+        id: "operator-identity",
+        label: "Trusted operator capability",
+        detail: isTrustedOperatorMode()
+          ? "Enabled for this private deployment."
+          : "Disabled for this deployment.",
+        status: isTrustedOperatorMode() ? "passed" : "blocked",
+      },
+    ],
+    policyId: "build-retry-human-review",
+    canApprove: isTrustedOperatorMode(),
+    blockedReason: isTrustedOperatorMode()
+      ? null
+      : "Trusted operator mode is disabled.",
+  }
+}
+
+export type ApprovalRequestTarget = {
+  kind: "remediation" | "delivery" | "build-retry"
+  incidentId: string
+  approvalId: string
+}
+
+export function encodeApprovalRequestId(
+  kind: ApprovalRequestTarget["kind"],
+  incidentId: string,
+  approvalId: string,
+) {
+  return [kind, incidentId, approvalId].map(encodeURIComponent).join(":")
+}
+
+export function decodeApprovalRequestId(
+  id: string,
+): ApprovalRequestTarget | null {
+  const parts = id.split(":")
+  if (parts.length !== 3) return null
+  try {
+    const [kind, incidentId, approvalId] = parts.map(decodeURIComponent)
+    if (
+      (kind !== "remediation" &&
+        kind !== "delivery" &&
+        kind !== "build-retry") ||
+      !incidentId ||
+      !approvalId
+    )
+      return null
+    return { kind, incidentId, approvalId }
+  } catch {
+    return null
+  }
+}
+
+async function optionalBuildIncidents(
+  client: ReturnType<typeof createDashboardClient>,
+) {
+  try {
+    return (await client.listBuildIncidents()).incidents
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("(404)") || error.message.includes("(503)"))
+    )
+      return []
+    throw error
   }
 }
 
 export async function getSafetyApprovals(): Promise<SafetyApprovalsViewModel> {
-  if (isDemoDashboard()) return structuredClone(safetyApprovalsMock)
+  if (isDemoDashboard()) {
+    const { safetyApprovalsMock } = await import("../mocks/safety")
+    return structuredClone(safetyApprovalsMock)
+  }
   const client = createDashboardClient()
-  const { incidents } = await client.listIncidents()
-  const requests = (
+  const [{ incidents }, buildIncidents] = await Promise.all([
+    client.listIncidents(),
+    optionalBuildIncidents(client),
+  ])
+  const incidentRequests = (
     await Promise.all(
       incidents.map(async (incident) => {
         const [remediationResult, deliveryResult] = await Promise.all([
@@ -118,28 +242,18 @@ export async function getSafetyApprovals(): Promise<SafetyApprovalsViewModel> {
       }),
     )
   ).flat()
+  const buildRequests = buildIncidents
+    .map(buildRetryRequest)
+    .filter((request): request is ApprovalRequest => request !== null)
+  const requests = [...incidentRequests, ...buildRequests]
 
   return {
     revision: requests.reduce((sum, request) => sum + request.id.length, 0),
-    owner: { name: "Podo Core", avatar: "/icon.svg" },
+    owner: { name: "Podo Core", avatar: "/brand/podo-logo.png" },
     generatedAt: "Updated from Core",
-    currentActor: "Authenticated operator",
+    currentActor: "Not provided by Core",
     requests,
     history: [],
-    policies: [
-      {
-        id: "human-review-required",
-        name: "Human review required",
-        description:
-          "Remediation and delivery remain separate explicit approvals.",
-        mode: "enforced",
-        coverage: "All incident mutations",
-        rules: [
-          "No production mutation",
-          "No default approval",
-          "No automatic merge",
-        ],
-      },
-    ],
+    policies: [],
   }
 }

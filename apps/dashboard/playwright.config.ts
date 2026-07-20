@@ -8,7 +8,9 @@ const coreURL = `http://127.0.0.1:${corePort}`
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.pw.ts",
-  testIgnore: "**/real-core.pw.ts",
+  // Core mutations require the trusted server composition and are covered by
+  // playwright.core.config.ts against an actual Core process.
+  testIgnore: ["**/live-core.pw.ts", "**/real-core.pw.ts"],
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",

@@ -1,10 +1,13 @@
-import { operationsOverviewMock } from "../mocks/operations-overview"
 import { createDashboardClient, isDemoDashboard } from "./dashboard-client"
 import { getIncidentOverview } from "./incidents-data"
 import type { OperationsOverviewViewModel } from "./operations-overview-types"
 
 export async function getOperationsOverview(): Promise<OperationsOverviewViewModel> {
-  if (isDemoDashboard()) return structuredClone(operationsOverviewMock)
+  if (isDemoDashboard()) {
+    const { operationsOverviewMock } =
+      await import("../mocks/operations-overview")
+    return structuredClone(operationsOverviewMock)
+  }
 
   const client = createDashboardClient()
   const [incidentOverview, system] = await Promise.all([
