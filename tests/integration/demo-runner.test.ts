@@ -47,6 +47,8 @@ describe("one-command judge demo", () => {
     expect(configuration.dashboardEnvironment).toMatchObject({
       PODO_CORE_URL: "http://127.0.0.1:4510",
       PODO_DASHBOARD_MODE: "live",
+      PODO_TRUSTED_OPERATOR_MODE: "true",
+      PODO_DASHBOARD_ORIGIN: "http://127.0.0.1:4511",
       PODO_INCIDENT_CWD: repositoryRoot,
     });
     expect(configuration.coreEnvironment.GH_TOKEN).toBeUndefined();
@@ -118,6 +120,7 @@ describe("one-command judge demo", () => {
     expect(configuration.dashboardCommand).toContain("start");
     expect(configuration.dashboardCommand).not.toContain("dev");
     expect(configuration.dashboardUrl).toBe("http://127.0.0.1:3000");
+    expect(configuration.coreStartupTimeoutMs).toBe(60_000);
     expect(configuration.dashboardEnvironment.PODO_DASHBOARD_MODE).toBe("live");
     expect(configuration.coreEnvironment.PODO_DEMO_OUTCOME).toBe("success");
   });
