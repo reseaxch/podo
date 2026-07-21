@@ -42,6 +42,7 @@ export interface DemoConfiguration {
   host: string;
   corePort: number;
   dashboardPort: number;
+  coreStartupTimeoutMs: number;
 }
 
 export interface DemoSeedResult {
@@ -167,6 +168,8 @@ export function createDemoConfiguration(
     NEXT_TELEMETRY_DISABLED: "1",
     PODO_CORE_URL: coreUrl,
     PODO_DASHBOARD_MODE: "live",
+    PODO_TRUSTED_OPERATOR_MODE: "true",
+    PODO_DASHBOARD_ORIGIN: dashboardUrl,
     PODO_INCIDENT_CWD: root,
   };
 
@@ -212,6 +215,7 @@ export function createDemoConfiguration(
     host,
     corePort,
     dashboardPort,
+    coreStartupTimeoutMs: 60_000,
   };
 }
 
@@ -346,6 +350,7 @@ export async function runDemo(
         core,
         config.coreUrl,
         lifecycle.signal,
+        config.coreStartupTimeoutMs,
       );
       const { incident: coreIncident } = await client.getIncident(
         status.incidentId,
@@ -452,6 +457,7 @@ async function waitForDemoCore(
   child: DemoChildProcess,
   coreUrl: string,
   signal: AbortSignal,
+  timeoutMs: number,
 ): Promise<DemoCoreStatus> {
   let status: DemoCoreStatus | null = null;
   await waitForEndpoint(
@@ -459,7 +465,7 @@ async function waitForDemoCore(
     `${coreUrl}/__demo/status`,
     "Demo Core",
     signal,
-    30_000,
+    timeoutMs,
     async (response) => {
       const value = (await response.json()) as unknown;
       status = parseDemoCoreStatus(value);
