@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises"
+import { mkdtemp, rm, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -125,12 +125,19 @@ test("production incident graph bootstrap rejects traversal-shaped fixture paths
 test("production incident graph bootstrap rejects a fixture symlink that escapes the manifest directory", async () => {
   const root = await mkdtemp(join(tmpdir(), "podo-graph-bootstrap-"))
   temporaryRoots.push(root)
-  const fixtures = join(root, "fixtures")
-  await mkdir(fixtures)
-  await symlink(
-    fileURLToPath(new URL("../../../../scenarios/cache-growth/fixtures/graph.json", import.meta.url)),
-    join(fixtures, "graph.json"),
-  )
+  const outside = await mkdtemp(join(tmpdir(), "podo-graph-escape-"))
+  temporaryRoots.push(outside)
+
+  // Real graph fixture placed OUTSIDE the manifest root.
+  const canonicalGraph = await Bun.file(
+    new URL("../../../../scenarios/cache-growth/fixtures/graph.json", import.meta.url),
+  ).text()
+  await Bun.write(join(outside, "graph.json"), canonicalGraph)
+
+  // Directory junction (dir symlink on Unix) at <root>/fixtures -> outside dir.
+  // Junctions need no elevation/Developer Mode on Windows and require an absolute target.
+  await symlink(outside, join(root, "fixtures"), "junction")
+
   const manifest = await Bun.file(bootstrapUrl).json() as Record<string, unknown>
   const manifestPath = join(root, "graph-bootstrap.json")
   await Bun.write(manifestPath, JSON.stringify(manifest))
